@@ -39,13 +39,6 @@
   },
   "app": {
     "title": "skd",
-    "connectionsRestored": "Connections Restored",
-    "connectionsRestoredDesc": "{{restoredCount}} connection(s) restored, {{failedCount}} failed",
-    "connectionsRestoredAllDesc": "Successfully restored {{restoredCount}} connection(s)",
-    "restoreFailed": "Connection Restore Failed",
-    "restoreFailedDesc": "Unable to restore previous connections. Please reconnect manually.",
-    "restoreTimedOut": "Restore Timed Out",
-    "restoreTimedOutDesc": "Some connections could not be restored in time. Please reconnect manually.",
     "connectionFailed": "Connection Failed",
     "connectionError": "Connection Error",
     "connectionErrorDesc": "An unexpected error occurred while connecting.",
@@ -68,9 +61,6 @@
     "failedToOpenWindow": "Failed to open file window",
     "couldNotOpenWindow": "Could not open file window",
     "noCredentialsDesc": "No saved credentials found. Please connect manually.",
-    "restoreHighlight": {
-      "encryptedSecrets": "Secrets stay encrypted in macOS Keychain"
-    },
     "noEditorHandler": "Cannot open {{name}}: no editor handler available",
     "monitor": "Monitor",
     "logs": "Logs",

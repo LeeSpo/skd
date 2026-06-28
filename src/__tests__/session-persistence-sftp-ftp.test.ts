@@ -9,10 +9,6 @@ import {
   serialize,
   deserialize,
 } from '../lib/terminal-group-serializer';
-import {
-  ActiveConnectionsManager,
-  type ActiveConnectionState,
-} from '../lib/connection-storage';
 
 // ── Setup ──
 
@@ -99,30 +95,6 @@ describe('Property 18 — SFTP/FTP tab persistence round trip', () => {
     );
   });
 
-  it('ActiveConnectionState preserves tabType and protocol', () => {
-    const activeConns: ActiveConnectionState[] = [
-      { tabId: 'ssh-1', connectionId: 'ssh-1', order: 0 },
-      { tabId: 'sftp-1', connectionId: 'sftp-1', order: 1, tabType: 'file-browser', protocol: 'SFTP' },
-      { tabId: 'ftp-1', connectionId: 'ftp-1', order: 2, tabType: 'file-browser', protocol: 'FTP' },
-    ];
-
-    ActiveConnectionsManager.saveActiveConnections(activeConns);
-    const loaded = ActiveConnectionsManager.getActiveConnections();
-
-    expect(loaded.length).toBe(3);
-
-    const sftpConn = loaded.find(c => c.tabId === 'sftp-1');
-    expect(sftpConn?.tabType).toBe('file-browser');
-    expect(sftpConn?.protocol).toBe('SFTP');
-
-    const ftpConn = loaded.find(c => c.tabId === 'ftp-1');
-    expect(ftpConn?.tabType).toBe('file-browser');
-    expect(ftpConn?.protocol).toBe('FTP');
-
-    const sshConn = loaded.find(c => c.tabId === 'ssh-1');
-    expect(sshConn?.tabType).toBeUndefined();
-    expect(sshConn?.protocol).toBeUndefined();
-  });
 });
 
 // ── Task 11.4 — Unit tests for session persistence ──
@@ -191,47 +163,4 @@ describe('SFTP/FTP session persistence unit tests', () => {
     });
   });
 
-  describe('ActiveConnectionsManager with SFTP/FTP', () => {
-    it('saves and loads file-browser active connections', () => {
-      const connections: ActiveConnectionState[] = [
-        { tabId: 'ftp-active', connectionId: 'ftp-active', order: 0, tabType: 'file-browser', protocol: 'FTP' },
-      ];
-
-      ActiveConnectionsManager.saveActiveConnections(connections);
-      const loaded = ActiveConnectionsManager.getActiveConnections();
-
-      expect(loaded.length).toBe(1);
-      expect(loaded[0].tabType).toBe('file-browser');
-      expect(loaded[0].protocol).toBe('FTP');
-    });
-
-    it('clearActiveConnections removes all', () => {
-      ActiveConnectionsManager.saveActiveConnections([
-        { tabId: 'x', connectionId: 'x', order: 0, tabType: 'file-browser', protocol: 'SFTP' },
-      ]);
-      ActiveConnectionsManager.clearActiveConnections();
-      expect(ActiveConnectionsManager.getActiveConnections()).toEqual([]);
-    });
-  });
-
-  describe('restoration flow simulation', () => {
-    it('identifies SFTP/FTP connections for reconnection', () => {
-      const activeConns: ActiveConnectionState[] = [
-        { tabId: 'ssh-1', connectionId: 'ssh-1', order: 0 },
-        { tabId: 'sftp-1', connectionId: 'sftp-1', order: 1, tabType: 'file-browser', protocol: 'SFTP' },
-        { tabId: 'ftp-1', connectionId: 'ftp-1', order: 2, tabType: 'file-browser', protocol: 'FTP' },
-      ];
-
-      // Simulate restoration logic from App.tsx
-      const sftpFtpConns = activeConns.filter(
-        c => c.protocol === 'SFTP' || c.protocol === 'FTP',
-      );
-      expect(sftpFtpConns.length).toBe(2);
-
-      const sshConns = activeConns.filter(
-        c => c.protocol !== 'SFTP' && c.protocol !== 'FTP',
-      );
-      expect(sshConns.length).toBe(1);
-    });
-  });
 });

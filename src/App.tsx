@@ -13,15 +13,11 @@ import { IntegratedFileBrowser } from './components/integrated-file-browser';
 import { WelcomeScreen } from './components/welcome-screen';
 import { UpdateChecker } from './components/update-checker';
 import {
-  ActiveConnectionsManager,
   ConnectionStorageManager,
   connectionHasStoredCredentials,
   getConnectionWithCredentials,
   migratePlaintextCredentialsToKeychain,
 } from './lib/connection-storage';
-import { isSavePasswordsEnabled } from './lib/credential-storage';
-
-import { registerRestoration, clearAllRestorations } from './lib/restoration-manager';
 import { useLayout, LayoutProvider } from './lib/layout-context';
 import {
   APP_SETTINGS_CHANGED_EVENT,
@@ -41,7 +37,6 @@ import { toast } from 'sonner';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { History, ShieldCheck, PlugZap, Activity, Loader2 } from 'lucide-react';
 
 interface ConnectionNode {
   id: string;
@@ -78,11 +73,7 @@ function AppContent() {
   const [externalLogPath, setExternalLogPath] = useState<string | undefined>();
   const [externalLogPathKey, setExternalLogPathKey] = useState(0);
 
-  // Restoration state
   const defaultLocalShellOpenedRef = useRef(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [restoringProgress, setRestoringProgress] = useState({ current: 0, total: 0 });
-  const [currentRestoreTarget, setCurrentRestoreTarget] = useState<{ name: string; host?: string; username?: string } | null>(null);
 
   // Layout management
   const {
@@ -204,286 +195,22 @@ function AppContent() {
 
   useKeyboardShortcuts([...layoutShortcuts, ...splitViewShortcuts, ...localTerminalShortcuts], true);
 
-  // Save active connections when tabs change (for restore on next launch)
   useEffect(() => {
-    // Editor tabs are transient — exclude them from persistence
-    const persistableTabs = allTabs.filter(
-      (tab) => tab.tabType !== 'editor' && tab.protocol !== 'Local',
-    );
-    if (persistableTabs.length > 0) {
-      const activeConnections = persistableTabs.map((tab, index) => ({
-        tabId: tab.id,
-        connectionId: tab.id,
-        order: index,
-        originalConnectionId: tab.originalConnectionId,
-        tabType: tab.tabType,
-        protocol: tab.protocol,
-      }));
-      ActiveConnectionsManager.saveActiveConnections(activeConnections);
-    } else {
-      ActiveConnectionsManager.clearActiveConnections();
-    }
-  }, [allTabs]);
-
-  // Restore connections on mount
-  useEffect(() => {
-    /** Race a promise against a timeout; rejects with a clear message on expiry. */
-    function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-      return Promise.race([
-        promise,
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(() => reject(new Error(`Timeout: ${label} did not complete within ${ms / 1000}s`)), ms),
-        ),
-      ]);
-    }
-
-    const CONNECT_TIMEOUT_MS = 15_000; // 15 s per backend connect call
-    const OVERALL_RESTORE_TIMEOUT_MS = 60_000; // 60 s for the entire restore
-
-    const restoreConnections = async () => {
-      try {
-        await migratePlaintextCredentialsToKeychain();
-      } catch (error: unknown) {
-        console.error('Failed to migrate credentials to Keychain:', error);
-      }
-
-      const activeConnections = ActiveConnectionsManager.getActiveConnections();
-
-      if (activeConnections.length === 0) {
-        return;
-      }
-
-      // Collect tab IDs already present in the restored layout state to avoid duplicates.
-      // The TerminalGroupProvider may have loaded tabs from localStorage, so we only need
-      // to re-establish SSH connections for those tabs, not add them again.
-      const existingTabIds = new Set(
-        Object.values(state.groups).flatMap(g => g.tabs.map(t => t.id))
-      );
-
-      console.log('Previous connections found:', activeConnections);
-
-      setIsRestoring(true);
-      setRestoringProgress({ current: 0, total: activeConnections.length });
-
-      const sortedConnections = [...activeConnections].sort((a, b) => a.order - b.order);
-
-      let restoredCount = 0;
-      let failedCount = 0;
-
-      for (let i = 0; i < sortedConnections.length; i++) {
-        const activeConn = sortedConnections[i];
-        const connectionIdToLoad = activeConn.originalConnectionId || activeConn.connectionId;
-        const connectionMeta = ConnectionStorageManager.getConnection(connectionIdToLoad);
-
-        setRestoringProgress({ current: i + 1, total: sortedConnections.length });
-
-        if (!connectionMeta) {
-          console.warn(`Connection ${connectionIdToLoad} not found in storage`);
-          failedCount++;
-          continue;
-        }
-
-        const supportedProtocols = ['SSH', 'SFTP', 'FTP'];
-        if (!supportedProtocols.includes(connectionMeta.protocol)) {
-          console.warn(
-            `Skipping unsupported connection restore: ${connectionMeta.name} (${connectionMeta.protocol})`,
-          );
-          failedCount++;
-          continue;
-        }
-
-        if (!connectionHasStoredCredentials(connectionMeta)) {
-          console.log(`Connection ${connectionMeta.name} has no saved credentials, skipping restore`);
-          failedCount++;
-          continue;
-        }
-
-        const connectionData = await getConnectionWithCredentials(connectionIdToLoad);
-        if (!connectionData) {
-          failedCount++;
-          continue;
-        }
-
-        setCurrentRestoreTarget({
-          name: connectionData.name,
-          host: connectionData.host,
-          username: connectionData.username,
-        });
-
-        const tabAlreadyExists = existingTabIds.has(activeConn.connectionId);
-        const isSftp = activeConn.protocol === 'SFTP' || connectionData.protocol === 'SFTP';
-        const isFtp = activeConn.protocol === 'FTP' || connectionData.protocol === 'FTP';
-        const isFileBrowser = isSftp || isFtp;
-
-        try {
-          if (isFileBrowser) {
-            // SFTP/FTP restoration
-            if (isSftp) {
-              await withTimeout(
-                invoke('sftp_connect', {
-                  request: {
-                    connection_id: activeConn.connectionId,
-                    host: connectionData.host,
-                    port: connectionData.port || 22,
-                    username: connectionData.username,
-                    auth_method: connectionData.authMethod || 'password',
-                    password: connectionData.password || '',
-                    key_path: connectionData.privateKeyPath || null,
-                    passphrase: connectionData.passphrase || null,
-                  }
-                }),
-                CONNECT_TIMEOUT_MS,
-                `sftp_connect ${connectionData.name}`,
-              );
-            } else {
-              await withTimeout(
-                invoke('ftp_connect', {
-                  request: {
-                    connection_id: activeConn.connectionId,
-                    host: connectionData.host,
-                    port: connectionData.port || 21,
-                    username: connectionData.username || '',
-                    password: connectionData.password || '',
-                    ftps_enabled: connectionData.ftpsEnabled ?? false,
-                    anonymous: connectionData.authMethod === 'anonymous',
-                  }
-                }),
-                CONNECT_TIMEOUT_MS,
-                `ftp_connect ${connectionData.name}`,
-              );
-            }
-
-            if (!activeConn.originalConnectionId) {
-              ConnectionStorageManager.updateLastConnected(connectionData.id);
-            }
-
-            if (tabAlreadyExists) {
-              dispatch({ type: 'UPDATE_TAB_STATUS', tabId: activeConn.connectionId, status: 'connected' });
-            } else {
-              const newTab: TerminalTab = {
-                id: activeConn.connectionId,
-                name: connectionData.name,
-                tabType: 'file-browser',
-                protocol: connectionData.protocol,
-                host: connectionData.host,
-                username: connectionData.username,
-                originalConnectionId: activeConn.originalConnectionId,
-                connectionStatus: 'connected',
-                reconnectCount: 0,
-              };
-              dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
-            }
-
-            restoredCount++;
-            console.log(`✓ Restored ${connectionData.protocol} connection: ${connectionData.name}${tabAlreadyExists ? ' (reconnected existing tab)' : ''}`);
-          } else {
-            // SSH restoration (existing behavior)
-            const result = await withTimeout(
-              invoke<{ success: boolean; error?: string }>(
-                'ssh_connect',
-                {
-                  request: {
-                    connection_id: activeConn.connectionId,
-                    host: connectionData.host,
-                    port: connectionData.port || 22,
-                    username: connectionData.username,
-                    auth_method: connectionData.authMethod || 'password',
-                    password: connectionData.password || '',
-                    key_path: connectionData.privateKeyPath || null,
-                    passphrase: connectionData.passphrase || null,
-                  }
-                }
-              ),
-              CONNECT_TIMEOUT_MS,
-              `ssh_connect ${connectionData.name}`,
-            );
-
-            if (result.success) {
-              if (!activeConn.originalConnectionId) {
-                ConnectionStorageManager.updateLastConnected(connectionData.id);
-              }
-
-              if (tabAlreadyExists) {
-                dispatch({ type: 'UPDATE_TAB_STATUS', tabId: activeConn.connectionId, status: 'connecting' });
-              } else {
-                const newTab: TerminalTab = {
-                  id: activeConn.connectionId,
-                  name: connectionData.name,
-                  protocol: connectionData.protocol,
-                  host: connectionData.host,
-                  username: connectionData.username,
-                  originalConnectionId: activeConn.originalConnectionId,
-                  connectionStatus: 'connecting',
-                  reconnectCount: 0,
-                };
-                dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
-              }
-
-              restoredCount++;
-              console.log(`✓ Restored connection: ${connectionData.name}${tabAlreadyExists ? ' (reconnected existing tab)' : ''}${activeConn.originalConnectionId ? ' (duplicate)' : ''}`);
-
-              if (i < sortedConnections.length - 1) {
-                await registerRestoration(activeConn.connectionId, 3000);
-              }
-            } else {
-              console.error(`Failed to restore connection ${connectionData.name}:`, result.error);
-              if (tabAlreadyExists) {
-                dispatch({ type: 'UPDATE_TAB_STATUS', tabId: activeConn.connectionId, status: 'disconnected' });
-              }
-              failedCount++;
-            }
-          }
-        } catch (error) {
-          console.error(`Error restoring connection ${connectionData.name}:`, error);
-          if (tabAlreadyExists) {
-            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: activeConn.connectionId, status: 'disconnected' });
-          }
-          failedCount++;
-        }
-      }
-
-      if (restoredCount > 0) {
-        toast.success(t('app.connectionsRestored'), {
-          description: failedCount > 0
-            ? t('app.connectionsRestoredDesc', { restoredCount, failedCount })
-            : t('app.connectionsRestoredAllDesc', { restoredCount }),
-        });
-      } else if (failedCount > 0) {
-        ActiveConnectionsManager.clearActiveConnections();
-        toast.error(t('app.restoreFailed'), {
-          description: t('app.restoreFailedDesc'),
-        });
-      }
-
-      setCurrentRestoreTarget(null);
-      setIsRestoring(false);
-      setRestoringProgress({ current: 0, total: 0 });
-      clearAllRestorations();
-    };
-
-    withTimeout(restoreConnections(), OVERALL_RESTORE_TIMEOUT_MS, 'Session restore').catch((err) => {
-      console.error('Session restore timed out:', err);
-      toast.error(t('app.restoreTimedOut'), {
-        description: t('app.restoreTimedOutDesc'),
-      });
-      setCurrentRestoreTarget(null);
-      setIsRestoring(false);
-      setRestoringProgress({ current: 0, total: 0 });
-      clearAllRestorations();
+    void migratePlaintextCredentialsToKeychain().catch((error: unknown) => {
+      console.error('Failed to migrate credentials to Keychain:', error);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Open a local shell by default when the app starts with no tabs (after session restore).
+  // Open a local shell by default when the app starts with no tabs.
   useEffect(() => {
-    if (defaultLocalShellOpenedRef.current || isRestoring) {
+    if (defaultLocalShellOpenedRef.current) {
       return;
     }
     if (allTabs.length === 0) {
       defaultLocalShellOpenedRef.current = true;
       handleNewLocalTab();
     }
-  }, [isRestoring, allTabs.length, handleNewLocalTab]);
+  }, [allTabs.length, handleNewLocalTab]);
 
   const handleConnectionSelect = async (connection: ConnectionNode) => {
     if (connection.type === 'connection') {
@@ -1438,18 +1165,6 @@ function AppContent() {
     status: activeConnection.status,
   } : undefined;
 
-  const restoringPercent = !restoringProgress.total
-    ? 0
-    : Math.min(100, Math.round((restoringProgress.current / restoringProgress.total) * 100));
-
-  const restoreHighlights = useMemo(() => {
-    return [
-      { icon: ShieldCheck, label: t('app.restoreHighlight.encryptedSecrets') },
-      { icon: PlugZap, label: 'Auto reconnect with retry' },
-      { icon: Activity, label: 'Live status monitoring' },
-    ];
-  }, [t]);
-
   // Check if there are any tabs across all groups
   const hasAnyTabs = allTabs.length > 0;
   // Check if the grid has only one empty group (show welcome screen)
@@ -1464,72 +1179,6 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col bg-background">
       <UpdateChecker checkSignal={updateCheckSignal} />
-      {/* Connection Restoration Loading Overlay */}
-      {isRestoring && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-xl rounded-2xl border bg-card p-8 shadow-2xl">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <History className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Workspace Restore</p>
-                <h3 className="mt-1 text-2xl font-semibold text-foreground">Bringing your connections back online</h3>
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-5">
-              <div className="flex items-center justify-between text-sm text-muted-foreground" aria-live="polite">
-                <span>
-                  {currentRestoreTarget
-                    ? `Reconnecting ${currentRestoreTarget.name}`
-                    : 'Preparing saved connections'}
-                </span>
-                <span className="font-semibold text-foreground">
-                  {restoringProgress.current} / {restoringProgress.total}
-                </span>
-              </div>
-
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-primary/70 transition-[width] duration-500 ease-out"
-                  style={{ width: `${restoringPercent}%` }}
-                />
-              </div>
-
-              {currentRestoreTarget && (
-                <div className="flex items-start gap-3 rounded-xl border bg-muted/40 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{currentRestoreTarget.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {currentRestoreTarget.username ? `${currentRestoreTarget.username}@` : ''}
-                      {currentRestoreTarget.host || 'unknown host'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-                {restoreHighlights.map(({ icon: Icon, label }) => (
-                  <div
-                    key={label}
-                    className="flex items-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 p-2.5"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-background text-primary">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs leading-tight">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <MenuBar
         onOpenSettings={handleOpenSettings}
         onToggleLeftSidebar={toggleLeftSidebar}

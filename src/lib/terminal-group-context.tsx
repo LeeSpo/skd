@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useMemo } from 'react';
 import type { TerminalGroupState, TerminalGroupAction, TerminalGroup, TerminalTab } from './terminal-group-types';
 import { terminalGroupReducer, createDefaultState } from './terminal-group-reducer';
-import { saveState, loadState, migrateFromLegacy } from './terminal-group-serializer';
+import { migrateFromLegacy, STORAGE_KEY } from './terminal-group-serializer';
 
 interface TerminalGroupContextType {
   state: TerminalGroupState;
@@ -25,50 +25,14 @@ const TerminalGroupContext = createContext<TerminalGroupContextType | null>(null
 
 function initializeState(): TerminalGroupState {
   migrateFromLegacy();
-  const loaded = loadState();
-  if (!loaded) return createDefaultState();
-
-  // Reset all tabs to 'pending' — SSH sessions don't survive app restart.
-  // This indicates the tab needs SSH connection to be established.
-  // The restoreConnections effect in App.tsx will re-establish connections.
-  const groups: Record<string, TerminalGroup> = {};
-  const tabToGroupMap: Record<string, string> = {};
-  
-  for (const [id, group] of Object.entries(loaded.groups)) {
-    const tabs = group.tabs
-      .filter((tab) => tab.protocol !== 'Local' && tab.tabType !== 'editor')
-      .map((tab) => ({
-        ...tab,
-        connectionStatus: 'pending' as const,
-      }));
-    groups[id] = {
-      ...group,
-      tabs,
-      activeTabId: tabs.find((t) => t.id === group.activeTabId)
-        ? group.activeTabId
-        : (tabs[0]?.id ?? null),
-    };
-    for (const tab of tabs) {
-      tabToGroupMap[tab.id] = id;
-    }
-  }
-  return { ...loaded, groups, tabToGroupMap };
+  localStorage.removeItem(STORAGE_KEY);
+  return createDefaultState();
 }
 
 export function TerminalGroupProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(terminalGroupReducer, undefined, initializeState);
 
-  const isInitialMount = useRef(true);
   const prevGroupCountRef = useRef(Object.keys(state.groups).length);
-
-  // Save state on every change (skip the initial mount to avoid re-saving loaded state)
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    saveState(state);
-  }, [state]);
 
   // When the number of groups changes (split/merge), fire window resize events
   // so all PtyTerminal instances refit to their new container dimensions.
