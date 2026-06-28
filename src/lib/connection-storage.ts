@@ -91,7 +91,8 @@ export class ConnectionStorageManager {
   }
 
   /**
-   * Initialize default folder structure if not exists
+   * Initialize the root folder if no folder data exists yet.
+   * Subfolders are created by the user via Connection Manager.
    */
   static initialize(): void {
     // First, try to migrate legacy data
@@ -99,10 +100,7 @@ export class ConnectionStorageManager {
     
     const folders = this.getFolders();
     if (folders.length === 0) {
-      // Create default folder structure
       this.createFolder('All Connections', undefined);
-      this.createFolder('Personal', 'All Connections');
-      this.createFolder('Work', 'All Connections');
     }
   }
 
