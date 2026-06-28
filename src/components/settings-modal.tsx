@@ -41,7 +41,7 @@ import {
   DEFAULT_APP_KEYBOARD_SHORTCUTS,
   loadKeyboardShortcutSettings,
 } from '../lib/keyboard-shortcuts';
-import { applyTheme, ThemeMode } from '../lib/utils';
+import { applyTheme, ThemeMode, cn } from '../lib/utils';
 import {
   loadEditorConfig,
   saveEditorConfig,
@@ -258,10 +258,24 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     { value: 'advanced', icon: Monitor, labelKey: 'settings.tab.advanced' },
   ] as const;
 
+  const TALL_TABS = new Set(['terminal', 'editor']);
+  const isTallTab = TALL_TABS.has(activeTab);
+  const tabContentClassName = cn(
+    'px-6 py-4 space-y-4 mt-0 overflow-y-auto',
+    isTallTab && 'flex-1 min-h-0',
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[680px] max-w-[90vw] max-h-[90vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+      <DialogContent
+        className={cn(
+          '!top-0 !left-0 !translate-x-0 !translate-y-0 !inset-0 !m-auto',
+          '!flex !flex-col !w-full sm:!max-w-4xl',
+          '!max-h-[85vh] overflow-hidden p-0 gap-0 min-w-0',
+          isTallTab ? '!h-[85vh]' : '!h-fit',
+        )}
+      >
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
             <div className="p-2 bg-primary/10 rounded-lg">
               <Settings className="h-5 w-5 text-primary" />
@@ -275,9 +289,16 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className={cn(
+            'flex flex-col overflow-hidden',
+            isTallTab ? 'flex-1 min-h-0' : 'shrink-0',
+          )}
+        >
           {/* Scrollable tab bar with fade edges and scroll arrows */}
-          <div className="relative border-b">
+          <div className="relative border-b shrink-0">
             {/* Left scroll button */}
             {canScrollLeft && (
               <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pl-1 pr-6 bg-gradient-to-r from-background via-background/95 to-transparent pointer-events-none">
@@ -326,7 +347,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </TabsList>
           </div>
 
-          <TabsContent value="terminal" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="terminal" className={tabContentClassName}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -338,7 +359,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.terminal.fontFamily')}</Label>
                     <Select 
@@ -371,7 +392,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.terminal.lineHeight', { height: terminalAppearance.lineHeight })}</Label>
                     <Slider
@@ -394,7 +415,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.terminal.colorTheme')}</Label>
                     <Select 
@@ -641,7 +662,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="editor" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="editor" className={tabContentClassName}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -654,7 +675,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Theme & Font */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.editor.theme')}</Label>
                     <Select
@@ -693,7 +714,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.editor.fontSize', { size: editorConfig.fontSize })}</Label>
                     <Slider
@@ -783,7 +804,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="connection" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="connection" className={tabContentClassName}>
             <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -795,7 +816,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.connection.defaultProtocol')}</Label>
                     <Select value={settings.defaultProtocol} onValueChange={(value) => updateSetting('defaultProtocol', value)}>
@@ -846,7 +867,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="security" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="security" className={tabContentClassName}>
             <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -903,7 +924,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="interface" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="interface" className={tabContentClassName}>
             <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -984,7 +1005,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="keyboard" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="keyboard" className={tabContentClassName}>
             <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -996,7 +1017,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.keyboard.newSession')}</Label>
                     <Input
@@ -1015,7 +1036,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.keyboard.nextTab')}</Label>
                     <Input
@@ -1043,7 +1064,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             </Card>
           </TabsContent>
 
-          <TabsContent value="advanced" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0">
+          <TabsContent value="advanced" className={tabContentClassName}>
             <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1055,7 +1076,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.advanced.logLevel')}</Label>
                     <Select value={settings.logLevel} onValueChange={(value) => updateSetting('logLevel', value)}>
@@ -1129,7 +1150,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-between px-6 py-4 border-t bg-muted/30">
+        <div className="shrink-0 flex justify-between px-6 py-4 border-t bg-muted/30">
           <Button variant="ghost" onClick={handleReset}>
             {t('settings.button.resetToDefaults')}
           </Button>
