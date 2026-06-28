@@ -31,7 +31,9 @@ import {
   defaultAppearanceSettings, 
   loadAppearanceSettings,
   saveAppearanceSettings,
+  dispatchTerminalAppearanceChanged,
   terminalThemes,
+  MACOS_MULTILINGUAL_TERMINAL_FONT,
   MIN_TERMINAL_SCROLLBACK,
   MAX_TERMINAL_SCROLLBACK,
 } from '../lib/terminal-config';
@@ -142,6 +144,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const handleSave = () => {
     // Save terminal appearance settings
     saveAppearanceSettings(terminalAppearance);
+    dispatchTerminalAppearanceChanged();
     
     // Notify parent component of appearance changes
     if (onAppearanceChange) {
@@ -367,15 +370,37 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Menlo, Monaco, 'Courier New', monospace">Menlo</SelectItem>
-                        <SelectItem value="'JetBrains Mono', monospace">JetBrains Mono</SelectItem>
-                        <SelectItem value="'Fira Code', monospace">Fira Code</SelectItem>
-                        <SelectItem value="'Source Code Pro', monospace">Source Code Pro</SelectItem>
-                        <SelectItem value="Consolas, monospace">Consolas</SelectItem>
-                        <SelectItem value="Monaco, monospace">Monaco</SelectItem>
-                        <SelectItem value="'Courier New', monospace">Courier New</SelectItem>
+                        <SelectItem value={MACOS_MULTILINGUAL_TERMINAL_FONT}>
+                          {t('settings.terminal.fontSystemMultilingual')}
+                        </SelectItem>
+                        <SelectItem value="Menlo, Monaco, 'Courier New', monospace">
+                          {t('settings.terminal.fontMenlo')}
+                        </SelectItem>
+                        <SelectItem value="'JetBrains Mono', monospace">
+                          {t('settings.terminal.fontJetBrainsMono')}
+                        </SelectItem>
+                        <SelectItem value="'Fira Code', monospace">
+                          {t('settings.terminal.fontFiraCode')}
+                        </SelectItem>
+                        <SelectItem value="'Source Code Pro', monospace">
+                          {t('settings.terminal.fontSourceCodePro')}
+                        </SelectItem>
+                        <SelectItem value="Consolas, monospace">
+                          {t('settings.terminal.fontConsolas')}
+                        </SelectItem>
+                        <SelectItem value="Monaco, monospace">
+                          {t('settings.terminal.fontMonaco')}
+                        </SelectItem>
+                        <SelectItem value="'Courier New', monospace">
+                          {t('settings.terminal.fontCourierNew')}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                    {terminalAppearance.fontFamily !== MACOS_MULTILINGUAL_TERMINAL_FONT && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.terminal.latinFontCjkWarning')}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t('settings.terminal.fontSize', { size: terminalAppearance.fontSize })}</Label>
@@ -477,6 +502,19 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   <Switch
                     checked={terminalAppearance.cursorBlink}
                     onCheckedChange={(checked) => updateTerminalAppearance('cursorBlink', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>{t('settings.terminal.useWebglRenderer')}</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {t('settings.terminal.useWebglRendererDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={terminalAppearance.useWebglRenderer}
+                    onCheckedChange={(checked) => updateTerminalAppearance('useWebglRenderer', checked)}
                   />
                 </div>
 

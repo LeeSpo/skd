@@ -24,11 +24,60 @@ export interface TerminalAppearanceSettings {
   scrollback: number;
   allowTransparency: boolean;
   opacity: number;
+  /** WebGL is faster but cannot fall back to system CJK fonts — off by default. */
+  useWebglRenderer: boolean;
   // Background image settings
   backgroundImage: string; // Base64 data URL or empty string
   backgroundImageOpacity: number; // 0-100
   backgroundImageBlur: number; // 0-20 pixels
   backgroundImagePosition: 'cover' | 'contain' | 'center' | 'tile';
+}
+
+/** Legacy default — Latin-only; missing glyphs for CJK/Emoji in xterm WebGL. */
+export const LEGACY_LATIN_ONLY_TERMINAL_FONT =
+  'Menlo, Monaco, "Courier New", monospace';
+
+/**
+ * macOS system font stack with per-glyph fallback (Canvas renderer).
+ * Matches Terminal.app behaviour: Menlo for Latin, Hiragino/PingFang for CJK.
+ */
+export const MACOS_MULTILINGUAL_TERMINAL_FONT = [
+  'Menlo',
+  'Hiragino Kaku Gothic ProN',
+  'Hiragino Sans',
+  'PingFang SC',
+  'PingFang TC',
+  'Apple SD Gothic Neo',
+  'Yu Gothic UI',
+  'Apple Color Emoji',
+  'monospace',
+]
+  .map((f) => (f.includes(' ') ? `"${f}"` : f))
+  .join(', ');
+
+const LEGACY_LATIN_ONLY_FONT_VARIANTS = new Set([
+  LEGACY_LATIN_ONLY_TERMINAL_FONT,
+  "Menlo, Monaco, 'Courier New', monospace",
+]);
+
+export function isLegacyLatinOnlyFontFamily(fontFamily: string): boolean {
+  return LEGACY_LATIN_ONLY_FONT_VARIANTS.has(fontFamily);
+}
+
+export function migrateAppearanceSettings(
+  settings: TerminalAppearanceSettings,
+): TerminalAppearanceSettings {
+  let migrated = { ...settings };
+
+  if (isLegacyLatinOnlyFontFamily(migrated.fontFamily)) {
+    migrated = { ...migrated, fontFamily: MACOS_MULTILINGUAL_TERMINAL_FONT };
+  }
+
+  if (migrated.useWebglRenderer === undefined) {
+    migrated = { ...migrated, useWebglRenderer: false };
+  }
+
+  return migrated;
 }
 
 export const DEFAULT_TERMINAL_SCROLLBACK = 10000;
@@ -310,7 +359,7 @@ export const terminalThemes: Record<string, ITheme> = {
 
 export const defaultAppearanceSettings: TerminalAppearanceSettings = {
   fontSize: 14,
-  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  fontFamily: MACOS_MULTILINGUAL_TERMINAL_FONT,
   lineHeight: 1.2,
   letterSpacing: 0,
   cursorStyle: 'block',
@@ -319,6 +368,7 @@ export const defaultAppearanceSettings: TerminalAppearanceSettings = {
   scrollback: DEFAULT_TERMINAL_SCROLLBACK,
   allowTransparency: false,
   opacity: 100,
+  useWebglRenderer: false,
   // Background image defaults
   backgroundImage: '',
   backgroundImageOpacity: 30,
@@ -329,7 +379,7 @@ export const defaultAppearanceSettings: TerminalAppearanceSettings = {
 export const defaultTerminalOptions: ITerminalOptions = {
   cursorBlink: true,
   cursorStyle: 'block',
-  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  fontFamily: MACOS_MULTILINGUAL_TERMINAL_FONT,
   fontSize: 14,
   lineHeight: 1.2,
   letterSpacing: 0,
@@ -340,6 +390,7 @@ export const defaultTerminalOptions: ITerminalOptions = {
   tabStopWidth: 8,
   allowTransparency: false,
   scrollSensitivity: 1,
+  rescaleOverlappingGlyphs: true,
 };
 
 export function getTerminalOptions(appearance: TerminalAppearanceSettings): ITerminalOptions {
@@ -371,10 +422,12 @@ export function loadAppearanceSettings(): TerminalAppearanceSettings {
     if (saved) {
       const parsed = JSON.parse(saved) as unknown;
       if (parsed && typeof parsed === 'object') {
-        return normalizeAppearanceSettings({
-          ...defaultAppearanceSettings,
-          ...(parsed as Partial<TerminalAppearanceSettings>),
-        });
+        return normalizeAppearanceSettings(
+          migrateAppearanceSettings({
+            ...defaultAppearanceSettings,
+            ...(parsed as Partial<TerminalAppearanceSettings>),
+          }),
+        );
       }
     }
   } catch (e) {
@@ -391,8 +444,14 @@ export function saveAppearanceSettings(settings: TerminalAppearanceSettings): vo
   }
 }
 
+export const TERMINAL_APPEARANCE_CHANGED_EVENT = 'skd-terminal-appearance-changed';
+
+export function dispatchTerminalAppearanceChanged(): void {
+  window.dispatchEvent(new Event(TERMINAL_APPEARANCE_CHANGED_EVENT));
+}
+
 export const defaultConfig: TerminalConfig = {
-  rendererType: 'webgl',
+  rendererType: 'canvas',
   enableFlowControl: true,
   enableUnicode: true,
   enableSixel: false,

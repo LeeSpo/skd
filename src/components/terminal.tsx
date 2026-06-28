@@ -5,11 +5,16 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { invoke } from '@tauri-apps/api/core';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { loadAppearanceSettings, getTerminalOptions } from '../lib/terminal-config';
+import {
+  loadAppearanceSettings,
+  getTerminalOptions,
+  TERMINAL_APPEARANCE_CHANGED_EVENT,
+} from '../lib/terminal-config';
 import 'xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -31,6 +36,13 @@ export function Terminal({ connectionId, connectionName, host = 'localhost', use
   const historyIndexRef = React.useRef<number>(-1);
   const [showSearch, setShowSearch] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [settingsRevision, setSettingsRevision] = React.useState(0);
+
+  React.useEffect(() => {
+    const handler = () => setSettingsRevision((v) => v + 1);
+    window.addEventListener(TERMINAL_APPEARANCE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(TERMINAL_APPEARANCE_CHANGED_EVENT, handler);
+  }, []);
 
   React.useEffect(() => {
     if (!terminalRef.current) return;
@@ -49,22 +61,30 @@ export function Terminal({ connectionId, connectionName, host = 'localhost', use
     const fitAddon = new FitAddon();
     const webLinks = new WebLinksAddon();
     const search = new SearchAddon();
-    const webgl = new WebglAddon();
 
     term.loadAddon(fitAddon);
     term.loadAddon(webLinks);
     term.loadAddon(search);
 
+    const unicode11Addon = new Unicode11Addon();
+    term.loadAddon(unicode11Addon);
+    term.unicode.activeVersion = '11';
+
     term.open(terminalRef.current);
     
-    // Load WebGL addon after terminal is opened
-    try {
-      term.loadAddon(webgl);
-      rendererRef.current = 'webgl';
-      console.log('WebGL renderer enabled');
-    } catch (e) {
+    const wantsWebgl = appearance.useWebglRenderer && !appearance.backgroundImage;
+    if (wantsWebgl) {
+      try {
+        const webgl = new WebglAddon();
+        term.loadAddon(webgl);
+        rendererRef.current = 'webgl';
+        console.log('WebGL renderer enabled');
+      } catch (e) {
+        rendererRef.current = 'canvas';
+        console.warn('WebGL addon failed to load, falling back to canvas:', e);
+      }
+    } else {
       rendererRef.current = 'canvas';
-      console.warn('WebGL addon failed to load, falling back to canvas:', e);
     }
     
     fitAddon.fit();
@@ -271,7 +291,7 @@ export function Terminal({ connectionId, connectionName, host = 'localhost', use
       window.removeEventListener('resize', handleResize);
       term.dispose();
     };
-  }, [connectionId, connectionName, host, username, appearanceKey]);
+  }, [connectionId, connectionName, host, username, appearanceKey, settingsRevision]);
 
   // Search functionality
   const handleSearch = (term: string, direction: 'next' | 'prev' = 'next') => {

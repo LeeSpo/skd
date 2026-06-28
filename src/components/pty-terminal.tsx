@@ -4,10 +4,17 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { invoke } from '@tauri-apps/api/core';
-import { loadAppearanceSettings, getThemeAwareTerminalOptions, terminalThemes, defaultTerminalTheme } from '../lib/terminal-config';
+import {
+  loadAppearanceSettings,
+  getThemeAwareTerminalOptions,
+  terminalThemes,
+  defaultTerminalTheme,
+  TERMINAL_APPEARANCE_CHANGED_EVENT,
+} from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
 import { TerminalSearchBar } from './terminal/terminal-search-bar';
 import { toast } from 'sonner';
@@ -132,20 +139,32 @@ export function PtyTerminal({
     }
   }, []);
 
-  // Get appearance settings - reloads when appearanceKey changes
-  const appearance = React.useMemo(() => loadAppearanceSettings(), [appearanceKey]);
+  const [settingsRevision, setSettingsRevision] = React.useState(0);
+
+  React.useEffect(() => {
+    const handler = () => setSettingsRevision((v) => v + 1);
+    window.addEventListener(TERMINAL_APPEARANCE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(TERMINAL_APPEARANCE_CHANGED_EVENT, handler);
+  }, []);
+
+  // Get appearance settings - reloads when appearanceKey or settingsRevision changes
+  const appearance = React.useMemo(
+    () => loadAppearanceSettings(),
+    [appearanceKey, settingsRevision],
+  );
   
   // Track whether we need to switch renderers due to background image change
   // This is necessary because WebGL renderer doesn't support transparency
   const hasBackgroundImage = !!appearance.backgroundImage;
   
-  // Use a key that only changes when we need to switch renderers
+  // Remount when renderer mode changes — WebGL vs Canvas cannot be swapped in-place.
   const terminalKey = React.useMemo(() => {
-    // Update the ref to track current state
+    const renderer =
+      appearance.useWebglRenderer && !hasBackgroundImage ? 'webgl' : 'canvas';
     const key = hasBackgroundImage ? 'bg' : 'no-bg';
     hadBackgroundImageRef.current = hasBackgroundImage;
-    return key;
-  }, [hasBackgroundImage]);
+    return `${key}-${renderer}`;
+  }, [hasBackgroundImage, appearance.useWebglRenderer]);
   
   React.useEffect(() => {
     if (!terminalRef.current) return;
@@ -167,12 +186,17 @@ export function PtyTerminal({
     const clipboardAddon = new ClipboardAddon();
     term.loadAddon(clipboardAddon);
     clipboardAddonRef.current = clipboardAddon;
+
+    const unicode11Addon = new Unicode11Addon();
+    term.loadAddon(unicode11Addon);
+    term.unicode.activeVersion = '11';
     
     term.open(terminalRef.current);
     
-    // Load WebGL renderer for better performance
-    // NOTE: WebGL doesn't support transparency, so skip it when background image is set
-    if (!appearance.backgroundImage) {
+    // WebGL is opt-in: it cannot fall back to system CJK fonts (shows □ for Japanese etc.).
+    // Canvas renderer uses browser per-glyph font fallback — required for multilingual text.
+    const wantsWebgl = appearance.useWebglRenderer && !appearance.backgroundImage;
+    if (wantsWebgl) {
       try {
         const webglAddon = new WebglAddon();
         // Dispose listener — xterm calls this when the addon is disposed
@@ -192,7 +216,11 @@ export function PtyTerminal({
       }
     } else {
       rendererRef.current = 'canvas';
-      console.log('[PTY Terminal] Using canvas renderer (background image requires transparency)');
+      if (appearance.backgroundImage) {
+        console.log('[PTY Terminal] Using canvas renderer (background image requires transparency)');
+      } else {
+        console.log('[PTY Terminal] Using canvas renderer (multilingual font fallback)');
+      }
     }
     
     fitAddon.fit();
@@ -758,7 +786,7 @@ export function PtyTerminal({
     term.options.scrollback = opts.scrollback;
     // Refit so any font-size change propagates as a PTY resize.
     fitRef.current?.fit();
-  }, [themeKey, appearanceKey]);
+  }, [themeKey, appearanceKey, settingsRevision]);
 
   React.useEffect(() => {
     if (!isActive) {

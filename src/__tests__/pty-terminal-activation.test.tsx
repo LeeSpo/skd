@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     cols = 80;
     rows = 24;
     options: Record<string, unknown> = {};
+    unicode = { activeVersion: '11' };
     buffer = {
       active: {
         length: 0,
@@ -102,11 +103,18 @@ vi.mock('@xterm/addon-search', () => ({
   }),
 }));
 
+vi.mock('@xterm/addon-unicode11', () => ({
+  Unicode11Addon: vi.fn(function Unicode11Addon() {
+    return { dispose: vi.fn() };
+  }),
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (command: string) => (command === 'get_websocket_port' ? 9001 : undefined)),
 }));
 
 vi.mock('../lib/terminal-config', () => ({
+  TERMINAL_APPEARANCE_CHANGED_EVENT: 'skd-terminal-appearance-changed',
   defaultTerminalTheme: {
     background: '#000000',
   },
@@ -120,6 +128,7 @@ vi.mock('../lib/terminal-config', () => ({
     backgroundImage: '',
     opacity: 100,
     theme: 'vs-code-dark',
+    useWebglRenderer: false,
   })),
   getThemeAwareTerminalOptions: vi.fn(() => ({
     cursorBlink: true,
