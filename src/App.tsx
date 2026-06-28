@@ -1007,13 +1007,19 @@ function AppContent() {
   // Handler: open a remote file in a new Tauri window.
   // The window is centered on whichever monitor the parent window currently
   // occupies, matching the behaviour of VS Code, Chrome, Figma, etc.
-  const handleOpenInEditor = useCallback((filePath: string, fileName: string) => {
+  const handleOpenInEditor = useCallback((
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => {
     if (!activeConnection) return;
     const label = `file-viewer-${Date.now()}`;
+    const readOnlyParam = options?.readOnly ? '&readOnly=1' : '';
     const url = `${window.location.origin}/?mode=file-viewer`
       + `&connectionId=${encodeURIComponent(activeConnection.connectionId)}`
       + `&filePath=${encodeURIComponent(filePath)}`
-      + `&fileName=${encodeURIComponent(fileName)}`;
+      + `&fileName=${encodeURIComponent(fileName)}`
+      + readOnlyParam;
 
     const WIN_W = 900;
     const WIN_H = 700;

@@ -11,6 +11,7 @@ export function FileViewerWindow() {
   const connectionId = params.get("connectionId") ?? "";
   const filePath = decodeURIComponent(params.get("filePath") ?? "");
   const fileName = decodeURIComponent(params.get("fileName") ?? "Untitled");
+  const readOnly = params.get("readOnly") === "1";
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
@@ -19,6 +20,7 @@ export function FileViewerWindow() {
         filePath={filePath}
         fileName={fileName}
         isConnected={true}
+        readOnly={readOnly}
       />
     </div>
   );

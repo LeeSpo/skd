@@ -22,6 +22,8 @@ interface FileEditorViewProps {
   fileName: string;
   /** Whether the underlying SSH connection is alive */
   isConnected: boolean;
+  /** When true, the text editor is read-only (no save) */
+  readOnly?: boolean;
 }
 
 export function FileEditorView({
@@ -29,6 +31,7 @@ export function FileEditorView({
   filePath,
   fileName,
   isConnected,
+  readOnly = false,
 }: FileEditorViewProps) {
   const { t } = useTranslation();
   const [content, setContent] = useState("");
@@ -136,9 +139,9 @@ export function FileEditorView({
     }
   }, [connectionId, filePath, fileName]);
 
-  // Ctrl+S / Cmd+S to save (only for text files)
+  // Ctrl+S / Cmd+S to save (only for editable text files)
   useEffect(() => {
-    if (fileKind !== "text") return;
+    if (readOnly || fileKind !== "text") return;
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
@@ -147,7 +150,7 @@ export function FileEditorView({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleSave, fileKind]);
+  }, [handleSave, fileKind, readOnly]);
 
   // ---------- Shared header toolbar ----------
   const renderToolbar = (showSaveButton: boolean) => (
@@ -155,6 +158,11 @@ export function FileEditorView({
       <span className="font-mono text-muted-foreground truncate flex-1" title={filePath}>
         {filePath}
       </span>
+      {readOnly && (
+        <span className="text-muted-foreground text-[10px] font-medium shrink-0">
+          {t('fileEditorView.readOnly')}
+        </span>
+      )}
       {showSaveButton && dirty && (
         <span className="text-yellow-500 text-[10px] font-medium">{t('fileEditorView.modified')}</span>
       )}
@@ -306,13 +314,14 @@ export function FileEditorView({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {renderToolbar(true)}
+      {renderToolbar(!readOnly)}
       {/* Editor */}
       <div className="flex-1 min-h-0">
         <CodeEditor
           value={content}
           onChange={setContent}
           filename={fileName}
+          readOnly={readOnly}
         />
       </div>
     </div>

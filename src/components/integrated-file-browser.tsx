@@ -84,8 +84,12 @@ interface IntegratedFileBrowserProps {
   onClose: () => void;
   /** Called when user wants to open a file in the Log Monitor */
   onOpenInLogMonitor?: (filePath: string) => void;
-  /** Called when user wants to open a file in the editor tab */
-  onOpenInEditor?: (filePath: string, fileName: string) => void;
+  /** Called when user wants to open a file in the editor window */
+  onOpenInEditor?: (
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => void;
 }
 
 // Cache to store state per session
@@ -762,19 +766,20 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
     }
   };
 
-  const handleFileDoubleClick = async (file: FileItem) => {
-    console.log('handleFileDoubleClick called', { file, currentPath, connectionId });
-    
+  const openFileInEditor = (file: FileItem, options?: { readOnly?: boolean }) => {
+    if (onOpenInEditor) {
+      onOpenInEditor(file.path, file.name, options);
+    } else {
+      toast.info(t('app.noEditorHandler', { name: file.name }));
+    }
+  };
+
+  const handleFileDoubleClick = (file: FileItem) => {
     if (file.type === 'directory') {
-      console.log('Navigating to directory:', file.path);
       navigateTo(file.path);
     } else {
-      // Open file in editor tab
-      if (onOpenInEditor) {
-        onOpenInEditor(file.path, file.name);
-      } else {
-        toast.info(t('app.noEditorHandler', { name: file.name }));
-      }
+      // Double-click opens read-only preview (same as context menu Open)
+      openFileInEditor(file, { readOnly: true });
     }
   };
 
@@ -1648,13 +1653,13 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                   {/* File-specific actions */}
                   {file.type === 'file' && (
                     <>
-                      <ContextMenuItem onClick={() => handleFileDoubleClick(file)}>
+                      <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: true })}>
                         <Eye className="mr-2 h-4 w-4" />
-                        Open
+                        {t('fileBrowser.contextMenu.open')}
                       </ContextMenuItem>
-                      <ContextMenuItem onClick={() => handleFileDoubleClick(file)}>
+                      <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: false })}>
                         <Edit className="mr-2 h-4 w-4" />
-                        Edit
+                        {t('fileBrowser.contextMenu.edit')}
                       </ContextMenuItem>
                       {onOpenInLogMonitor && (
                         <ContextMenuItem onClick={() => {
