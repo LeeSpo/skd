@@ -38,11 +38,13 @@ import {
   PanelBottomClose,
   PanelBottomOpen,
   Maximize2,
-  LayoutGrid
+  LayoutGrid,
+  Terminal,
 } from 'lucide-react';
 
 interface MenuBarProps {
   onNewConnection?: () => void;
+  onNewLocalTerminal?: () => void;
   onOpenConnection?: () => void;
   onSaveConnection?: () => void;
   onCloseConnection?: () => void;
@@ -78,6 +80,7 @@ interface MenuBarProps {
 
 export function MenuBar({
   onNewConnection,
+  onNewLocalTerminal,
   onOpenConnection,
   onSaveConnection,
   onCloseConnection,
@@ -159,6 +162,11 @@ export function MenuBar({
             <Plus className="mr-2 h-4 w-4" />
             {t('menuBar.newConnection')}
             <DropdownMenuShortcut>{cmdOrCtrl}+N</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onNewLocalTerminal}>
+            <Terminal className="mr-2 h-4 w-4" />
+            {t('menuBar.newLocalTerminal')}
+            <DropdownMenuShortcut>{cmdOrCtrl}+Shift+L</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenConnection}>
             <FolderOpen className="mr-2 h-4 w-4" />

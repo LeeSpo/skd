@@ -133,6 +133,44 @@ pub async fn ssh_disconnect(
 }
 
 #[tauri::command]
+pub async fn local_shell_connect(
+    connection_id: String,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<CommandResponse, String> {
+    match state.create_local_connection(connection_id.clone()).await {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            output: Some(format!("Local shell ready: {}", connection_id)),
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            output: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn local_shell_disconnect(
+    connection_id: String,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<CommandResponse, String> {
+    match state.close_local_connection(&connection_id).await {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            output: Some("Local shell disconnected".to_string()),
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            output: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+#[tauri::command]
 pub async fn ssh_execute_command(
     connection_id: String,
     command: String,

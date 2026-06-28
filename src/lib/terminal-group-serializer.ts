@@ -35,16 +35,20 @@ export function deserialize(json: string): TerminalGroupState | null {
 
 /**
  * saveState — persist state to localStorage, warn on failure.
- * Editor tabs are ephemeral and excluded from persistence.
+ * Editor and local-shell tabs are ephemeral and excluded from persistence.
  */
+function isEphemeralTab(tab: { tabType?: string; protocol?: string }): boolean {
+  return tab.tabType === 'editor' || tab.protocol === 'Local';
+}
+
 export function saveState(state: TerminalGroupState): void {
   try {
-    // Strip editor tabs before saving — they are transient and cannot be restored
+    // Strip ephemeral tabs before saving — they are transient and cannot be restored
     const filtered: TerminalGroupState = {
       ...state,
       groups: Object.fromEntries(
         Object.entries(state.groups).map(([id, group]) => {
-          const tabs = group.tabs.filter(t => t.tabType !== 'editor');
+          const tabs = group.tabs.filter(t => !isEphemeralTab(t));
           return [id, {
             ...group,
             tabs,
@@ -56,7 +60,7 @@ export function saveState(state: TerminalGroupState): void {
         Object.entries(state.tabToGroupMap).filter(([tabId]) => {
           const group = state.groups[state.tabToGroupMap[tabId]];
           const tab = group?.tabs.find(t => t.id === tabId);
-          return tab?.tabType !== 'editor';
+          return tab !== undefined && !isEphemeralTab(tab);
         }),
       ),
     };

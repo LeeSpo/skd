@@ -2,7 +2,9 @@ mod commands;
 mod connection_manager;
 mod desktop_protocol;
 mod ftp_client;
+mod local_shell;
 mod os_detect;
+mod pty_session;
 mod rdp_client;
 mod sftp_client;
 mod ssh;
@@ -60,6 +62,13 @@ fn build_app_menu<F: Fn(&str) -> String>(
                 &t("menuBar.newConnection"),
                 true,
                 Some("CmdOrCtrl+N"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "new_local_terminal",
+                &t("menuBar.newLocalTerminal"),
+                true,
+                Some("CmdOrCtrl+Shift+L"),
             )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
@@ -179,6 +188,7 @@ fn default_menu_text(key: &str) -> String {
         "menuBar.connection" => "Connection",
         "menuBar.window" => "Window",
         "menuBar.newConnection" => "New Connection...",
+        "menuBar.newLocalTerminal" => "New Local Terminal",
         "menuBar.saveConnection" => "Save Connection",
         "menuBar.closeTab" => "Close Tab",
         "menuBar.find" => "Find...",
@@ -254,6 +264,8 @@ pub fn run() {
             commands::ssh_connect,
             commands::ssh_cancel_connect,
             commands::ssh_disconnect,
+            commands::local_shell_connect,
+            commands::local_shell_disconnect,
             commands::ssh_execute_command,
             commands::ssh_tab_complete,
             commands::get_system_stats,

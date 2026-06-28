@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Monitor, Server, HardDrive, Plus, Pencil, Copy, Trash2, FolderPlus, FolderEdit, Zap, Clock } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Monitor, Server, HardDrive, Plus, Pencil, Copy, Trash2, FolderPlus, FolderEdit, Zap, Clock, Terminal } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
@@ -65,6 +65,7 @@ interface ConnectionManagerProps {
   selectedConnectionId: string | null;
   activeConnections?: Set<string>;
   onNewConnection?: () => void;
+  onNewLocalTerminal?: () => void;
   onEditConnection?: (connection: ConnectionNode) => void;
   onDeleteConnection?: (connectionId: string) => void;
   onDuplicateConnection?: (connection: ConnectionNode) => void;
@@ -78,6 +79,7 @@ export function ConnectionManager({
   selectedConnectionId,
   activeConnections = new Set(),
   onNewConnection,
+  onNewLocalTerminal,
   onEditConnection,
   onDeleteConnection,
   onDuplicateConnection,
@@ -630,6 +632,24 @@ export function ConnectionManager({
               </TooltipTrigger>
               <TooltipContent>{t('connectionManager.newConnection')}</TooltipContent>
             </Tooltip>
+
+            {/* Local Terminal */}
+            {onNewLocalTerminal && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onNewLocalTerminal}
+                    className="h-6 w-6 p-0"
+                    aria-label={t('connectionManager.newLocalTerminal')}
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('connectionManager.newLocalTerminal')}</TooltipContent>
+              </Tooltip>
+            )}
           </TooltipProvider>
         </div>
         <div className="flex-1 overflow-auto">

@@ -4,6 +4,7 @@ import { X, Plus, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, Arro
 import type { TerminalTab, SplitDirection } from '../../lib/terminal-group-types';
 import { getTabDisplayName } from '../../lib/terminal-group-utils';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
+import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import { Button } from '../ui/button';
 import {
   ContextMenu,
@@ -236,11 +237,14 @@ export function GroupTabBar({
     e.preventDefault();
   }, []);
 
+  const { onTabClose } = useTerminalCallbacks();
+
   const handleTabClose = useCallback(
     (tabId: string) => {
+      void onTabClose?.(tabId);
       dispatch({ type: 'REMOVE_TAB', groupId, tabId });
     },
-    [dispatch, groupId],
+    [dispatch, groupId, onTabClose],
   );
 
   const handleTabSelect = useCallback(

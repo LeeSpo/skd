@@ -3,7 +3,9 @@ use crate::ftp_client::FtpClient;
 use crate::os_detect::OsInfoCache;
 use crate::rdp_client::RdpClient;
 use crate::sftp_client::StandaloneSftpClient;
-use crate::ssh::{PtySession, SshClient, SshConfig};
+use crate::local_shell;
+use crate::pty_session::PtySession;
+use crate::ssh::{SshClient, SshConfig};
 use crate::vnc_client::VncClient;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -113,6 +115,27 @@ impl ConnectionManager {
         connections.keys().cloned().collect()
     }
 
+    // ===== Local Shell Connection Management =====
+
+    /// Ephemeral local tabs use IDs like `local-<timestamp>` and do not require
+    /// a prior `local_shell_connect` IPC call — they are registered on first PTY start.
+    pub fn is_ephemeral_local_id(connection_id: &str) -> bool {
+        connection_id.starts_with("local-")
+    }
+
+    pub async fn create_local_connection(&self, connection_id: String) -> Result<()> {
+        let mut types = self.connection_types.write().await;
+        types.insert(connection_id, "Local".to_string());
+        Ok(())
+    }
+
+    pub async fn close_local_connection(&self, connection_id: &str) -> Result<()> {
+        self.close_pty_connection(connection_id, None).await?;
+        let mut types = self.connection_types.write().await;
+        types.remove(connection_id);
+        Ok(())
+    }
+
     // ===== PTY Connection Management (Interactive Terminal) =====
 
     /// Start a PTY shell connection (like ttyd does)
@@ -123,13 +146,17 @@ impl ConnectionManager {
         cols: u32,
         rows: u32,
     ) -> Result<u64> {
-        // Get the SSH client
-        let connections = self.connections.read().await;
-        let client = connections
-            .get(connection_id)
-            .ok_or_else(|| anyhow::anyhow!("Connection not found"))?;
+        if Self::is_ephemeral_local_id(connection_id)
+            && self.get_connection_type(connection_id).await.is_none()
+        {
+            self.create_local_connection(connection_id.to_string()).await?;
+        }
 
-        let client = client.read().await;
+        let is_local = self
+            .get_connection_type(connection_id)
+            .await
+            .as_deref()
+            == Some("Local");
 
         // Cancel and remove any existing PTY session for this connection first.
         // This ensures the old SSH channel and reader task are torn down before
@@ -142,8 +169,17 @@ impl ConnectionManager {
             }
         }
 
-        // Create PTY session
-        let pty = client.create_pty_session(cols, rows).await?;
+        let pty = if is_local {
+            local_shell::create_local_pty_session(cols, rows)?
+        } else {
+            // Get the SSH client
+            let connections = self.connections.read().await;
+            let client = connections
+                .get(connection_id)
+                .ok_or_else(|| anyhow::anyhow!("Connection not found"))?;
+            let client = client.read().await;
+            client.create_pty_session(cols, rows).await?
+        };
 
         // Bump generation so any in-flight Close for the old session is ignored
         let mut generations = self.pty_generations.write().await;
@@ -239,6 +275,17 @@ impl ConnectionManager {
             // Cancel the session so the WebSocket reader task stops immediately
             session.cancel.cancel();
         }
+
+        if self
+            .get_connection_type(connection_id)
+            .await
+            .as_deref()
+            == Some("Local")
+        {
+            let mut types = self.connection_types.write().await;
+            types.remove(connection_id);
+        }
+
         Ok(())
     }
 
@@ -495,6 +542,29 @@ mod tests {
             mgr.get_connection_type("ftp-1").await,
             Some("FTP".to_string())
         );
+    }
+
+    #[test]
+    fn test_is_ephemeral_local_id() {
+        assert!(ConnectionManager::is_ephemeral_local_id("local-1719561234567"));
+        assert!(!ConnectionManager::is_ephemeral_local_id("connection-1"));
+        assert!(!ConnectionManager::is_ephemeral_local_id("ssh-prod"));
+    }
+
+    #[tokio::test]
+    async fn test_local_connection_type() {
+        let mgr = ConnectionManager::new();
+        mgr.create_local_connection("local-1".to_string())
+            .await
+            .expect("create_local_connection");
+        assert_eq!(
+            mgr.get_connection_type("local-1").await,
+            Some("Local".to_string())
+        );
+        mgr.close_local_connection("local-1")
+            .await
+            .expect("close_local_connection");
+        assert!(mgr.get_connection_type("local-1").await.is_none());
     }
 
     #[tokio::test]

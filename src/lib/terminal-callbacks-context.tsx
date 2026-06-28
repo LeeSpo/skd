@@ -7,8 +7,11 @@ import { createContext, useContext } from 'react';
 export interface TerminalCallbacks {
   onDuplicateTab?: (tabId: string) => void | Promise<void>;
   onNewTab?: () => void;
+  onNewLocalTab?: () => void | Promise<void>;
   /** Full reconnect: re-establishes the backend connection then remounts the terminal. */
   onReconnectTab?: (tabId: string) => void | Promise<void>;
+  /** Called before a tab is removed so backend sessions can be cleaned up. */
+  onTabClose?: (tabId: string) => void | Promise<void>;
 }
 
 const TerminalCallbacksContext = createContext<TerminalCallbacks>({});

@@ -35,14 +35,20 @@ function initializeState(): TerminalGroupState {
   const tabToGroupMap: Record<string, string> = {};
   
   for (const [id, group] of Object.entries(loaded.groups)) {
-    groups[id] = {
-      ...group,
-      tabs: group.tabs.map((tab) => ({
+    const tabs = group.tabs
+      .filter((tab) => tab.protocol !== 'Local' && tab.tabType !== 'editor')
+      .map((tab) => ({
         ...tab,
         connectionStatus: 'pending' as const,
-      })),
+      }));
+    groups[id] = {
+      ...group,
+      tabs,
+      activeTabId: tabs.find((t) => t.id === group.activeTabId)
+        ? group.activeTabId
+        : (tabs[0]?.id ?? null),
     };
-    for (const tab of group.tabs) {
+    for (const tab of tabs) {
       tabToGroupMap[tab.id] = id;
     }
   }

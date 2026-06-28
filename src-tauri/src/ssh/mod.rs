@@ -1,3 +1,4 @@
+use crate::pty_session::PtySession;
 use anyhow::Result;
 use russh::*;
 use russh_keys::*;
@@ -52,18 +53,6 @@ pub struct SshSession {
 
 pub struct SshClient {
     session: Option<Arc<client::Handle<Client>>>,
-}
-
-// PTY session handle for interactive shell
-pub struct PtySession {
-    pub input_tx: mpsc::Sender<Vec<u8>>,
-    pub output_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<Vec<u8>>>>,
-    pub channel_id: ChannelId,
-    /// Sender for resize requests (cols, rows) — forwarded to the SSH channel
-    pub resize_tx: mpsc::Sender<(u32, u32)>,
-    /// Cancellation token — cancelled when this session is torn down.
-    /// The WebSocket reader task should select on this to stop promptly.
-    pub cancel: CancellationToken,
 }
 
 pub struct Client;
@@ -289,8 +278,6 @@ impl SshClient {
             let (input_tx, mut input_rx) = mpsc::channel::<Vec<u8>>(1000); // Increased from 100
             let (output_tx, output_rx) = mpsc::channel::<Vec<u8>>(128); // Bounded: back-pressure to SSH window
 
-            let channel_id = channel.id();
-
             // Clone channel for input task
             let input_channel = channel.make_writer();
 
@@ -369,7 +356,6 @@ impl SshClient {
             Ok(PtySession {
                 input_tx,
                 output_rx: Arc::new(tokio::sync::Mutex::new(output_rx)),
-                channel_id,
                 resize_tx,
                 cancel: CancellationToken::new(),
             })

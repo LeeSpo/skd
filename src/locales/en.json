@@ -77,6 +77,11 @@
     "quickConnected": "Quick Connected",
     "quickConnectedDesc": "Connected to {{name}}"
   },
+  "localTerminal": {
+    "tabName": "Local",
+    "connectFailed": "Failed to open local terminal",
+    "connectFailedDesc": "Could not start the local shell. Please try again."
+  },
   "connectionDialog": {
     "title": {
       "new": "New Connection",
@@ -399,6 +404,7 @@
     "tools": "Tools",
     "connection": "Connection",
     "newConnection": "New Connection...",
+    "newLocalTerminal": "New Local Terminal",
     "openConnection": "Open Connection...",
     "recentConnections": "Recent Connections",
     "noRecentConnections": "No recent connections",
@@ -680,6 +686,7 @@
     "noConnections": "No connections saved",
     "noConnectionsDesc": "Save a connection to see it here",
     "newConnection": "New Connection",
+    "newLocalTerminal": "New Local Terminal",
     "newFolder": "New Folder",
     "edit": "Edit Connection",
     "delete": "Delete Connection",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyLanguageFromPreference } from './lib/i18n';
 import { invoke } from '@tauri-apps/api/core';
@@ -24,7 +24,7 @@ import {
   loadKeyboardShortcutSettings,
   useKeyboardShortcuts,
 } from './lib/keyboard-shortcuts';
-import type { SplitViewShortcutBindings } from './lib/keyboard-shortcuts';
+import type { KeyboardShortcut, SplitViewShortcutBindings } from './lib/keyboard-shortcuts';
 import { TerminalGroupProvider, useTerminalGroups } from './lib/terminal-group-context';
 import { TerminalCallbacksProvider } from './lib/terminal-callbacks-context';
 import { GridRenderer } from './components/terminal/grid-renderer';
@@ -73,6 +73,7 @@ function AppContent() {
   const [externalLogPathKey, setExternalLogPathKey] = useState(0);
 
   // Restoration state
+  const defaultLocalShellOpenedRef = useRef(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoringProgress, setRestoringProgress] = useState({ current: 0, total: 0 });
   const [currentRestoreTarget, setCurrentRestoreTarget] = useState<{ name: string; host?: string; username?: string } | null>(null);
@@ -94,6 +95,30 @@ function AppContent() {
   const allTabs = useMemo(() => {
     return Object.values(state.groups).flatMap(g => g.tabs);
   }, [state.groups]);
+
+  const handleTabClose = useCallback(async (tabId: string) => {
+    const tab = allTabs.find((item) => item.id === tabId);
+    if (tab?.protocol === 'Local') {
+      try {
+        await invoke('local_shell_disconnect', { connection_id: tabId });
+      } catch {
+        // PTY cleanup may have already run via WebSocket Close
+      }
+    }
+  }, [allTabs]);
+
+  const handleNewLocalTab = useCallback(() => {
+    const tabId = `local-${Date.now()}`;
+    const newTab: TerminalTab = {
+      id: tabId,
+      name: t('localTerminal.tabName'),
+      protocol: 'Local',
+      host: 'localhost',
+      connectionStatus: 'connecting',
+      reconnectCount: 0,
+    };
+    dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+  }, [state.activeGroupId, dispatch, t]);
 
   // Apply stored language preference (follows OS locale when set to "auto")
   useEffect(() => {
@@ -135,6 +160,7 @@ function AppContent() {
         },
         closeTab: () => {
           if (activeGroup && activeGroup.activeTabId) {
+            void handleTabClose(activeGroup.activeTabId);
             dispatch({ type: 'REMOVE_TAB', groupId: activeGroup.id, tabId: activeGroup.activeTabId });
           }
         },
@@ -155,7 +181,18 @@ function AppContent() {
       },
       keyboardShortcutSettings,
     );
-  }, [state.activeGroupId, state.groups, activeGroup, dispatch, keyboardShortcutSettings]);
+  }, [state.activeGroupId, state.groups, activeGroup, dispatch, keyboardShortcutSettings, handleTabClose]);
+
+  const localTerminalShortcuts = useMemo<KeyboardShortcut[]>(() => [
+    {
+      key: 'l',
+      ctrlKey: true,
+      shiftKey: true,
+      ignoreInTerminal: true,
+      handler: () => { void handleNewLocalTab(); },
+      description: 'New Local Terminal',
+    },
+  ], [handleNewLocalTab]);
 
   const layoutShortcuts = useMemo(() => createLayoutShortcuts({
     toggleLeftSidebar,
@@ -164,12 +201,14 @@ function AppContent() {
     toggleZenMode,
   }), [toggleLeftSidebar, toggleRightSidebar, toggleBottomPanel, toggleZenMode]);
 
-  useKeyboardShortcuts([...layoutShortcuts, ...splitViewShortcuts], true);
+  useKeyboardShortcuts([...layoutShortcuts, ...splitViewShortcuts, ...localTerminalShortcuts], true);
 
   // Save active connections when tabs change (for restore on next launch)
   useEffect(() => {
     // Editor tabs are transient — exclude them from persistence
-    const persistableTabs = allTabs.filter(tab => tab.tabType !== 'editor');
+    const persistableTabs = allTabs.filter(
+      (tab) => tab.tabType !== 'editor' && tab.protocol !== 'Local',
+    );
     if (persistableTabs.length > 0) {
       const activeConnections = persistableTabs.map((tab, index) => ({
         tabId: tab.id,
@@ -466,6 +505,17 @@ function AppContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Open a local shell by default when the app starts with no tabs (after session restore).
+  useEffect(() => {
+    if (defaultLocalShellOpenedRef.current || isRestoring) {
+      return;
+    }
+    if (allTabs.length === 0) {
+      defaultLocalShellOpenedRef.current = true;
+      handleNewLocalTab();
+    }
+  }, [isRestoring, allTabs.length, handleNewLocalTab]);
+
   const handleConnectionSelect = (connection: ConnectionNode) => {
     if (connection.type === 'connection') {
       setSelectedConnection(connection);
@@ -679,6 +729,26 @@ function AppContent() {
     const tabToDuplicate = allTabs.find(tab => tab.id === tabId);
     if (!tabToDuplicate) return;
 
+    if (tabToDuplicate.protocol === 'Local') {
+      const duplicateId = `local-${Date.now()}`;
+      dispatch({
+        type: 'ADD_TAB',
+        groupId: state.activeGroupId,
+        tab: {
+          id: duplicateId,
+          name: tabToDuplicate.name,
+          protocol: 'Local',
+          host: 'localhost',
+          connectionStatus: 'connecting',
+          reconnectCount: 0,
+        },
+      });
+      toast.success(t('app.tabDuplicated'), {
+        description: t('app.tabDuplicatedDesc', { name: tabToDuplicate.name }),
+      });
+      return;
+    }
+
     const originalConnectionId = tabToDuplicate.originalConnectionId || tabId;
     const connectionData = ConnectionStorageManager.getConnection(originalConnectionId);
     if (!connectionData) {
@@ -812,6 +882,19 @@ function AppContent() {
   const handleReconnect = useCallback(async (tabId: string) => {
     const tabToReconnect = allTabs.find(tab => tab.id === tabId);
     if (!tabToReconnect) return;
+
+    if (tabToReconnect.protocol === 'Local') {
+      try {
+        await invoke('local_shell_disconnect', { connection_id: tabId });
+      } catch {
+        // PTY may already be closed
+      }
+      dispatch({ type: 'RECONNECT_TAB', tabId });
+      toast.success(t('app.reconnected'), {
+        description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
+      });
+      return;
+    }
 
     const originalConnectionId = tabToReconnect.originalConnectionId || tabId;
     const connectionData = ConnectionStorageManager.getConnection(originalConnectionId);
@@ -1212,8 +1295,12 @@ function AppContent() {
         case 'new_tab':
           handleNewTab();
           break;
+        case 'new_local_terminal':
+          void handleNewLocalTab();
+          break;
         case 'close_connection':
           if (activeGroup && activeGroup.activeTabId) {
+            void handleTabClose(activeGroup.activeTabId);
             dispatch({ type: 'REMOVE_TAB', groupId: activeGroup.id, tabId: activeGroup.activeTabId });
           }
           break;
@@ -1245,7 +1332,7 @@ function AppContent() {
       }
     });
     return () => { unlistenPromise.then(fn => fn()); };
-  }, [activeGroup, activeTab, handleNewTab, handleOpenSettings, handleDuplicateTab, dispatch]);
+  }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleTabClose, handleOpenSettings, handleDuplicateTab, dispatch]);
 
   const handleEditConnection = useCallback((connection: ConnectionNode) => {
     if (connection.type === 'connection') {
@@ -1444,7 +1531,8 @@ function AppContent() {
   const isDesktopTab = activeTab?.tabType === 'desktop';
   // Editor tabs are standalone — hide extra panels like file-browser/desktop tabs
   const isEditorTab = activeTab?.tabType === 'editor';
-  const hideExtraPanels = isFileBrowserTab || isDesktopTab || isEditorTab;
+  const isLocalTab = activeTab?.protocol === 'Local';
+  const hideExtraPanels = isFileBrowserTab || isDesktopTab || isEditorTab || isLocalTab;
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -1518,9 +1606,11 @@ function AppContent() {
       {/* Web menu bar – on macOS shows only layout controls (native system menu handles File/Edit); on Windows/Linux shows full menus */}
       <MenuBar
         onNewConnection={handleNewTab}
+        onNewLocalTerminal={() => { void handleNewLocalTab(); }}
         onNewTab={handleNewTab}
         onCloseConnection={() => {
           if (activeGroup && activeGroup.activeTabId) {
+            void handleTabClose(activeGroup.activeTabId);
             dispatch({ type: 'REMOVE_TAB', groupId: activeGroup.id, tabId: activeGroup.activeTabId });
           }
         }}
@@ -1580,6 +1670,7 @@ function AppContent() {
                   selectedConnectionId={selectedConnection?.id || null}
                   activeConnections={new Set(allTabs.map(tab => tab.id))}
                   onNewConnection={handleNewTab}
+                  onNewLocalTerminal={handleNewLocalTab}
                   onEditConnection={handleEditConnection}
                   recentConnections={recentConnections}
                   onQuickConnect={handleQuickConnect}
@@ -1607,7 +1698,7 @@ function AppContent() {
                 <ResizablePanelGroup direction="vertical" className="flex-1">
                   {/* Terminal Grid Panel */}
                   <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
-                    <TerminalCallbacksProvider value={{ onDuplicateTab: handleDuplicateTab, onNewTab: handleNewTab, onReconnectTab: handleReconnect }}>
+                    <TerminalCallbacksProvider value={{ onDuplicateTab: handleDuplicateTab, onNewTab: handleNewTab, onNewLocalTab: handleNewLocalTab, onReconnectTab: handleReconnect, onTabClose: handleTabClose }}>
                       <ErrorBoundary label="Terminal">
                         <GridRenderer node={state.gridLayout} path={[]} />
                       </ErrorBoundary>

@@ -77,6 +77,11 @@
     "quickConnected": "快速连接成功",
     "quickConnectedDesc": "已连接到 {{name}}"
   },
+  "localTerminal": {
+    "tabName": "本地",
+    "connectFailed": "无法打开本地终端",
+    "connectFailedDesc": "无法启动本机 shell，请重试。"
+  },
   "connectionDialog": {
     "title": {
       "new": "新建连接",
@@ -399,6 +404,7 @@
     "tools": "工具",
     "connection": "连接",
     "newConnection": "新建连接...",
+    "newLocalTerminal": "新建本地终端",
     "openConnection": "打开连接...",
     "recentConnections": "最近的连接",
     "noRecentConnections": "暂无最近连接",
@@ -680,6 +686,7 @@
     "noConnections": "暂无已保存的连接",
     "noConnectionsDesc": "保存连接后将会显示在这里",
     "newConnection": "新建连接",
+    "newLocalTerminal": "新建本地终端",
     "newFolder": "新建文件夹",
     "edit": "编辑连接",
     "delete": "删除连接",
