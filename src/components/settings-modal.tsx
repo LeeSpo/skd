@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { changeLanguage, getLanguagePreference, AUTO } from '@/lib/i18n';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -61,7 +60,6 @@ interface SettingsModalProps {
 
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {
   const { t } = useTranslation();
-  const [languagePref, setLanguagePref] = useState<string>(() => getLanguagePreference());
   const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearanceSettings>(defaultAppearanceSettings);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
   
@@ -938,26 +936,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   </Select>
                 </div>
 
-                <Separator />
-                <div className="space-y-2">
-                  <Label>{t('settings.language.label')}</Label>
-                  <Select
-                    value={languagePref}
-                    onValueChange={(value) => {
-                      setLanguagePref(value);
-                      void changeLanguage(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={AUTO}>{t('settings.language.auto')}</SelectItem>
-                      <SelectItem value="en">{t('settings.language.en')}</SelectItem>
-                      <SelectItem value="zh-CN">{t('settings.language.zhCN')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <Separator />
 
                 <div className="space-y-4">

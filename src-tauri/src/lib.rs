@@ -316,7 +316,6 @@ pub fn run() {
             commands::list_local_files_recursive,
             commands::list_remote_files_recursive,
             commands::update_menu_language,
-            commands::get_system_locale,
             // Note: PTY terminal I/O now uses WebSocket instead of IPC
             // WebSocket server runs on a dynamically assigned port (9001-9010)
         ])

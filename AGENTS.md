@@ -265,10 +265,10 @@ VS Code-like resizable panel layout with presets:
 
 ### Internationalization (i18n)
 
-R-Shell supports multiple languages via `react-i18next`. All user-facing strings must go through the translation system.
+R-Shell is English-only. User-facing strings are centralized in `react-i18next` with a single locale file.
 
-- **Translation files**: `src/locales/en.json` (English, source of truth) and `src/locales/zh-CN.json` (Chinese)
-- **i18n config**: `src/lib/i18n.ts` — initialization, language detection, `changeLanguage()` helper
+- **Translation file**: `src/locales/en.json` (source of truth)
+- **i18n config**: `src/lib/i18n.ts` — English initialization and native macOS menu sync
 - **Hook**: Use `const { t } = useTranslation()` from `react-i18next` in every component with user-facing strings
 - **Key naming**: `{component}.{category}.{name}` — e.g. `connectionDialog.title.new`, `common.cancel`
 - **Never hardcode user-facing strings** in JSX, toast messages, placeholders, tooltips, or dialog titles — always use `t('key')`
@@ -277,4 +277,4 @@ R-Shell supports multiple languages via `react-i18next`. All user-facing strings
 - **HTML in strings**: Use `<Trans>` component from `react-i18next` for strings containing markup
 - **Do NOT translate**: protocol values (`"SSH"`), keyboard symbols (`⌘N`), font names, Rust error messages in toast descriptions, layout preset internal names
 - **Select option values**: Only translate display text, never the `value` attribute passed to backend
-- **After adding new strings**: Add keys to both `en.json` and `zh-CN.json`, then run `pnpm i18n:check` to verify parity
+- **After adding new strings**: Add keys to `en.json` only

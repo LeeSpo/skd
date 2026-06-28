@@ -300,12 +300,6 @@
       "enableTelemetry": "Enable Telemetry",
       "enableTelemetryDesc": "Help improve the application by sending anonymous usage data"
     },
-    "language": {
-      "label": "Language",
-      "auto": "Auto (System)",
-      "en": "English",
-      "zhCN": "Chinese (Simplified)"
-    },
     "button": {
       "resetToDefaults": "Reset to Defaults",
       "save": "Save Settings"

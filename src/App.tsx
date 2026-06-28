@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { applyLanguageFromPreference } from './lib/i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { MenuBar } from './components/menu-bar';
@@ -119,11 +118,6 @@ function AppContent() {
     };
     dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
   }, [state.activeGroupId, dispatch, t]);
-
-  // Apply stored language preference (follows OS locale when set to "auto")
-  useEffect(() => {
-    void applyLanguageFromPreference();
-  }, []);
 
   useEffect(() => {
     const refreshKeyboardShortcutSettings = () => {
