@@ -55,6 +55,10 @@ import { APP_SETTINGS_STORAGE_KEY } from '../lib/keyboard-shortcuts';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+function enableAutoCheck() {
+  localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ checkUpdates: true }));
+}
+
 /** Create a fake Update object matching the plugin-updater shape. */
 function makeUpdate(version = '9.9.9', body?: string) {
   return {
@@ -81,9 +85,10 @@ describe('UpdateChecker', () => {
   // ── Auto-check on mount ────────────────────────────────────────────────
 
   describe('auto-check on mount', () => {
-    it('calls check() when auto-check is enabled (default)', async () => {
+    it('skips check() when auto-check is disabled (default)', async () => {
       render(<UpdateChecker />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
+      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+      expect(mockCheck).not.toHaveBeenCalled();
     });
 
     it('calls check() when checkUpdates is true in localStorage', async () => {
@@ -101,6 +106,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows no toast on silent auto-check when no update', async () => {
+      enableAutoCheck();
       render(<UpdateChecker />);
       await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
       expect(mockToast.success).not.toHaveBeenCalled();
@@ -109,6 +115,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows no toast on silent auto-check when check fails', async () => {
+      enableAutoCheck();
       mockCheck.mockRejectedValue(new Error('network timeout'));
       render(<UpdateChecker />);
       await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
@@ -120,6 +127,7 @@ describe('UpdateChecker', () => {
 
   describe('manual check via signal', () => {
     it('triggers check() when checkSignal changes', async () => {
+      enableAutoCheck();
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
       // auto-check fires on mount
       await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
@@ -131,6 +139,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows loading toast during manual check', async () => {
+      enableAutoCheck();
       // Make check() hang until we resolve it
       let resolveCheck: (v: null) => void;
       mockCheck.mockImplementation(() => new Promise(r => { resolveCheck = r as (v: null) => void; }));
@@ -158,6 +167,7 @@ describe('UpdateChecker', () => {
     });
 
     it('does NOT trigger check() when signal is same value', async () => {
+      enableAutoCheck();
       const { rerender } = render(<UpdateChecker checkSignal={5} />);
       await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
       mockCheck.mockClear();
@@ -173,6 +183,7 @@ describe('UpdateChecker', () => {
 
   describe('update available', () => {
     it('opens dialog with version info when update is found', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('2.0.0', 'Bug fixes'));
       render(<UpdateChecker />);
 
@@ -183,6 +194,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows fallback notes when update has no body', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('2.0.0'));
       render(<UpdateChecker />);
 
@@ -191,6 +203,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows Download update button in available state', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('3.0.0'));
       render(<UpdateChecker />);
 
@@ -265,6 +278,7 @@ describe('UpdateChecker', () => {
 
   describe('busy guard', () => {
     it('prevents concurrent checks when already checking', async () => {
+      enableAutoCheck();
       let resolveCheck: (v: null) => void;
       mockCheck.mockImplementation(() => new Promise(r => { resolveCheck = r as (v: null) => void; }));
 
@@ -288,6 +302,7 @@ describe('UpdateChecker', () => {
 
   describe('download flow', () => {
     it('tracks download progress and shows ready state', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
 
       // Simulate download with progress events
@@ -313,6 +328,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows error toast when download fails', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
       mockDownload.mockRejectedValue(new Error('disk full'));
 
@@ -335,6 +351,7 @@ describe('UpdateChecker', () => {
 
   describe('install flow', () => {
     it('calls install() then relaunch() on Restart now', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
       mockDownload.mockResolvedValue(undefined);
 
@@ -359,6 +376,7 @@ describe('UpdateChecker', () => {
     });
 
     it('shows error toast when install fails', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
       mockDownload.mockResolvedValue(undefined);
       mockInstall.mockRejectedValue(new Error('permission denied'));
@@ -388,6 +406,7 @@ describe('UpdateChecker', () => {
 
   describe('later button', () => {
     it('closes dialog and resets state', async () => {
+      enableAutoCheck();
       mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
       render(<UpdateChecker />);
       await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());

@@ -296,9 +296,7 @@
       "maxLogSize": "Max Log Size: {{size}}MB",
       "checkUpdates": "Check for Updates",
       "checkUpdatesDesc": "Automatically check for application updates",
-      "checkNow": "Check Now",
-      "enableTelemetry": "Enable Telemetry",
-      "enableTelemetryDesc": "Help improve the application by sending anonymous usage data"
+      "checkNow": "Check Now"
     },
     "button": {
       "resetToDefaults": "Reset to Defaults",

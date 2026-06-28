@@ -98,8 +98,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     // Advanced settings
     logLevel: 'info',
     maxLogSize: 100,
-    checkUpdates: true,
-    telemetry: false
+    checkUpdates: false
   });
 
   // Load settings when modal opens
@@ -113,11 +112,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
       try {
         const savedSettings = localStorage.getItem(APP_SETTINGS_STORAGE_KEY);
         if (savedSettings) {
-          const parsed = JSON.parse(savedSettings);
+          const parsed = JSON.parse(savedSettings) as Record<string, unknown>;
+          const { telemetry: _telemetry, ...rest } = parsed;
           const keyboardShortcuts = loadKeyboardShortcutSettings();
           setSettings(prev => ({
             ...prev,
-            ...parsed,
+            ...rest,
             closeSession: keyboardShortcuts.closeTab,
             nextTab: keyboardShortcuts.nextTab,
             previousTab: keyboardShortcuts.prevTab,
@@ -193,8 +193,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
         previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
         logLevel: 'info',
         maxLogSize: 100,
-        checkUpdates: true,
-        telemetry: false
+        checkUpdates: false
       });
       
       // Apply default theme
@@ -1131,19 +1130,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       onCheckedChange={(checked) => updateSetting('checkUpdates', checked)}
                     />
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>{t('settings.advanced.enableTelemetry')}</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t('settings.advanced.enableTelemetryDesc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.telemetry}
-                    onCheckedChange={(checked) => updateSetting('telemetry', checked)}
-                  />
                 </div>
               </CardContent>
             </Card>
