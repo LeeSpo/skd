@@ -38,7 +38,7 @@ function useThemeKey(): number {
 
 export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const { state, dispatch } = useTerminalGroups();
-  const { onDuplicateTab, onNewTab, onReconnectTab } = useTerminalCallbacks();
+  const { onDuplicateTab, onNewTab, onReconnectTab, onOpenInEditorForTab } = useTerminalCallbacks();
   const group = state.groups[groupId];
   const isActive = state.activeGroupId === groupId;
   const themeKey = useThemeKey();
@@ -135,6 +135,12 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
                   protocol={tab.protocol}
                   isConnected={tab.connectionStatus === 'connected'}
                   onReconnect={() => handleReconnect(tab.id)}
+                  onOpenInEditor={
+                    tab.protocol === 'SFTP' && onOpenInEditorForTab
+                      ? (filePath, fileName, options) =>
+                          onOpenInEditorForTab(tab.id, filePath, fileName, options)
+                      : undefined
+                  }
                 />
               ) : tab.tabType === 'editor' && tab.editorFilePath && tab.editorConnectionId ? (
                 <FileEditorView

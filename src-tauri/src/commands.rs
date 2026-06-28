@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
 use crate::os_detect::{self, OsInfo};
@@ -569,6 +570,28 @@ pub async fn rename_file(
     }
 }
 
+const MAX_PREVIEW_FILE_BYTES: u64 = 20 * 1024 * 1024;
+
+fn infer_mime_from_path(path: &str) -> &'static str {
+    let ext = path
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "tiff" | "tif" => "image/tiff",
+        "avif" => "image/avif",
+        _ => "application/octet-stream",
+    }
+}
+
 #[tauri::command]
 pub async fn create_file(
     connection_id: String,
@@ -576,20 +599,38 @@ pub async fn create_file(
     content: String,
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<bool, String> {
-    let connection = state
-        .get_connection(&connection_id)
-        .await
-        .ok_or("Connection not found")?;
+    let conn_type = state.get_connection_type(&connection_id).await;
 
-    let client = connection.read().await;
-
-    // Upload the content as bytes
-    match client
-        .upload_file_from_bytes(content.as_bytes(), &path)
-        .await
-    {
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.to_string()),
+    match conn_type.as_deref() {
+        Some("SFTP") => {
+            let sftp_map = state.get_sftp_connection().await;
+            let connections = sftp_map.read().await;
+            let client = connections
+                .get(&connection_id)
+                .ok_or("SFTP connection not found".to_string())?;
+            client
+                .write_file_bytes(&path, content.as_bytes())
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(true)
+        }
+        Some("FTP") => Err(
+            "FTP connections do not support in-app file editing. Download the file instead."
+                .to_string(),
+        ),
+        Some(other) => Err(format!("Unsupported protocol for file editing: {}", other)),
+        None => {
+            let connection = state
+                .get_connection(&connection_id)
+                .await
+                .ok_or_else(|| format!("No connection found for '{}'", connection_id))?;
+            let client = connection.read().await;
+            client
+                .upload_file_from_bytes(content.as_bytes(), &path)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(true)
+        }
     }
 }
 
@@ -599,18 +640,44 @@ pub async fn read_file_content(
     path: String,
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<String, String> {
-    let connection = state
-        .get_connection(&connection_id)
-        .await
-        .ok_or("Connection not found")?;
+    let conn_type = state.get_connection_type(&connection_id).await;
 
-    let client = connection.read().await;
-    let command = format!("cat '{}'", path);
+    let bytes_result: Result<Vec<u8>, String> = match conn_type.as_deref() {
+        Some("SFTP") => {
+            let sftp_map = state.get_sftp_connection().await;
+            let connections = sftp_map.read().await;
+            let client = connections
+                .get(&connection_id)
+                .ok_or("SFTP connection not found".to_string())?;
+            client
+                .read_file_bytes(&path)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        Some("FTP") => Err(
+            "FTP connections do not support in-app file editing. Download the file instead."
+                .to_string(),
+        ),
+        Some(other) => Err(format!("Unsupported protocol for file reading: {}", other)),
+        None => {
+            let connection = state
+                .get_connection(&connection_id)
+                .await
+                .ok_or_else(|| format!("No connection found for '{}'", connection_id))?;
+            let client = connection.read().await;
+            let command = format!("cat '{}'", path);
+            let output = client
+                .execute_command(&command)
+                .await
+                .map_err(|e| e.to_string())?;
+            return Ok(output);
+        }
+    };
 
-    match client.execute_command(&command).await {
-        Ok(output) => Ok(output),
-        Err(e) => Err(e.to_string()),
-    }
+    let bytes = bytes_result?;
+    String::from_utf8(bytes).map_err(|_| {
+        "File is not valid UTF-8 text and cannot be displayed in the editor.".to_string()
+    })
 }
 
 /// Response for `read_remote_file_base64`.
@@ -629,65 +696,86 @@ pub async fn read_remote_file_base64(
     path: String,
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<Base64FileResponse, String> {
-    let connection = state
-        .get_connection(&connection_id)
-        .await
-        .ok_or("Connection not found")?;
+    let conn_type = state.get_connection_type(&connection_id).await;
 
-    let client = connection.read().await;
+    match conn_type.as_deref() {
+        Some("SFTP") => {
+            let sftp_map = state.get_sftp_connection().await;
+            let connections = sftp_map.read().await;
+            let client = connections
+                .get(&connection_id)
+                .ok_or("SFTP connection not found".to_string())?;
 
-    // Refuse very large files to avoid memory / performance issues
-    let size_cmd = format!("stat -c '%s' '{}' 2>/dev/null || stat -f '%z' '{}'", path, path);
-    let size_str = client
-        .execute_command(&size_cmd)
-        .await
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let file_size: u64 = size_str.parse().unwrap_or(0);
-    if file_size > 20 * 1024 * 1024 {
-        return Err(format!(
-            "File too large for preview ({} MB). Download it first to open with your local application.",
-            file_size / (1024 * 1024)
-        ));
+            let bytes = client
+                .read_file_bytes(&path)
+                .await
+                .map_err(|e| e.to_string())?;
+            let file_size = bytes.len() as u64;
+            if file_size > MAX_PREVIEW_FILE_BYTES {
+                return Err(format!(
+                    "File too large for preview ({} MB). Download it first to open with your local application.",
+                    file_size / (1024 * 1024)
+                ));
+            }
+
+            Ok(Base64FileResponse {
+                data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+                size: file_size,
+                mime_type: infer_mime_from_path(&path).to_string(),
+            })
+        }
+        Some("FTP") => Err(
+            "FTP connections do not support in-app file preview. Download the file instead."
+                .to_string(),
+        ),
+        Some(other) => Err(format!(
+            "Unsupported protocol for file preview: {}",
+            other
+        )),
+        None => {
+            let connection = state
+                .get_connection(&connection_id)
+                .await
+                .ok_or("Connection not found")?;
+
+            let client = connection.read().await;
+
+            // Refuse very large files to avoid memory / performance issues
+            let size_cmd =
+                format!("stat -c '%s' '{}' 2>/dev/null || stat -f '%z' '{}'", path, path);
+            let size_str = client
+                .execute_command(&size_cmd)
+                .await
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let file_size: u64 = size_str.parse().unwrap_or(0);
+            if file_size > MAX_PREVIEW_FILE_BYTES {
+                return Err(format!(
+                    "File too large for preview ({} MB). Download it first to open with your local application.",
+                    file_size / (1024 * 1024)
+                ));
+            }
+
+            // Read raw bytes via `cat` then base64-encode on the remote side.
+            // `base64 -w0` (GNU) disables line wrapping; on macOS `base64` wraps by default,
+            // so we pipe through `tr -d '\n'` as a portable fallback.
+            let b64_cmd = format!(
+                "base64 -w0 '{}' 2>/dev/null || base64 '{}' | tr -d '\\n'",
+                path, path
+            );
+            let b64_data = client
+                .execute_command(&b64_cmd)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            Ok(Base64FileResponse {
+                data: b64_data.trim().to_string(),
+                size: file_size,
+                mime_type: infer_mime_from_path(&path).to_string(),
+            })
+        }
     }
-
-    // Read raw bytes via `cat` then base64-encode on the remote side.
-    // `base64 -w0` (GNU) disables line wrapping; on macOS `base64` wraps by default,
-    // so we pipe through `tr -d '\n'` as a portable fallback.
-    let b64_cmd = format!(
-        "base64 -w0 '{}' 2>/dev/null || base64 '{}' | tr -d '\\n'",
-        path, path
-    );
-    let b64_data = client
-        .execute_command(&b64_cmd)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Infer MIME type from extension
-    let ext = path
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
-    let mime = match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "bmp" => "image/bmp",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "ico" => "image/x-icon",
-        "tiff" | "tif" => "image/tiff",
-        "avif" => "image/avif",
-        _ => "application/octet-stream",
-    };
-
-    Ok(Base64FileResponse {
-        data: b64_data.trim().to_string(),
-        size: file_size,
-        mime_type: mime.to_string(),
-    })
 }
 
 #[tauri::command]

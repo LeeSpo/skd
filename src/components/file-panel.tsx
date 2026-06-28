@@ -33,6 +33,8 @@ import {
   ChevronRight,
   Home,
   ExternalLink,
+  Eye,
+  Edit,
   ArrowUpDown,
   ArrowDownAZ,
   ArrowUpAZ,
@@ -82,6 +84,13 @@ export interface FilePanelProps {
   // OS-native drag-and-drop from Finder / Explorer / Nautilus.
   // Only meaningful for the remote panel (local has no remote to upload to).
   onOsFilesDropped?: (paths: string[]) => void | Promise<void>;
+
+  /** Open a remote file in the editor (remote panel only). */
+  onOpenInEditor?: (
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => void;
 }
 
 export interface FilePanelRef {
@@ -116,6 +125,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       showPermissions = false,
       disabled = false,
       onOsFilesDropped,
+      onOpenInEditor,
     },
     ref,
   ) {
@@ -333,9 +343,19 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       }
     };
 
+    const openFileInEditor = (
+      entry: FileEntry,
+      options?: { readOnly?: boolean },
+    ) => {
+      if (!onOpenInEditor || entry.file_type !== "File") return;
+      onOpenInEditor(pathJoin(currentPath, entry.name), entry.name, options);
+    };
+
     const handleDoubleClick = (entry: FileEntry) => {
       if (entry.file_type === "Directory" || entry.file_type === "Symlink") {
         loadDirectory(pathJoin(currentPath, entry.name));
+      } else if (entry.file_type === "File" && onOpenInEditor) {
+        openFileInEditor(entry, { readOnly: true });
       }
     };
 
@@ -722,6 +742,27 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                             </tr>
                           </ContextMenuTrigger>
                           <ContextMenuContent>
+                            {entry.file_type === "File" && onOpenInEditor && (
+                              <>
+                                <ContextMenuItem
+                                  onClick={() =>
+                                    openFileInEditor(entry, { readOnly: true })
+                                  }
+                                >
+                                  <Eye className="h-3.5 w-3.5 mr-2" />
+                                  {t('fileBrowser.contextMenu.open')}
+                                </ContextMenuItem>
+                                <ContextMenuItem
+                                  onClick={() =>
+                                    openFileInEditor(entry, { readOnly: false })
+                                  }
+                                >
+                                  <Edit className="h-3.5 w-3.5 mr-2" />
+                                  {t('fileBrowser.contextMenu.edit')}
+                                </ContextMenuItem>
+                                <ContextMenuSeparator />
+                              </>
+                            )}
                             {onTransferToOther && (
                               <ContextMenuItem onClick={handleTransfer}>
                                 {mode === "local" ? (

@@ -12,6 +12,13 @@ export interface TerminalCallbacks {
   onReconnectTab?: (tabId: string) => void | Promise<void>;
   /** Called before a tab is removed so backend sessions can be cleaned up. */
   onTabClose?: (tabId: string) => void | Promise<void>;
+  /** Open a remote file in a new editor window for a specific tab connection. */
+  onOpenInEditorForTab?: (
+    tabConnectionId: string,
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => void;
 }
 
 const TerminalCallbacksContext = createContext<TerminalCallbacks>({});

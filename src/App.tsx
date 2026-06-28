@@ -1004,19 +1004,17 @@ function AppContent() {
     toast.success(t('app.openingInLogMonitor', { filename: filePath.split("/").pop() }));
   }, [layout.rightSidebarVisible, toggleRightSidebar, t]);
 
-  // Handler: open a remote file in a new Tauri window.
-  // The window is centered on whichever monitor the parent window currently
-  // occupies, matching the behaviour of VS Code, Chrome, Figma, etc.
-  const handleOpenInEditor = useCallback((
+  // Open a remote file in a new Tauri window, centered on the parent's monitor.
+  const openFileInEditorWindow = useCallback((
+    connectionId: string,
     filePath: string,
     fileName: string,
     options?: { readOnly?: boolean },
   ) => {
-    if (!activeConnection) return;
     const label = `file-viewer-${Date.now()}`;
     const readOnlyParam = options?.readOnly ? '&readOnly=1' : '';
     const url = `${window.location.origin}/?mode=file-viewer`
-      + `&connectionId=${encodeURIComponent(activeConnection.connectionId)}`
+      + `&connectionId=${encodeURIComponent(connectionId)}`
       + `&filePath=${encodeURIComponent(filePath)}`
       + `&fileName=${encodeURIComponent(fileName)}`
       + readOnlyParam;
@@ -1030,12 +1028,10 @@ function AppContent() {
     ]).then(async ([{ WebviewWindow }, { getCurrentWindow, currentMonitor }]) => {
       const parentWin = getCurrentWindow();
       const [monitor, scaleFactor] = await Promise.all([
-        currentMonitor(),          // standalone function, not a method on Window
+        currentMonitor(),
         parentWin.scaleFactor(),
       ]);
 
-      // Derive logical (DIP) position centered on the parent's monitor.
-      // Falls back to Tauri's built-in centering if monitor info is unavailable.
       let position: { x: number; y: number } | undefined;
       if (monitor) {
         const logicalMonX = monitor.position.x / scaleFactor;
@@ -1053,7 +1049,6 @@ function AppContent() {
         title: fileName,
         width: WIN_W,
         height: WIN_H,
-        // Use explicit position when available; fall back to primary-monitor center
         ...(position ? position : { center: true }),
         resizable: true,
         decorations: true,
@@ -1064,7 +1059,30 @@ function AppContent() {
     }).catch((err: unknown) => {
       toast.error(t('app.couldNotOpenWindow'), { description: String(err) });
     });
-  }, [activeConnection, t]);
+  }, [t]);
+
+  const handleOpenInEditor = useCallback((
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => {
+    if (!activeConnection) return;
+    openFileInEditorWindow(
+      activeConnection.connectionId,
+      filePath,
+      fileName,
+      options,
+    );
+  }, [activeConnection, openFileInEditorWindow]);
+
+  const handleOpenInEditorForTab = useCallback((
+    tabConnectionId: string,
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => {
+    openFileInEditorWindow(tabConnectionId, filePath, fileName, options);
+  }, [openFileInEditorWindow]);
 
   const handleConnectionDialogConnect = useCallback(async (config: ConnectionConfig) => {
     const tabId = config.id || `connection-${Date.now()}`;
@@ -1599,7 +1617,7 @@ function AppContent() {
                 <ResizablePanelGroup direction="vertical" className="flex-1">
                   {/* Terminal Grid Panel */}
                   <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
-                    <TerminalCallbacksProvider value={{ onDuplicateTab: handleDuplicateTab, onNewTab: handleNewTab, onNewLocalTab: handleNewLocalTab, onReconnectTab: handleReconnect, onTabClose: handleTabClose }}>
+                    <TerminalCallbacksProvider value={{ onDuplicateTab: handleDuplicateTab, onNewTab: handleNewTab, onNewLocalTab: handleNewLocalTab, onReconnectTab: handleReconnect, onTabClose: handleTabClose, onOpenInEditorForTab: handleOpenInEditorForTab }}>
                       <ErrorBoundary label="Terminal">
                         <GridRenderer node={state.gridLayout} path={[]} />
                       </ErrorBoundary>

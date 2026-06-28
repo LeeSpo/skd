@@ -41,6 +41,11 @@ export interface FileBrowserViewProps {
   protocol?: string;
   isConnected: boolean;
   onReconnect?: () => void;
+  onOpenInEditor?: (
+    filePath: string,
+    fileName: string,
+    options?: { readOnly?: boolean },
+  ) => void;
 }
 
 // ---------- Component ----------
@@ -49,9 +54,10 @@ export function FileBrowserView({
   connectionId,
   connectionName,
   host,
-  protocol: _protocol,
+  protocol,
   isConnected,
   onReconnect,
+  onOpenInEditor,
 }: FileBrowserViewProps) {
   const { t } = useTranslation();
   const [activePanel, setActivePanel] = useState<"local" | "remote">("local");
@@ -624,6 +630,7 @@ export function FileBrowserView({
               showPermissions={true}
               disabled={!isConnected}
               onOsFilesDropped={handleOsFilesDropped}
+              onOpenInEditor={protocol === 'SFTP' ? onOpenInEditor : undefined}
             />
           </ResizablePanel>
         </ResizablePanelGroup>

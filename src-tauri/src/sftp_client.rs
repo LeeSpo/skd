@@ -251,8 +251,8 @@ impl StandaloneSftpClient {
         Ok(result)
     }
 
-    /// Download a remote file to a local path. Returns bytes downloaded.
-    pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<u64> {
+    /// Read a remote file into memory.
+    pub async fn read_file_bytes(&self, remote_path: &str) -> Result<Vec<u8>> {
         let sftp = self
             .sftp
             .as_ref()
@@ -265,7 +265,6 @@ impl StandaloneSftpClient {
 
         let mut buffer = Vec::new();
         let mut temp_buf = vec![0u8; 32768];
-        let mut total_bytes = 0u64;
 
         loop {
             let n = remote_file.read(&mut temp_buf).await?;
@@ -273,23 +272,18 @@ impl StandaloneSftpClient {
                 break;
             }
             buffer.extend_from_slice(&temp_buf[..n]);
-            total_bytes += n as u64;
         }
 
-        tokio::fs::write(local_path, buffer).await?;
-        Ok(total_bytes)
+        Ok(buffer)
     }
 
-    /// Upload a local file to a remote path. Returns bytes uploaded.
-    pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<u64> {
+    /// Write bytes to a remote file (creates or truncates). Returns bytes written.
+    pub async fn write_file_bytes(&self, remote_path: &str, data: &[u8]) -> Result<u64> {
         let sftp = self
             .sftp
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("SFTP session not connected"))?;
 
-        let data = tokio::fs::read(local_path)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to read local file '{}': {}", local_path, e))?;
         let total_bytes = data.len() as u64;
 
         let mut remote_file = sftp.create(remote_path).await.map_err(|e| {
@@ -306,6 +300,22 @@ impl StandaloneSftpClient {
         remote_file.flush().await?;
 
         Ok(total_bytes)
+    }
+
+    /// Download a remote file to a local path. Returns bytes downloaded.
+    pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<u64> {
+        let buffer = self.read_file_bytes(remote_path).await?;
+        let total_bytes = buffer.len() as u64;
+        tokio::fs::write(local_path, buffer).await?;
+        Ok(total_bytes)
+    }
+
+    /// Upload a local file to a remote path. Returns bytes uploaded.
+    pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<u64> {
+        let data = tokio::fs::read(local_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read local file '{}': {}", local_path, e))?;
+        self.write_file_bytes(remote_path, &data).await
     }
 
     /// Create a directory on the remote server.
