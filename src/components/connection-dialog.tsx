@@ -46,6 +46,7 @@ import {
   Terminal as TerminalIcon,
 } from 'lucide-react';
 import { getDefaultPort, getAuthMethods, getHiddenFields } from '@/lib/protocol-config';
+import { connectionNameUpdateForHostChange } from '@/lib/connection-name-sync';
 import { cn } from '@/lib/utils';
 
 interface ConnectionDialogProps {
@@ -97,7 +98,7 @@ export function ConnectionDialog({
     protocol: 'SSH',
     host: '',
     port: 22,
-    username: '',
+    username: 'root',
     authMethod: 'password',
     password: '',
     privateKeySource: 'path',
@@ -126,6 +127,7 @@ export function ConnectionDialog({
   const [availableFolders, setAvailableFolders] = useState<string[]>([]);
   const connectionIdRef = useRef<string | null>(null);
   const cancelRequestedRef = useRef(false);
+  const nameManuallyEditedRef = useRef(false);
   const hostKeyRetryRef = useRef<(() => Promise<ConnectResponse>) | null>(null);
   const pendingSshConnectRef = useRef<{
     connectionId: string;
@@ -289,6 +291,7 @@ export function ConnectionDialog({
         );
       } else {
         // Reset to defaults for new connection
+        nameManuallyEditedRef.current = false;
         setConfig(defaultConfig);
         setSaveAsConnection(true);
         setRememberPassword(true);
@@ -730,6 +733,36 @@ export function ConnectionDialog({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="host">{t('connectionDialog.label.host')}</Label>
+                    <Input
+                      id="host"
+                      placeholder={t('connectionDialog.placeholder.host')}
+                      value={config.host}
+                      onChange={(e) => {
+                        const host = e.target.value;
+                        updateConfig({
+                          host,
+                          ...connectionNameUpdateForHostChange(host, {
+                            isNewConnection: !editingConnection,
+                            nameManuallyEdited: nameManuallyEditedRef.current,
+                          }),
+                        });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="port">{t('connectionDialog.label.port')}</Label>
+                    <Input
+                      id="port"
+                      type="number"
+                      value={config.port}
+                      onChange={(e) => updateConfig({ port: parseInt(e.target.value) || 22 })}
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="connection-name">{t('connectionDialog.label.connectionName')}</Label>
@@ -737,7 +770,10 @@ export function ConnectionDialog({
                       id="connection-name"
                       placeholder={t('connectionDialog.placeholder.connectionName')}
                       value={config.name}
-                      onChange={(e) => updateConfig({ name: e.target.value })}
+                      onChange={(e) => {
+                        nameManuallyEditedRef.current = true;
+                        updateConfig({ name: e.target.value });
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -764,27 +800,6 @@ export function ConnectionDialog({
                         <SelectItem value="FTP">FTP</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="host">{t('connectionDialog.label.host')}</Label>
-                    <Input
-                      id="host"
-                      placeholder={t('connectionDialog.placeholder.host')}
-                      value={config.host}
-                      onChange={(e) => updateConfig({ host: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="port">{t('connectionDialog.label.port')}</Label>
-                    <Input
-                      id="port"
-                      type="number"
-                      value={config.port}
-                      onChange={(e) => updateConfig({ port: parseInt(e.target.value) || 22 })}
-                    />
                   </div>
                 </div>
 
