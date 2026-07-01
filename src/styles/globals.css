@@ -85,6 +85,18 @@
   --status-connected: #22c55e;
   --status-connecting: #f59e0b;
   --status-disconnected: #ef4444;
+  --status-pending: #3b82f6;
+
+  /* Panel chrome */
+  --panel-header-bg: color-mix(in srgb, var(--muted) 50%, transparent);
+  --panel-toolbar-bg: color-mix(in srgb, var(--muted) 30%, transparent);
+  --panel-border: color-mix(in srgb, var(--border) 50%, transparent);
+
+  /* File browser typography */
+  --file-chrome-font-size: 0.75rem;
+  --file-chrome-line-height: 1rem;
+  --file-list-font-size: 0.6875rem;
+  --file-list-line-height: 1rem;
   
   /* Font weights */
   --font-weight-medium: 500;
@@ -171,6 +183,12 @@
   --status-connected: #22c55e;
   --status-connecting: #f59e0b;
   --status-disconnected: #ef4444;
+  --status-pending: #60a5fa;
+
+  /* Panel chrome */
+  --panel-header-bg: color-mix(in srgb, var(--muted) 50%, transparent);
+  --panel-toolbar-bg: color-mix(in srgb, var(--muted) 30%, transparent);
+  --panel-border: color-mix(in srgb, var(--border) 50%, transparent);
 }
 
 @theme inline {
@@ -223,6 +241,14 @@
   --color-status-connected: var(--status-connected);
   --color-status-connecting: var(--status-connecting);
   --color-status-disconnected: var(--status-disconnected);
+  --color-status-pending: var(--status-pending);
+  --color-panel-header: var(--panel-header-bg);
+  --color-panel-toolbar: var(--panel-toolbar-bg);
+  --color-panel-border: var(--panel-border);
+  --text-ui-2xs: 0.625rem;
+  --text-ui-2xs--line-height: 0.875rem;
+  --text-ui-xs: 0.6875rem;
+  --text-ui-xs--line-height: 1rem;
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
@@ -417,6 +443,44 @@ html {
 
 .status-disconnected {
   background-color: var(--status-disconnected);
+}
+
+.status-pending {
+  background-color: var(--status-pending);
+}
+
+/* Panel chrome utilities */
+.panel-header {
+  background-color: var(--panel-header-bg);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.panel-toolbar {
+  background-color: var(--panel-toolbar-bg);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+/* File browser typography — explicit sizes (not dependent on Tailwind build) */
+.file-chrome-text {
+  font-size: var(--file-chrome-font-size);
+  line-height: var(--file-chrome-line-height);
+}
+
+.file-chrome-text input,
+.file-chrome-text button {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.file-list-text {
+  font-size: var(--file-list-font-size);
+  line-height: var(--file-list-line-height);
+}
+
+.file-list-text input,
+.file-list-text button {
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* Connection status dot animation */

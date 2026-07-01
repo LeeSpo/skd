@@ -46,6 +46,7 @@ import {
   ContextMenuTrigger,
 } from './ui/context-menu';
 import { toast } from 'sonner';
+import { StatusDot } from './ui/status-dot';
 
 interface ConnectionNode {
   id: string;
@@ -423,8 +424,8 @@ export function ConnectionManager({
 
     const nodeContent = (
       <div
-        className={`flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer ${
-          isSelected ? 'bg-accent' : ''
+        className={`flex items-center gap-2 px-2 py-1 hover:bg-sidebar-accent cursor-pointer ${
+          isSelected ? 'bg-sidebar-accent' : ''
         } ${isDragging ? 'opacity-50' : ''}`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleNodeClick}
@@ -448,7 +449,10 @@ export function ConnectionManager({
         <div className="relative">
           {getIcon(node)}
           {isConnected && (
-            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-card" />
+            <StatusDot
+              variant="connected"
+              className="absolute -bottom-0.5 -right-0.5 border border-sidebar"
+            />
           )}
         </div>
         <span className="text-sm flex-1">{node.name}</span>
@@ -559,10 +563,10 @@ export function ConnectionManager({
 
   return (
     <>
-    <div className="bg-card border-r border-border h-full flex flex-col">
+    <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 flex flex-col">
-        <div className="px-3 py-1.5 border-b border-border flex items-center gap-1">
+        <div className="flex items-center gap-1 border-b border-sidebar-border px-3 py-1.5">
           <h3 className="font-medium text-sm flex-1">{t('connectionManager.connectionsHeader')}</h3>
           <TooltipProvider>
             {/* Quick Connect */}
@@ -698,7 +702,7 @@ export function ConnectionManager({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{t('connectionDetails.status')}</span>
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${selectedConnection.isConnected ? 'bg-green-500' : 'bg-gray-500'}`} />
+                    <StatusDot variant={selectedConnection.isConnected ? 'connected' : 'disconnected'} />
                     <span className="text-xs">{selectedConnection.isConnected ? t('connectionDetails.connected') : t('connectionDetails.disconnected')}</span>
                   </div>
                 </div>

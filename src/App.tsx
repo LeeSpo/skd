@@ -1298,22 +1298,16 @@ function AppContent() {
                           onValueChange={(value) => setBottomPanelTab(value as 'file-browser' | 'compose')}
                           className="h-full flex flex-col"
                         >
-                          <TabsList className="flex w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-8">
-                            <TabsTrigger 
-                              value="file-browser" 
-                              className="relative h-8 rounded-none border-b-2 border-transparent bg-transparent px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all"
-                            >
+                          <TabsList variant="underline">
+                            <TabsTrigger variant="underline" value="file-browser">
                               {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
                             </TabsTrigger>
-                            <TabsTrigger 
-                              value="compose" 
-                              className="relative h-8 rounded-none border-b-2 border-transparent bg-transparent px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all"
-                            >
+                            <TabsTrigger variant="underline" value="compose">
                               {t('app.composePane')}
                             </TabsTrigger>
                           </TabsList>
 
-                          <div className="flex-1 mt-0 overflow-hidden relative min-h-0 bg-background/50">
+                          <div className="relative mt-0 min-h-0 flex-1 overflow-hidden bg-background">
                             <TabsContent
                               value="file-browser"
                               className="absolute inset-0 mt-0 data-[state=inactive]:hidden"
@@ -1368,9 +1362,9 @@ function AppContent() {
                 onResize={(size) => setRightSidebarSize(size)}
               >
                 <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="h-full flex flex-col">
-                  <TabsList className="inline-flex w-auto mx-1 mt-2">
-                    <TabsTrigger value="monitor" className="text-xs px-2">{t('app.monitor')}</TabsTrigger>
-                    <TabsTrigger value="logs" className="text-xs px-2">{t('app.logs')}</TabsTrigger>
+                  <TabsList variant="underline" className="w-full">
+                    <TabsTrigger variant="underline" value="monitor">{t('app.monitor')}</TabsTrigger>
+                    <TabsTrigger variant="underline" value="logs">{t('app.logs')}</TabsTrigger>
                   </TabsList>
 
                   <div className="flex-1 mt-0 overflow-hidden relative">

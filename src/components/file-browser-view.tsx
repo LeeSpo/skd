@@ -532,9 +532,9 @@ export function FileBrowserView({
   // ------ Disconnected overlay ------
   if (!isConnected) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-muted/30 gap-3">
-        <WifiOff className="h-10 w-10 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+        <WifiOff className="mb-4 h-12 w-12 opacity-50" />
+        <p className="text-sm">
           {t('fileBrowser.disconnected', { name: connectionName })}
         </p>
         {onReconnect && (

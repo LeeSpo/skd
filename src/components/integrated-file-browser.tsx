@@ -5,6 +5,12 @@ import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { withRetry, CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { PanelToolbar } from './ui/panel-chrome';
+import {
+  FILE_BROWSER_CHROME_TEXT,
+  FILE_BROWSER_LIST_ICONS,
+  FILE_BROWSER_LIST_TEXT,
+} from '@/lib/file-browser-typography';
 import { ScrollArea } from './ui/scroll-area';
 import {
   transferQueueReducer,
@@ -1311,25 +1317,23 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
 
   if (!isConnected) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>{t('fileBrowser.connectPrompt')}</p>
+          <Folder className="mx-auto mb-4 h-12 w-12 opacity-50" />
+          <p className="text-sm">{t('fileBrowser.connectPrompt')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`h-full flex flex-col bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
-      {/* File Browser Toolbar */}
-      <div className="relative z-10 px-2 py-1.5 bg-muted/10 border-b border-border/40">
-        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap rounded-md border border-border/40 bg-background/60 px-1.5 py-1.5 text-xs shadow-sm backdrop-blur-md scrollbar-none transition-all hover:border-border/60">
+    <div className={`flex h-full flex-col bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
+      <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} gap-1 overflow-x-auto whitespace-nowrap scrollbar-none`}>
           {/* Back */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 rounded-md"
+            className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.back')}
             disabled={!canGoBack}
             onClick={goBack}
@@ -1340,7 +1344,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 rounded-md"
+            className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.forward')}
             disabled={!canGoForward}
             onClick={goForward}
@@ -1351,7 +1355,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 rounded-md"
+            className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.parentDir')}
             disabled={currentPath === '/'}
             onClick={goUp}
@@ -1362,7 +1366,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 rounded-md"
+            className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.home')}
             onClick={() => navigateTo('/home')}
           >
@@ -1371,7 +1375,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
 
           {/* Breadcrumb / Editable address bar */}
           <div
-            className="mx-1.5 flex h-6 min-w-0 flex-1 cursor-text items-center rounded-md border border-border/50 bg-background/50 px-2 shadow-inner group hover:border-border transition-colors"
+            className="group mx-1.5 flex h-6 min-w-0 flex-1 cursor-text items-center rounded-sm border border-panel-border bg-background px-2 transition-colors hover:border-border"
             onClick={() => {
               if (!isEditingPath) {
                 setEditPathValue(currentPath);
@@ -1384,7 +1388,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
               <input
                 ref={pathInputRef}
                 autoFocus
-                className="h-full w-full bg-transparent font-mono text-[11px] outline-none"
+                className="h-full w-full bg-transparent font-mono outline-none"
                 value={editPathValue}
                 onChange={(e) => setEditPathValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -1401,7 +1405,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                       <ChevronRight className="mx-0.5 h-2.5 w-2.5 shrink-0 text-muted-foreground" />
                     )}
                     <button
-                      className="max-w-[120px] truncate rounded px-0.5 text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      className="max-w-[120px] truncate rounded px-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigateTo(seg.path);
@@ -1418,19 +1422,19 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           </div>
 
           {/* Refresh */}
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
           <div className="mx-1 h-4 w-px shrink-0 bg-border/60" />
 
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 rounded-md px-2" onClick={handleCreateFolder}>
+          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" onClick={handleCreateFolder}>
             <FolderPlus className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 rounded-md px-2" title={t('fileBrowser.toolbar.uploadFiles')} onClick={handleUpload}>
+          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFiles')} onClick={handleUpload}>
             <Upload className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 rounded-md px-2" title={t('fileBrowser.toolbar.uploadFolder')} onClick={handleUploadFolder}>
+          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFolder')} onClick={handleUploadFolder}>
             <FolderUp className="h-3.5 w-3.5" />
           </Button>
 
@@ -1441,20 +1445,18 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
               placeholder={t('fileBrowser.searchFiles')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-6 border-border/50 bg-background/50 text-[11px] shadow-none placeholder:text-muted-foreground/60 focus-visible:bg-background transition-colors"
+              className="h-6 border-panel-border bg-background shadow-none placeholder:text-muted-foreground/60 transition-colors focus-visible:bg-background"
             />
           </div>
 
-          <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">{t('fileBrowser.items', { count: actualItemCount })}</span>
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">{t('fileBrowser.items', { count: actualItemCount })}</span>
 
           {selectedFiles.size > 0 && (
-            <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-primary">
               {t('fileBrowser.selected', { count: selectedFiles.size })}
             </span>
           )}
-        </div>
-        <div className="pointer-events-none absolute inset-x-4 top-full -mt-2 h-4 bg-gradient-to-b from-background/35 via-background/10 to-transparent blur-sm" />
-      </div>
+      </PanelToolbar>
 
       {/* File List + Directory Tree */}
       <div className="min-h-0 flex-1 pb-2">
@@ -1509,7 +1511,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
               )}
 
               {/* Column Headers — outside ScrollArea so they never move */}
-              <div className="flex shrink-0 gap-2 border-b border-border/40 bg-muted/20 px-2 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+              <div className={`panel-toolbar flex shrink-0 gap-2 px-2 py-px font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}>
                 <div 
                   className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
                   style={{ width: `${columnWidths.name}px` }}
@@ -1604,7 +1606,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                         }}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`flex gap-2 px-2 py-1.5 hover:bg-muted/50 cursor-pointer border-b border-border/30 ${
+                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer gap-2 border-b border-border/30 px-2 py-px hover:bg-muted/50 ${
                                 selectedFiles.has(file.name) ? 'bg-accent' : ''
                               }`}
                               onClick={(e) => handleFileClick(file, e)}
@@ -1616,7 +1618,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                                 }
                               }}
                             >
-                    <div className="flex items-center gap-2 min-w-0" style={{ width: `${columnWidths.name}px` }}>
+                    <div className={`flex min-w-0 items-center gap-1 ${FILE_BROWSER_LIST_ICONS}`} style={{ width: `${columnWidths.name}px` }}>
                       {getFileIcon(file)}
                       {renamingFile?.name === file.name ? (
                         <Input
@@ -1627,23 +1629,23 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                             if (e.key === 'Escape') handleRenameCancel();
                           }}
                           onBlur={handleRenameConfirm}
-                          className="text-sm h-6 px-1"
+                          className="h-5 px-1"
                           autoFocus
                         />
                       ) : (
-                        <span className="text-sm truncate">{file.name}</span>
+                        <span className="truncate">{file.name}</span>
                       )}
                     </div>
-                    <div className="text-sm text-muted-foreground truncate" style={{ width: `${columnWidths.size}px` }}>
+                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.size}px` }}>
                       {file.type === 'file' ? formatFileSize(file.size) : '-'}
                     </div>
-                    <div className="text-sm text-muted-foreground truncate" style={{ width: `${columnWidths.modified}px` }}>
+                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
                       {file.name !== '..' ? formatDate(file.modified) : '-'}
                     </div>
-                    <div className="text-sm font-mono text-muted-foreground truncate" style={{ width: `${columnWidths.permissions}px` }}>
+                    <div className="truncate font-mono text-muted-foreground" style={{ width: `${columnWidths.permissions}px` }}>
                       {file.permissions}
                     </div>
-                    <div className="text-sm text-muted-foreground truncate" style={{ width: `${columnWidths.owner}px` }}>
+                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.owner}px` }}>
                       {file.owner}:{file.group}
                     </div>
                             </div>

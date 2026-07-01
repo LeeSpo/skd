@@ -58,11 +58,12 @@ export function MenuBar({
 
   return (
     <div
-      className="border-b border-border bg-background py-1 flex items-center gap-1"
+      className="flex h-8 items-center gap-1 border-b border-border bg-background"
+      // macOS traffic-light inset — keeps native window controls unobstructed
       style={{ paddingLeft: '80px' }}
     >
       <div
-        className="flex-1 h-full min-h-[28px] min-w-0 cursor-default"
+        className="h-full min-h-0 min-w-0 flex-1 cursor-default"
         data-tauri-drag-region
       />
 

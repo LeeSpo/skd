@@ -40,7 +40,14 @@ beforeEach(() => {
       return '/Users/test';
     }
     if (command === 'list_local_files') {
-      return [];
+      return [
+        {
+          name: 'readme.md',
+          file_type: 'File',
+          size: 128,
+          modified: '2026-01-01',
+        },
+      ];
     }
     throw new Error(`Unexpected invoke: ${command}`);
   });
@@ -60,5 +67,17 @@ describe('LocalFileBrowser', () => {
     });
 
     expect(screen.getAllByText('Local')).toHaveLength(1);
+  });
+
+  it('uses shared compact file list typography', async () => {
+    render(<LocalFileBrowser />);
+
+    await waitFor(() => {
+      expect(screen.getByText('readme.md')).toBeTruthy();
+    });
+
+    const table = document.querySelector('table.file-list-text');
+    expect(table).not.toBeNull();
+    expect(document.querySelector('.file-chrome-text')).not.toBeNull();
   });
 });

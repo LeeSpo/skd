@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
+import { StatusDot, type StatusDotVariant } from './ui/status-dot';
 
 interface StatusBarProps {
   activeConnection?: {
@@ -12,20 +13,24 @@ interface StatusBarProps {
   };
 }
 
+function toStatusDotVariant(
+  status: NonNullable<StatusBarProps['activeConnection']>['status'],
+): StatusDotVariant {
+  if (status === 'connected') return 'connected';
+  if (status === 'connecting') return 'connecting';
+  if (status === 'pending') return 'pending';
+  return 'disconnected';
+}
+
 export function StatusBar({ activeConnection }: StatusBarProps) {
   const { t } = useTranslation();
   return (
-    <div className="bg-muted border-t border-border px-4 py-1 flex items-center justify-between text-sm">
+    <div className="flex h-7 items-center justify-between border-t border-border bg-muted px-4 text-xs">
       <div className="flex items-center gap-4">
         {activeConnection && (
           <>
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${
-                activeConnection.status === 'connected' ? 'bg-green-500' :
-                activeConnection.status === 'connecting' ? 'bg-yellow-500' :
-                activeConnection.status === 'pending' ? 'bg-blue-500 animate-pulse' :
-                'bg-red-500'
-              }`} />
+              <StatusDot variant={toStatusDotVariant(activeConnection.status)} />
               <span className={activeConnection.status === 'disconnected' ? 'text-muted-foreground' : ''}>
                 {activeConnection.status === 'connected' ? t('statusBar.connected') :
                  activeConnection.status === 'connecting' ? t('statusBar.connecting') :

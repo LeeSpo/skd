@@ -10,6 +10,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { PanelHeader, PanelToolbar } from "./ui/panel-chrome";
+import {
+  FILE_BROWSER_CHROME_TEXT,
+  FILE_BROWSER_LIST_ICONS,
+  FILE_BROWSER_LIST_TEXT,
+} from "@/lib/file-browser-typography";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -540,23 +546,21 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         tabIndex={0}
         data-panel-mode={mode}
       >
-        {/* Panel header */}
-        <div className="flex items-center gap-1 px-2 py-0.5 border-b bg-muted/60 shrink-0">
+        <PanelHeader className={FILE_BROWSER_CHROME_TEXT}>
           <Badge
             variant={mode === "local" ? "outline" : "secondary"}
-            className="text-[10px] px-1.5 py-0 h-5"
+            className="h-4 px-1 py-0"
           >
             {panelBadgeLabel}
           </Badge>
           {label && label !== panelBadgeLabel && (
-            <span className="text-[10px] text-muted-foreground truncate flex-1">
+            <span className="flex-1 truncate text-muted-foreground">
               {label}
             </span>
           )}
-        </div>
+        </PanelHeader>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-0.5 px-1 py-0.5 border-b bg-muted/30 shrink-0">
+        <PanelToolbar className={FILE_BROWSER_CHROME_TEXT}>
           <Button
             variant="ghost"
             size="icon"
@@ -591,7 +595,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
           </Button>
 
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-0.5 ml-1 text-[10px] overflow-x-auto whitespace-nowrap flex-1 min-w-0">
+          <div className="ml-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto whitespace-nowrap">
             {segments.map((seg, i) => (
               <React.Fragment key={seg.path}>
                 {i > 0 && (
@@ -613,7 +617,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
             <Search className="h-3 w-3 text-muted-foreground/60 shrink-0" />
             <input
               placeholder={t('filePanel.toolbar.filter')}
-              className="h-full w-24 text-[10px] bg-transparent outline-none placeholder:text-muted-foreground/50"
+              className="h-full w-24 bg-transparent outline-none placeholder:text-muted-foreground/50"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
@@ -629,7 +633,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
           >
             <FolderPlus className="h-3.5 w-3.5" />
           </Button>
-        </div>
+        </PanelToolbar>
 
         {/* File list */}
         <ContextMenu>
@@ -640,11 +644,11 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredEntries.length === 0 ? (
-                <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                <div className={`flex h-32 items-center justify-center text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}>
                   {filter ? t('filePanel.empty.noMatches') : t('filePanel.empty.emptyDirectory')}
                 </div>
               ) : (
-                <table className="w-full text-[11px]" style={{ tableLayout: "fixed" }}>
+                <table className={`w-full ${FILE_BROWSER_LIST_TEXT}`} style={{ tableLayout: "fixed" }}>
                   <colgroup>
                     <col />
                     <col style={{ width: colWidths.size }} />
@@ -656,7 +660,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                   <thead className="sticky top-0 bg-muted/60 z-10">
                     <tr className="border-b text-muted-foreground">
                       <th
-                        className="text-left px-2 py-0.5 font-medium cursor-pointer hover:bg-muted/80 select-none relative"
+                        className="relative cursor-pointer select-none px-2 py-px text-left font-medium hover:bg-muted/80"
                         onClick={() => handleSortClick("name")}
                       >
                         <span className="inline-flex items-center">
@@ -672,7 +676,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                         />
                       </th>
                       <th
-                        className="text-right px-2 py-0.5 font-medium cursor-pointer hover:bg-muted/80 select-none relative"
+                        className="relative cursor-pointer select-none px-2 py-px text-right font-medium hover:bg-muted/80"
                         onClick={() => handleSortClick("size")}
                       >
                         <span className="inline-flex items-center justify-end w-full">
@@ -688,7 +692,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                         />
                       </th>
                       <th
-                        className="text-left px-2 py-0.5 font-medium cursor-pointer hover:bg-muted/80 select-none relative"
+                        className="relative cursor-pointer select-none px-2 py-px text-left font-medium hover:bg-muted/80"
                         onClick={() => handleSortClick("modified")}
                       >
                         <span className="inline-flex items-center">
@@ -706,7 +710,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                         )}
                       </th>
                       {showPermissions && (
-                        <th className="text-left px-2 py-0.5 font-medium relative">
+                        <th className="relative px-2 py-px text-left font-medium">
                           {t('filePanel.column.permissions')}
                         </th>
                       )}
@@ -725,22 +729,22 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                               draggable
                               onDragStart={(e) => handleDragStart(e, entry)}
                             >
-                              <td className="px-2 py-0.5 overflow-hidden">
-                                <div className="flex items-center gap-1.5 min-w-0">
+                              <td className="overflow-hidden px-2 py-px">
+                                <div className={`flex min-w-0 items-center gap-1 ${FILE_BROWSER_LIST_ICONS}`}>
                                   {getFileIcon(entry)}
                                   <span className="truncate">{entry.name}</span>
                                 </div>
                               </td>
-                              <td className="text-right px-2 py-0.5 text-muted-foreground overflow-hidden whitespace-nowrap">
+                              <td className="overflow-hidden whitespace-nowrap px-2 py-px text-right text-muted-foreground">
                                 {entry.file_type === "File"
                                   ? formatSize(entry.size)
                                   : "—"}
                               </td>
-                              <td className="px-2 py-0.5 text-muted-foreground overflow-hidden whitespace-nowrap text-ellipsis">
+                              <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-px text-muted-foreground">
                                 {entry.modified ?? "—"}
                               </td>
                               {showPermissions && (
-                                <td className="px-2 py-0.5 text-muted-foreground font-mono text-[10px] overflow-hidden whitespace-nowrap">
+                                <td className="overflow-hidden whitespace-nowrap px-2 py-px font-mono text-muted-foreground">
                                   {entry.permissions ?? "—"}
                                 </td>
                               )}
@@ -875,7 +879,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         )}
 
         {/* Status bar */}
-        <div className="flex items-center justify-between px-2 py-0.5 text-[10px] text-muted-foreground border-t bg-muted/30 shrink-0">
+        <div className={`panel-toolbar flex shrink-0 items-center justify-between border-t px-2 py-0.5 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
           <span>
             {t('filePanel.statusBar.items', { count: filteredEntries.length })}
             {selectedNames.size > 0 && (

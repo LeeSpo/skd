@@ -253,7 +253,7 @@ export function Toolbar({
               <RotateCcw className="w-4 h-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Reconnect</TooltipContent>
+          <TooltipContent>{t('common.reconnect')}</TooltipContent>
         </Tooltip> */}
 
         <Separator orientation="vertical" className="h-4 mx-1" />
