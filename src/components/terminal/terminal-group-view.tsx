@@ -97,8 +97,8 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const showWelcome = group.tabs.length === 0 && isLastGroup;
 
   const containerClass = isActive
-    ? 'h-full w-full flex flex-col border-2 border-primary'
-    : 'h-full w-full flex flex-col border border-border';
+    ? 'h-full w-full flex flex-col border border-primary/40 ring-1 ring-primary/10 shadow-sm transition-all duration-200'
+    : 'h-full w-full flex flex-col border border-border transition-all duration-200';
 
   return (
     <section

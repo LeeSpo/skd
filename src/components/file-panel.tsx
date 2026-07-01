@@ -510,12 +510,15 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
     };
 
     // ------ Render ------
+    const panelBadgeLabel = t(
+      mode === "local" ? 'filePanel.panel.local' : 'filePanel.panel.remote',
+    );
     const segments = getSegments(currentPath);
     const activeBorderColor =
-      mode === "local" ? "border-blue-500" : "border-emerald-500";
+      mode === "local" ? "border-blue-500/40 ring-1 ring-blue-500/10 shadow-sm" : "border-emerald-500/40 ring-1 ring-emerald-500/10 shadow-sm";
     const borderClass = isActive
-      ? `border-2 ${activeBorderColor}`
-      : "border border-border";
+      ? `border ${activeBorderColor} transition-all duration-200`
+      : "border border-border transition-all duration-200";
     const selectedBg =
       mode === "local"
         ? "bg-blue-500/20 dark:bg-blue-400/20"
@@ -543,11 +546,13 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
             variant={mode === "local" ? "outline" : "secondary"}
             className="text-[10px] px-1.5 py-0 h-5"
           >
-            {t(mode === "local" ? 'filePanel.panel.local' : 'filePanel.panel.remote')}
+            {panelBadgeLabel}
           </Badge>
-          <span className="text-[10px] text-muted-foreground truncate flex-1">
-            {label}
-          </span>
+          {label && label !== panelBadgeLabel && (
+            <span className="text-[10px] text-muted-foreground truncate flex-1">
+              {label}
+            </span>
+          )}
         </div>
 
         {/* Toolbar */}

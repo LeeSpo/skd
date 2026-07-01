@@ -117,12 +117,12 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 shrink-0 bg-muted/10">
         <Button
           type="button"
           size="sm"
           variant="default"
-          className="h-7 gap-1.5"
+          className="h-8 gap-1.5 px-3 shadow-sm transition-all hover:shadow hover:-translate-y-[0.5px]"
           disabled={!canSend}
           onClick={handleSend}
         >
@@ -133,8 +133,8 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          className="h-7 gap-1.5"
+          variant="secondary"
+          className="h-8 gap-1.5 px-3 transition-colors bg-secondary/60 hover:bg-secondary"
           disabled={draft.length === 0}
           onClick={handleClear}
         >
@@ -157,17 +157,19 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
         </div>
       </div>
 
-      <Textarea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={!isConnected}
-        placeholder={isConnected ? t('composePane.placeholder') : t('composePane.placeholderDisconnected')}
-        className="flex-1 min-h-0 rounded-none border-0 resize-none font-mono text-sm focus-visible:ring-0"
-        spellCheck={false}
-      />
+      <div className="relative flex-1 min-h-0">
+        <Textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={!isConnected}
+          placeholder={isConnected ? t('composePane.placeholder') : t('composePane.placeholderDisconnected')}
+          className="absolute inset-0 h-full w-full rounded-none border-0 resize-none font-mono text-[13px] leading-relaxed p-4 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
+          spellCheck={false}
+        />
+      </div>
 
-      <div className="px-2 py-1 text-xs text-muted-foreground border-t border-border shrink-0">
+      <div className="px-4 py-1.5 text-[11px] font-medium text-muted-foreground/60 border-t border-border/40 shrink-0 bg-muted/5 flex justify-end tracking-wide">
         {t('composePane.hint.sendShortcut')}
       </div>
     </div>

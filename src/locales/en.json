@@ -137,7 +137,6 @@
       "keyboardInteractive": "Keyboard Interactive",
       "anonymous": "Anonymous"
     },
-
     "ftp": {
       "enableFtps": "Enable FTPS (FTP over TLS)",
       "enableFtpsDesc": "Encrypt the FTP connection using TLS for improved security"
@@ -473,7 +472,7 @@
       "edit": "Edit",
       "openInEditor": "Open in Editor",
       "openInLogMonitor": "Open in Log Monitor",
-      "openInOS": "Open in OS",
+      "openInOS": "Open In Finder",
       "uploadFolder": "Upload Folder",
       "syncDirectories": "Sync Directories"
     },
@@ -755,7 +754,7 @@
       "downloadToLocal": "Download to local",
       "uploadDirToRemote": "Upload directory to remote",
       "downloadDirToLocal": "Download directory to local",
-      "openInOS": "Open in OS",
+      "openInOS": "Open In Finder",
       "rename": "Rename",
       "copyPath": "Copy path",
       "delete": "Delete",

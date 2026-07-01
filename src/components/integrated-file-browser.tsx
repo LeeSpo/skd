@@ -1321,10 +1321,10 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   }
 
   return (
-    <div className={`h-full flex flex-col bg-background border-t ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
+    <div className={`h-full flex flex-col bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
       {/* File Browser Toolbar */}
-      <div className="relative z-10 pt-2 pb-1">
-        <div className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap rounded-lg border border-border/70 bg-background/90 px-1.5 py-1 text-xs shadow-sm backdrop-blur-sm scrollbar-none">
+      <div className="relative z-10 px-2 py-1.5 bg-muted/10 border-b border-border/40">
+        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap rounded-md border border-border/40 bg-background/60 px-1.5 py-1.5 text-xs shadow-sm backdrop-blur-md scrollbar-none transition-all hover:border-border/60">
           {/* Back */}
           <Button
             variant="ghost"
@@ -1371,7 +1371,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
 
           {/* Breadcrumb / Editable address bar */}
           <div
-            className="mx-1 flex h-6 min-w-0 flex-1 cursor-text items-center rounded-md border border-border/50 bg-muted/50 px-1.5 shadow-inner group hover:border-border"
+            className="mx-1.5 flex h-6 min-w-0 flex-1 cursor-text items-center rounded-md border border-border/50 bg-background/50 px-2 shadow-inner group hover:border-border transition-colors"
             onClick={() => {
               if (!isEditingPath) {
                 setEditPathValue(currentPath);
@@ -1441,7 +1441,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
               placeholder={t('fileBrowser.searchFiles')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-6 border-border/60 bg-background/70 text-xs shadow-none placeholder:text-muted-foreground/70 focus-visible:bg-background"
+              className="h-6 border-border/50 bg-background/50 text-[11px] shadow-none placeholder:text-muted-foreground/60 focus-visible:bg-background transition-colors"
             />
           </div>
 
@@ -1490,7 +1490,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           <ResizablePanel id="ssh-file-list" order={2} defaultSize={78} minSize={40}>
             <div
               ref={dropZoneRef}
-              className="relative flex flex-col h-full overflow-hidden rounded-lg border border-border/70 bg-background shadow-sm"
+              className="relative flex flex-col h-full overflow-hidden rounded-md border border-border/50 bg-background/50 shadow-sm ring-1 ring-black/5 dark:ring-white/5 transition-all"
               // Required on Linux/WebKit2GTK: without preventDefault the browser
               // never signals "drop accepted", so Tauri's native drop signal
               // never fires. Also suppresses the browser's default file-open
@@ -1509,7 +1509,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
               )}
 
               {/* Column Headers — outside ScrollArea so they never move */}
-              <div className="flex shrink-0 gap-2 border-b bg-muted/30 px-2 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm supports-[backdrop-filter]:bg-background/55">
+              <div className="flex shrink-0 gap-2 border-b border-border/40 bg-muted/20 px-2 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
                 <div 
                   className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
                   style={{ width: `${columnWidths.name}px` }}

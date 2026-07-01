@@ -570,7 +570,7 @@ export function FileBrowserView({
             <FilePanel
               ref={localPanelRef}
               mode="local"
-              label={t('fileBrowser.local')}
+              label={localHomePath ?? ''}
               isActive={activePanel === "local"}
               initialPath={localHomePath}
               onLoadDirectory={loadLocalDirectory}

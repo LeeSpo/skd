@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { FilePanel } from './file-panel';
 import type { FileEntry } from '@/lib/file-entry-types';
@@ -9,7 +8,6 @@ import type { FileEntry } from '@/lib/file-entry-types';
  * Reuses FilePanel + native Tauri file commands (no SFTP connection).
  */
 export function LocalFileBrowser() {
-  const { t } = useTranslation();
   const [homePath, setHomePath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -42,7 +40,7 @@ export function LocalFileBrowser() {
     <div className="h-full w-full flex flex-col bg-background text-foreground">
       <FilePanel
         mode="local"
-        label={t('fileBrowser.local')}
+        label={homePath ?? ''}
         isActive
         initialPath={homePath}
         onLoadDirectory={loadLocalDirectory}
