@@ -36,6 +36,7 @@ import { getPrivateKeyContentForConnection } from './lib/resolve-private-key';
 import {
   sshConnectWithHostKeyTrust,
   sftpConnectWithHostKeyTrust,
+  type ConnectResponse,
   type HostKeyTrustRequest,
 } from './lib/ssh-connect';
 import type { UnknownHostKeyPayload } from './lib/host-key-verification';
@@ -109,13 +110,15 @@ function AppContent() {
   const [externalLogPathKey, setExternalLogPathKey] = useState(0);
 
   const defaultLocalShellOpenedRef = useRef(false);
-  const hostKeyRetryRef = useRef<(() => Promise<{ success: boolean; error?: string }>) | null>(null);
+  const hostKeyRetryRef = useRef<(() => Promise<ConnectResponse>) | null>(null);
+  const hostKeyCancelRef = useRef<(() => void) | null>(null);
   const [hostKeyTrustOpen, setHostKeyTrustOpen] = useState(false);
   const [hostKeyTrustPayload, setHostKeyTrustPayload] = useState<UnknownHostKeyPayload | null>(null);
 
-  const onHostKeyTrustRequired = useCallback((request: HostKeyTrustRequest) => {
+  const onHostKeyTrustRequired = useCallback((request: HostKeyTrustRequest, onCancelled?: () => void) => {
     setHostKeyTrustPayload(request.payload);
     hostKeyRetryRef.current = request.retry;
+    hostKeyCancelRef.current = onCancelled ?? null;
     setHostKeyTrustOpen(true);
   }, []);
 
@@ -1149,7 +1152,32 @@ function AppContent() {
         description: t('app.quickConnectedDesc', { name: connectionData.name }),
       });
     } else {
-      // SSH quick connect (existing behavior)
+      // SSH quick connect: show a pending tab immediately, then mount PTY after
+      // the backend SSH connection has been established.
+      const pendingGroupId = state.activeGroupId;
+      const pendingTab: TerminalTab = {
+        id: connectionData.id,
+        name: connectionData.name,
+        protocol: connectionData.protocol,
+        host: connectionData.host,
+        username: connectionData.username,
+        connectionStatus: 'pending',
+        reconnectCount: 0,
+      };
+      dispatch({ type: 'ADD_TAB', groupId: pendingGroupId, tab: pendingTab });
+
+      const completeSshQuickConnect = () => {
+        ConnectionStorageManager.updateLastConnected(connectionData.id);
+        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: connectionData.id, status: 'connecting' });
+        toast.success(t('app.quickConnected'), {
+          description: t('app.quickConnectedDesc', { name: connectionData.name }),
+        });
+      };
+
+      const removePendingTab = () => {
+        dispatch({ type: 'REMOVE_TAB', groupId: pendingGroupId, tabId: connectionData.id });
+      };
+
       try {
         const auth = await buildAuthRequest(connectionData);
         const result = await sshConnectWithHostKeyTrust(
@@ -1160,34 +1188,34 @@ function AppContent() {
             username: connectionData.username,
             ...auth,
           },
-          onHostKeyTrustRequired,
+          (request) => {
+            onHostKeyTrustRequired(
+              {
+                ...request,
+                retry: async () => {
+                  const retryResult = await request.retry();
+                  if (retryResult.success) {
+                    completeSshQuickConnect();
+                  } else if (!retryResult.pendingHostKeyTrust) {
+                    removePendingTab();
+                  }
+                  return retryResult;
+                },
+              },
+              removePendingTab,
+            );
+          },
         );
 
         if (result.success) {
-          ConnectionStorageManager.updateLastConnected(connectionData.id);
-
-          const config: ConnectionConfig = {
-            id: connectionData.id,
-            name: connectionData.name,
-            protocol: connectionData.protocol as ConnectionConfig['protocol'],
-            host: connectionData.host,
-            port: connectionData.port,
-            username: connectionData.username,
-            authMethod: connectionData.authMethod || 'password',
-            password: connectionData.password,
-            privateKeyPath: connectionData.privateKeyPath,
-            passphrase: connectionData.passphrase,
-          };
-
-          handleConnectionDialogConnect(config);
-
-          toast.success(t('app.quickConnected'), {
-            description: t('app.quickConnectedDesc', { name: connectionData.name }),
-          });
+          completeSshQuickConnect();
+        } else if (result.pendingHostKeyTrust) {
+          return;
         } else {
           console.error('Quick connect failed:', result.error);
+          removePendingTab();
           toast.error(t('app.connectionFailed'), {
-            description: result.error || 'Unable to connect. Please try again.',
+            description: result.error || t('app.quickConnectFailedDesc'),
           });
           setEditingConnection({
             id: connectionData.id,
@@ -1202,12 +1230,13 @@ function AppContent() {
         }
       } catch (error) {
         console.error('Quick connect error:', error);
+        removePendingTab();
         toast.error(t('app.connectionError'), {
           description: error instanceof Error ? error.message : t('app.connectionErrorDesc'),
         });
       }
     }
-  }, [allTabs, handleTabSelect, handleConnectionDialogConnect, t]);
+  }, [allTabs, buildAuthRequest, dispatch, handleConnectionDialogConnect, handleTabSelect, onHostKeyTrustRequired, state.activeGroupId, t]);
 
   // Derive active connection info for StatusBar (compatible format)
   const statusBarConnection = activeConnection ? {
@@ -1487,12 +1516,21 @@ function AppContent() {
           void (async () => {
             if (!hostKeyRetryRef.current) return;
             const result = await hostKeyRetryRef.current();
+            if (result.success || !result.pendingHostKeyTrust) {
+              hostKeyRetryRef.current = null;
+              hostKeyCancelRef.current = null;
+            }
             if (!result.success) {
               toast.error(t('app.connectionFailed'), {
                 description: result.error,
               });
             }
           })();
+        }}
+        onCancelled={() => {
+          hostKeyCancelRef.current?.();
+          hostKeyRetryRef.current = null;
+          hostKeyCancelRef.current = null;
         }}
       />
 

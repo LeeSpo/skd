@@ -24,3 +24,5 @@ target
 *.njsproj
 *.sln
 *.sw?
+
+.superpowers/*

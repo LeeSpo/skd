@@ -70,7 +70,8 @@
     "systemMonitor": "System Monitor",
     "logMonitor": "Log Monitor",
     "quickConnected": "Quick Connected",
-    "quickConnectedDesc": "Connected to {{name}}"
+    "quickConnectedDesc": "Connected to {{name}}",
+    "quickConnectFailedDesc": "Unable to connect. Please try again."
   },
   "localTerminal": {
     "tabName": "Local",
@@ -899,6 +900,9 @@
   },
   "terminal": {
     "search": "Search..."
+  },
+  "terminalGroup": {
+    "waitingForConnection": "Waiting for connection..."
   },
   "terminalSearchBar": {
     "findInTerminal": "Find in terminal...",

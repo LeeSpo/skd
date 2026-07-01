@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import { GroupTabBar } from './group-tab-bar';
@@ -47,6 +48,7 @@ function useThemeKey(): number {
 }
 
 export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
+  const { t } = useTranslation();
   const { state, dispatch } = useTerminalGroups();
   const { onDuplicateTab, onNewTab, onReconnectTab, onOpenInEditorForTab } = useTerminalCallbacks();
   const group = state.groups[groupId];
@@ -140,7 +142,7 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
               {tab.connectionStatus === 'pending' ? (
                 <div className="h-full w-full flex items-center justify-center bg-muted/30">
                   <div className="text-center text-muted-foreground">
-                    <div className="animate-pulse">Waiting for connection...</div>
+                    <div className="animate-pulse">{t('terminalGroup.waitingForConnection')}</div>
                   </div>
                 </div>
               ) : (
