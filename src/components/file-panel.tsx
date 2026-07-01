@@ -80,6 +80,7 @@ export interface FilePanelProps {
   // Focus tracking
   onFocus: () => void;
   onPathChange?: (path: string) => void;
+  onSelectionCountChange?: (count: number) => void;
 
   // Columns config
   showPermissions?: boolean;
@@ -128,6 +129,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       onTransferDirectoryToOther,
       onFocus,
       onPathChange,
+      onSelectionCountChange,
       showPermissions = false,
       disabled = false,
       onOsFilesDropped,
@@ -222,6 +224,10 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         loadDirectory(initialPath);
       }
     }, [disabled, initialPath]);
+
+    useEffect(() => {
+      onSelectionCountChange?.(selectedNames.size);
+    }, [onSelectionCountChange, selectedNames.size]);
 
     // ------ Filtering & Sorting ------
     const filteredEntries = (() => {

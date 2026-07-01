@@ -7,11 +7,13 @@ import { Card, CardContent } from '../ui/card';
 import type { DiskUsage, MonitorPanelProps } from './monitor-types';
 import { getUsageColor, scheduleIdleTask } from './monitor-utils';
 
-export function DiskUsagePanel({ connectionId }: MonitorPanelProps) {
+export function DiskUsagePanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [disks, setDisks] = useState<DiskUsage[]>([]);
 
   useEffect(() => {
+    if (!active) return;
+
     const fetchDiskUsage = async (isCancelled: () => boolean = () => false): Promise<void> => {
       const result = await invoke<{
         success: boolean;
@@ -50,7 +52,7 @@ export function DiskUsagePanel({ connectionId }: MonitorPanelProps) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [connectionId]);
+  }, [connectionId, active]);
 
   return (
     <div className="space-y-1.5">

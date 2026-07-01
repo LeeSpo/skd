@@ -1,7 +1,6 @@
 import "./lib/i18n";
+import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
-import { FileViewerWindow } from "./FileViewerWindow.tsx";
 import "./index.css";
 import "./styles/globals.css";
 import { initializeTheme } from "./lib/utils";
@@ -10,6 +9,17 @@ import { initializeTheme } from "./lib/utils";
 initializeTheme();
 
 const mode = new URLSearchParams(window.location.search).get("mode");
-const root = mode === "file-viewer" ? <FileViewerWindow /> : <App />;
+const Root = lazy(() => {
+  if (mode === "file-viewer") {
+    return import("./FileViewerWindow.tsx").then((module) => ({
+      default: module.FileViewerWindow,
+    }));
+  }
+  return import("./App.tsx");
+});
 
-createRoot(document.getElementById("root")!).render(root);
+createRoot(document.getElementById("root")!).render(
+  <Suspense fallback={null}>
+    <Root />
+  </Suspense>,
+);

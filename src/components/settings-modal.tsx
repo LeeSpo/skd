@@ -60,12 +60,38 @@ interface SettingsModalProps {
   onCheckForUpdates?: () => void;
 }
 
+interface AppSettings {
+  fontSize: number;
+  fontFamily: string;
+  colorScheme: string;
+  cursorStyle: string;
+  scrollbackLines: number;
+  defaultProtocol: string;
+  connectionTimeout: number;
+  keepAliveInterval: number;
+  autoReconnect: boolean;
+  hostKeyVerification: boolean;
+  autoLockTimeout: number;
+  theme: ThemeMode;
+  showConnectionManager: boolean;
+  showSystemMonitor: boolean;
+  showStatusBar: boolean;
+  enableNotifications: boolean;
+  newSession: string;
+  closeSession: string;
+  nextTab: string;
+  previousTab: string;
+  logLevel: string;
+  maxLogSize: number;
+  checkUpdates: boolean;
+}
+
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {
   const { t } = useTranslation();
   const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearanceSettings>(defaultAppearanceSettings);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
   
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<AppSettings>({
     // Terminal settings
     fontSize: 14,
     fontFamily: 'JetBrains Mono',
@@ -91,10 +117,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     enableNotifications: true,
     
     // Keyboard shortcuts
-    newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession as string,
-    closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession as string,
-    nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab as string,
-    previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab as string,
+    newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession,
+    closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
+    nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
+    previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
     
     // Advanced settings
     logLevel: 'info',
@@ -156,7 +182,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     dispatchEditorConfigChanged();
     
     // Apply the theme immediately
-    applyTheme(settings.theme as ThemeMode);
+    applyTheme(settings.theme);
     
     // Save other settings to localStorage
     localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
@@ -188,10 +214,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
         showSystemMonitor: true,
         showStatusBar: true,
         enableNotifications: true,
-        newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession as string,
-        closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession as string,
-        nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab as string,
-        previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab as string,
+        newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession,
+        closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
+        nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
+        previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
         logLevel: 'info',
         maxLogSize: 100,
         checkUpdates: false

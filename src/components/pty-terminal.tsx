@@ -50,6 +50,18 @@ interface PtyTerminalProps {
  *  sustained high-throughput output (e.g. `yes`). */
 const SESSION_OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024;
 
+const terminalDebug = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.debug(...args);
+  }
+};
+
+const terminalWarn = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.warn(...args);
+  }
+};
+
 export function PtyTerminal({
   connectionId,
   connectionName,
@@ -81,6 +93,7 @@ export function PtyTerminal({
 
   // Scrollbar visibility — only show when buffer overflows the visible rows
   const [hasScrollableContent, setHasScrollableContent] = React.useState(false);
+  const hasScrollableContentRef = React.useRef(false);
 
   // Unique CSS scoping class for this instance — prevents dynamic scrollbar rules
   // injected via <style> from bleeding across multiple mounted terminals on the page.
@@ -206,22 +219,22 @@ export function PtyTerminal({
           webglAddon.dispose();
           webglAddonRef.current = null;
           rendererRef.current = 'canvas';
-          console.warn('[PTY Terminal] WebGL context lost, falling back to canvas');
+          terminalWarn('[PTY Terminal] WebGL context lost, falling back to canvas');
         });
         term.loadAddon(webglAddon);
         webglAddonRef.current = webglAddon;
         rendererRef.current = 'webgl';
-        console.log('[PTY Terminal] WebGL renderer loaded');
+        terminalDebug('[PTY Terminal] WebGL renderer loaded');
       } catch (e) {
         rendererRef.current = 'canvas';
-        console.warn('[PTY Terminal] WebGL not supported, falling back to canvas:', e);
+        terminalWarn('[PTY Terminal] WebGL not supported, falling back to canvas:', e);
       }
     } else {
       rendererRef.current = 'canvas';
       if (appearance.backgroundImage) {
-        console.log('[PTY Terminal] Using canvas renderer (background image requires transparency)');
+        terminalDebug('[PTY Terminal] Using canvas renderer (background image requires transparency)');
       } else {
-        console.log('[PTY Terminal] Using canvas renderer (multilingual font fallback)');
+        terminalDebug('[PTY Terminal] Using canvas renderer (multilingual font fallback)');
       }
     }
     
@@ -234,7 +247,10 @@ export function PtyTerminal({
 
     // Scrollbar visibility: show only when content overflows the viewport.
     const checkScrollability = () => {
-      setHasScrollableContent(term.buffer.active.length > term.rows);
+      const next = term.buffer.active.length > term.rows;
+      if (hasScrollableContentRef.current === next) return;
+      hasScrollableContentRef.current = next;
+      setHasScrollableContent(next);
     };
     const lineFeedDisposable = term.onLineFeed(checkScrollability);
 
@@ -361,12 +377,12 @@ export function PtyTerminal({
           // Consider terminal properly sized if it has reasonable dimensions
           // Typical minimum: 80x24, but we'll accept 40x10 as minimum
           if (term.cols >= 40 && term.rows >= 10) {
-            console.log(`[PTY Terminal] [${connectionId}] Terminal properly sized: ${term.cols}x${term.rows}`);
+            terminalDebug(`[PTY Terminal] [${connectionId}] Terminal properly sized: ${term.cols}x${term.rows}`);
             resolve();
           } else if (Date.now() - startTime > MAX_WAIT_MS) {
             // Tab is likely hidden (display: none). Proceed with fallback size;
             // the terminal will re-fit and send Resize when it becomes visible.
-            console.log(`[PTY Terminal] [${connectionId}] Size wait timed out (${term.cols}x${term.rows}), proceeding with fallback`);
+            terminalDebug(`[PTY Terminal] [${connectionId}] Size wait timed out (${term.cols}x${term.rows}), proceeding with fallback`);
             resolve();
           } else {
             // Terminal still too small (probably hidden), retry after 100ms
@@ -394,12 +410,12 @@ export function PtyTerminal({
       let wsPort = 9001; // fallback default
       try {
         wsPort = await invoke<number>('get_websocket_port');
-        console.log(`[PTY Terminal] [${connectionId}] WebSocket port: ${wsPort}`);
+        terminalDebug(`[PTY Terminal] [${connectionId}] WebSocket port: ${wsPort}`);
       } catch (e) {
-        console.warn(`[PTY Terminal] [${connectionId}] Failed to get WebSocket port, using default:`, e);
+        terminalWarn(`[PTY Terminal] [${connectionId}] Failed to get WebSocket port, using default:`, e);
       }
       
-      console.log(`[PTY Terminal] [${connectionId}] Connecting to WebSocket...`);
+      terminalDebug(`[PTY Terminal] [${connectionId}] Connecting to WebSocket...`);
       const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
       // Receive PTY output as ArrayBuffer so we can avoid the JSON overhead of
       // encoding Vec<u8> as integer arrays.  The backend sends binary output
@@ -408,10 +424,12 @@ export function PtyTerminal({
       // One streaming TextDecoder per WebSocket connection: preserves UTF-8
       // multi-byte sequences that may be split across successive output frames.
       const outputDecoder = new TextDecoder('utf-8');
+      const frameIdDecoder = new TextDecoder('utf-8');
+      const legacyOutputDecoder = new TextDecoder('utf-8');
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log(`[PTY Terminal] [${connectionId}] WebSocket connected`);
+        terminalDebug(`[PTY Terminal] [${connectionId}] WebSocket connected`);
         registerSender(connectionId, sendInputToPty);
 
         // Start PTY session
@@ -421,7 +439,7 @@ export function PtyTerminal({
           cols: term.cols,
           rows: term.rows,
         };
-        console.log(`[PTY Terminal] [${connectionId}] Starting PTY connection with ${term.cols}x${term.rows}`);
+        terminalDebug(`[PTY Terminal] [${connectionId}] Starting PTY connection with ${term.cols}x${term.rows}`);
         ws.send(JSON.stringify(startMsg));
       };
 
@@ -470,7 +488,7 @@ export function PtyTerminal({
           const idLen = (data[1] << 8) | data[2];
           const payloadOffset = 3 + idLen;
           if (data.length < payloadOffset) return;
-          const frameConnectionId = new TextDecoder().decode(data.subarray(3, payloadOffset));
+          const frameConnectionId = frameIdDecoder.decode(data.subarray(3, payloadOffset));
           if (frameConnectionId !== connectionId) return;
           const payload = data.subarray(payloadOffset);
           if (payload.length === 0) return;
@@ -483,7 +501,7 @@ export function PtyTerminal({
           
           switch (msg.type) {
             case 'Success':
-              console.log(`[PTY Terminal] [${connectionId}]`, msg.message);
+              terminalDebug(`[PTY Terminal] [${connectionId}]`, msg.message);
               if (msg.message.includes('PTY connection started')) {
                 reconnectAttemptsRef.current = 0;
                 autoReconnectAfterDropRef.current = 0;
@@ -502,7 +520,7 @@ export function PtyTerminal({
             case 'PtyStarted': {
               if (msg.connection_id === connectionId && typeof msg.generation === 'number') {
                 ptyGenerationRef.current = msg.generation;
-                console.log(`[PTY Terminal] [${connectionId}] PTY generation: ${msg.generation}`);
+                terminalDebug(`[PTY Terminal] [${connectionId}] PTY generation: ${msg.generation}`);
                 signalReady(connectionId);
               }
               break;
@@ -510,7 +528,7 @@ export function PtyTerminal({
               
             case 'Output':
               if (msg.data && msg.data.length > 0) {
-                writePtyOutput(new TextDecoder().decode(new Uint8Array(msg.data)));
+                writePtyOutput(legacyOutputDecoder.decode(new Uint8Array(msg.data)));
               }
               break;
               
@@ -542,7 +560,7 @@ export function PtyTerminal({
             }
               
             default:
-              console.log('[PTY Terminal] Unknown message type:', msg.type);
+              terminalDebug('[PTY Terminal] Unknown message type:', msg.type);
           }
         } catch (e) {
           console.error('[PTY Terminal] Failed to parse message:', e);
@@ -560,7 +578,7 @@ export function PtyTerminal({
       };
 
       ws.onclose = () => {
-        console.log('[PTY Terminal] WebSocket closed');
+        terminalDebug('[PTY Terminal] WebSocket closed');
         if (isRunning) {
           // If a session was successfully established, a WS drop means the
           // remote shell is gone (e.g. sleep/wake cycle, server timeout).
@@ -658,7 +676,7 @@ export function PtyTerminal({
           rows,
         };
         ws.send(JSON.stringify(resizeMsg));
-        console.log(`[PTY Terminal] Terminal resized to ${cols}x${rows}`);
+        terminalDebug(`[PTY Terminal] Terminal resized to ${cols}x${rows}`);
       }
     });
 
@@ -713,7 +731,7 @@ export function PtyTerminal({
 
     // Cleanup
     return () => {
-      console.log(`[PTY Terminal] [${connectionId}] Cleaning up`);
+      terminalDebug(`[PTY Terminal] [${connectionId}] Cleaning up`);
       unregisterSender(connectionId);
       isRunning = false;
 
@@ -840,6 +858,7 @@ export function PtyTerminal({
 
   const handleClear = React.useCallback(() => {
     xtermRef.current?.clear();
+    hasScrollableContentRef.current = false;
     setHasScrollableContent(false);
   }, []);
 
@@ -849,6 +868,7 @@ export function PtyTerminal({
       term.clear();
       // Note: clearScrollback method doesn't exist in newer xterm versions
       // clear() already clears both viewport and scrollback
+      hasScrollableContentRef.current = false;
       setHasScrollableContent(false);
     }
   }, []);

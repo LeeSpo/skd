@@ -16,7 +16,7 @@ import type {
 } from './monitor-types';
 import { GPU_COLORS, getGpuTempColor, getProgressColor, getUsageColor, scheduleIdleTask } from './monitor-utils';
 
-export function GpuMonitorPanel({ connectionId }: MonitorPanelProps) {
+export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [gpuDetection, setGpuDetection] = useState<GpuDetectionResult | null>(null);
   const [gpuStats, setGpuStats] = useState<GpuStats[]>([]);
@@ -25,6 +25,8 @@ export function GpuMonitorPanel({ connectionId }: MonitorPanelProps) {
   const [gpuDetectionDone, setGpuDetectionDone] = useState(false);
 
   useEffect(() => {
+    if (!active) return;
+
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpuDetectionDone(false);
@@ -56,9 +58,10 @@ export function GpuMonitorPanel({ connectionId }: MonitorPanelProps) {
     });
 
     return () => { cancelled = true; };
-  }, [connectionId]);
+  }, [connectionId, active]);
 
   useEffect(() => {
+    if (!active) return;
     if (!gpuDetection?.available) return;
 
     const fetchGpuStats = async (isCancelled: () => boolean = () => false): Promise<void> => {
@@ -106,7 +109,7 @@ export function GpuMonitorPanel({ connectionId }: MonitorPanelProps) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [connectionId, gpuDetection?.available]);
+  }, [connectionId, gpuDetection?.available, active]);
 
   if (!gpuDetectionDone) {
     return null;

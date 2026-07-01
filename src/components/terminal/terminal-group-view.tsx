@@ -1,15 +1,25 @@
-import { useCallback, useState, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useState, useEffect } from 'react';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import { GroupTabBar } from './group-tab-bar';
-import { PtyTerminal } from '../pty-terminal';
-import { FileBrowserView } from '../file-browser-view';
-
-import { FileEditorView } from '../file-editor-view';
 import { WelcomeScreen } from '../welcome-screen';
 
 interface TerminalGroupViewProps {
   groupId: string;
+}
+
+const PtyTerminal = lazy(() => import('../pty-terminal').then((module) => ({
+  default: module.PtyTerminal,
+})));
+const FileBrowserView = lazy(() => import('../file-browser-view').then((module) => ({
+  default: module.FileBrowserView,
+})));
+const FileEditorView = lazy(() => import('../file-editor-view').then((module) => ({
+  default: module.FileEditorView,
+})));
+
+function TabFallback() {
+  return <div className="h-full w-full bg-background" />;
 }
 
 function useThemeKey(): number {
@@ -127,45 +137,49 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
               className="absolute inset-0"
               style={{ display: tab.id === group.activeTabId ? 'block' : 'none' }}
             >
-              {tab.tabType === 'file-browser' ? (
-                <FileBrowserView
-                  connectionId={tab.id}
-                  connectionName={tab.name}
-                  host={tab.host}
-                  protocol={tab.protocol}
-                  isConnected={tab.connectionStatus === 'connected'}
-                  onReconnect={() => handleReconnect(tab.id)}
-                  onOpenInEditor={
-                    tab.protocol === 'SFTP' && onOpenInEditorForTab
-                      ? (filePath, fileName, options) =>
-                          onOpenInEditorForTab(tab.id, filePath, fileName, options)
-                      : undefined
-                  }
-                />
-              ) : tab.tabType === 'editor' && tab.editorFilePath && tab.editorConnectionId ? (
-                <FileEditorView
-                  connectionId={tab.editorConnectionId}
-                  filePath={tab.editorFilePath}
-                  fileName={tab.name}
-                  isConnected={tab.connectionStatus === 'connected'}
-                />
-              ) : tab.connectionStatus !== 'pending' ? (
-                <PtyTerminal
-                  key={`${tab.id}-${tab.reconnectCount}`}
-                  connectionId={tab.id}
-                  connectionName={tab.name}
-                  host={tab.host}
-                  username={tab.username}
-                  themeKey={themeKey}
-                  isActive={isActive && tab.id === group.activeTabId}
-                  onConnectionStatusChange={handleConnectionStatusChange}
-                />
-              ) : (
+              {tab.connectionStatus === 'pending' ? (
                 <div className="h-full w-full flex items-center justify-center bg-muted/30">
                   <div className="text-center text-muted-foreground">
                     <div className="animate-pulse">Waiting for connection...</div>
                   </div>
                 </div>
+              ) : (
+                <Suspense fallback={<TabFallback />}>
+                  {tab.tabType === 'file-browser' ? (
+                    <FileBrowserView
+                      connectionId={tab.id}
+                      connectionName={tab.name}
+                      host={tab.host}
+                      protocol={tab.protocol}
+                      isConnected={tab.connectionStatus === 'connected'}
+                      onReconnect={() => handleReconnect(tab.id)}
+                      onOpenInEditor={
+                        tab.protocol === 'SFTP' && onOpenInEditorForTab
+                          ? (filePath, fileName, options) =>
+                              onOpenInEditorForTab(tab.id, filePath, fileName, options)
+                          : undefined
+                      }
+                    />
+                  ) : tab.tabType === 'editor' && tab.editorFilePath && tab.editorConnectionId ? (
+                    <FileEditorView
+                      connectionId={tab.editorConnectionId}
+                      filePath={tab.editorFilePath}
+                      fileName={tab.name}
+                      isConnected={tab.connectionStatus === 'connected'}
+                    />
+                  ) : (
+                    <PtyTerminal
+                      key={`${tab.id}-${tab.reconnectCount}`}
+                      connectionId={tab.id}
+                      connectionName={tab.name}
+                      host={tab.host}
+                      username={tab.username}
+                      themeKey={themeKey}
+                      isActive={isActive && tab.id === group.activeTabId}
+                      onConnectionStatusChange={handleConnectionStatusChange}
+                    />
+                  )}
+                </Suspense>
               )}
             </div>
           ))

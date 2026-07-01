@@ -8,11 +8,13 @@ import { Card, CardContent } from '../ui/card';
 import type { LatencyData, MonitorPanelProps } from './monitor-types';
 import { scheduleIdleTask } from './monitor-utils';
 
-export function NetworkLatencyPanel({ connectionId }: MonitorPanelProps) {
+export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [latencyData, setLatencyData] = useState<LatencyData[]>([]);
 
   useEffect(() => {
+    if (!active) return;
+
     const fetchLatency = async (isCancelled: () => boolean = () => false) => {
       const result = await invoke<{
         success: boolean;
@@ -49,7 +51,7 @@ export function NetworkLatencyPanel({ connectionId }: MonitorPanelProps) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [connectionId]);
+  }, [connectionId, active]);
 
   return (
     <div className="space-y-1.5">

@@ -1,20 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { MenuBar } from './components/menu-bar';
 import { ConnectionManager } from './components/connection-manager';
-import { SystemMonitor } from './components/system-monitor';
-import { LogMonitor } from './components/log-monitor';
 import { StatusBar } from './components/status-bar';
-import { ConnectionDialog, ConnectionConfig } from './components/connection-dialog';
-import { SettingsModal } from './components/settings-modal';
-import { IntegratedFileBrowser } from './components/integrated-file-browser';
-import { LocalFileBrowser } from './components/local-file-browser';
-import { ComposePane } from './components/compose-pane';
+import type { ConnectionConfig } from './components/connection-dialog';
 import { TerminalInputProvider } from './lib/terminal-input-context';
 import { WelcomeScreen } from './components/welcome-screen';
-import { UpdateChecker } from './components/update-checker';
 import {
   ConnectionStorageManager,
   connectionHasStoredCredentials,
@@ -49,6 +42,35 @@ import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+
+const ConnectionDialog = lazy(() => import('./components/connection-dialog').then((module) => ({
+  default: module.ConnectionDialog,
+})));
+const SettingsModal = lazy(() => import('./components/settings-modal').then((module) => ({
+  default: module.SettingsModal,
+})));
+const IntegratedFileBrowser = lazy(() => import('./components/integrated-file-browser').then((module) => ({
+  default: module.IntegratedFileBrowser,
+})));
+const LocalFileBrowser = lazy(() => import('./components/local-file-browser').then((module) => ({
+  default: module.LocalFileBrowser,
+})));
+const ComposePane = lazy(() => import('./components/compose-pane').then((module) => ({
+  default: module.ComposePane,
+})));
+const SystemMonitor = lazy(() => import('./components/system-monitor').then((module) => ({
+  default: module.SystemMonitor,
+})));
+const LogMonitor = lazy(() => import('./components/log-monitor').then((module) => ({
+  default: module.LogMonitor,
+})));
+const UpdateChecker = lazy(() => import('./components/update-checker').then((module) => ({
+  default: module.UpdateChecker,
+})));
+
+function PanelFallback() {
+  return <div className="h-full w-full bg-background" />;
+}
 
 interface ConnectionNode {
   id: string;
@@ -1208,10 +1230,33 @@ function AppContent() {
   const hideBottomPanels = isFileBrowserTab || isEditorTab;
   const showBottomPanelToggle = !hideBottomPanels;
   const showRightPanelToggle = !hideRightPanels;
+  const activeConnectionIds = useMemo(() => new Set(allTabs.map(tab => tab.id)), [allTabs]);
+  const terminalCallbacks = useMemo(() => ({
+    onDuplicateTab: handleDuplicateTab,
+    onNewTab: handleNewTab,
+    onNewLocalTab: handleNewLocalTab,
+    onReconnectTab: handleReconnect,
+    onTabClose: handleTabClose,
+    onOpenInEditorForTab: handleOpenInEditorForTab,
+  }), [
+    handleDuplicateTab,
+    handleNewTab,
+    handleNewLocalTab,
+    handleReconnect,
+    handleTabClose,
+    handleOpenInEditorForTab,
+  ]);
+  const monitorActive =
+    rightSidebarTab === 'monitor'
+    && layout.rightSidebarVisible
+    && hasAnyTabs
+    && !hideRightPanels;
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      <UpdateChecker checkSignal={updateCheckSignal} />
+      <Suspense fallback={null}>
+        <UpdateChecker checkSignal={updateCheckSignal} />
+      </Suspense>
       <MenuBar
         onOpenSettings={handleOpenSettings}
         onToggleLeftSidebar={toggleLeftSidebar}
@@ -1244,7 +1289,7 @@ function AppContent() {
                   onConnectionSelect={handleConnectionSelect}
                   onConnectionConnect={handleConnectionConnect}
                   selectedConnectionId={selectedConnection?.id || null}
-                  activeConnections={new Set(allTabs.map(tab => tab.id))}
+                  activeConnections={activeConnectionIds}
                   onNewConnection={handleNewTab}
                   onNewLocalTerminal={handleNewLocalTab}
                   onEditConnection={handleEditConnection}
@@ -1274,7 +1319,7 @@ function AppContent() {
                 <ResizablePanelGroup direction="vertical" className="flex-1">
                   {/* Terminal Grid Panel */}
                   <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
-                    <TerminalCallbacksProvider value={{ onDuplicateTab: handleDuplicateTab, onNewTab: handleNewTab, onNewLocalTab: handleNewLocalTab, onReconnectTab: handleReconnect, onTabClose: handleTabClose, onOpenInEditorForTab: handleOpenInEditorForTab }}>
+                    <TerminalCallbacksProvider value={terminalCallbacks}>
                       <ErrorBoundary label="Terminal">
                         <GridRenderer node={state.gridLayout} path={[]} />
                       </ErrorBoundary>
@@ -1315,18 +1360,20 @@ function AppContent() {
                               <ErrorBoundary
                                 label={isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
                               >
-                                {isLocalTab ? (
-                                  <LocalFileBrowser />
-                                ) : (
-                                  <IntegratedFileBrowser
-                                    connectionId={activeConnection.connectionId}
-                                    host={activeConnection.host}
-                                    isConnected={activeConnection.status === 'connected'}
-                                    onClose={() => {}}
-                                    onOpenInLogMonitor={handleOpenInLogMonitor}
-                                    onOpenInEditor={handleOpenInEditor}
-                                  />
-                                )}
+                                <Suspense fallback={<PanelFallback />}>
+                                  {isLocalTab ? (
+                                    <LocalFileBrowser />
+                                  ) : (
+                                    <IntegratedFileBrowser
+                                      connectionId={activeConnection.connectionId}
+                                      host={activeConnection.host}
+                                      isConnected={activeConnection.status === 'connected'}
+                                      onClose={() => {}}
+                                      onOpenInLogMonitor={handleOpenInLogMonitor}
+                                      onOpenInEditor={handleOpenInEditor}
+                                    />
+                                  )}
+                                </Suspense>
                               </ErrorBoundary>
                             </TabsContent>
 
@@ -1335,7 +1382,9 @@ function AppContent() {
                               className="absolute inset-0 mt-0 data-[state=inactive]:hidden"
                             >
                               <ErrorBoundary label={t('app.composePane')}>
-                                <ComposePane />
+                                <Suspense fallback={<PanelFallback />}>
+                                  <ComposePane />
+                                </Suspense>
                               </ErrorBoundary>
                             </TabsContent>
                           </div>
@@ -1372,7 +1421,12 @@ function AppContent() {
                       <div className="h-full overflow-hidden px-1 py-2">
                         {activeConnection ? (
                           <ErrorBoundary label={t('app.systemMonitor')}>
-                            <SystemMonitor connectionId={activeConnection.connectionId} />
+                            <Suspense fallback={<PanelFallback />}>
+                              <SystemMonitor
+                                connectionId={activeConnection.connectionId}
+                                active={monitorActive}
+                              />
+                            </Suspense>
                           </ErrorBoundary>
                         ) : null}
                       </div>
@@ -1381,11 +1435,13 @@ function AppContent() {
                     <TabsContent value="logs" className="absolute inset-0 mt-0 data-[state=inactive]:hidden">
                       {activeConnection ? (
                         <ErrorBoundary label={t('app.logMonitor')}>
-                          <LogMonitor
-                            connectionId={activeConnection.connectionId}
-                            externalLogPath={externalLogPath}
-                            externalLogPathKey={externalLogPathKey}
-                          />
+                          <Suspense fallback={<PanelFallback />}>
+                            <LogMonitor
+                              connectionId={activeConnection.connectionId}
+                              externalLogPath={externalLogPath}
+                              externalLogPathKey={externalLogPathKey}
+                            />
+                          </Suspense>
                         </ErrorBoundary>
                       ) : null}
                     </TabsContent>
@@ -1400,22 +1456,28 @@ function AppContent() {
       <StatusBar activeConnection={statusBarConnection} />
 
       {/* Modals */}
-      <ConnectionDialog
-        open={connectionDialogOpen}
-        onOpenChange={setConnectionDialogOpen}
-        onConnect={handleConnectionDialogConnect}
-        editingConnection={editingConnection}
-      />
+      <Suspense fallback={null}>
+        {connectionDialogOpen && (
+          <ConnectionDialog
+            open={connectionDialogOpen}
+            onOpenChange={setConnectionDialogOpen}
+            onConnect={handleConnectionDialogConnect}
+            editingConnection={editingConnection}
+          />
+        )}
 
-      <SettingsModal
-        open={settingsModalOpen}
-        onOpenChange={setSettingsModalOpen}
-        onAppearanceChange={() => {
-          // Appearance changes are handled by individual PtyTerminal instances
-          // via their own settings listeners in TerminalGroupView
-        }}
-        onCheckForUpdates={() => setUpdateCheckSignal((current) => current + 1)}
-      />
+        {settingsModalOpen && (
+          <SettingsModal
+            open={settingsModalOpen}
+            onOpenChange={setSettingsModalOpen}
+            onAppearanceChange={() => {
+              // Appearance changes are handled by individual PtyTerminal instances
+              // via their own settings listeners in TerminalGroupView
+            }}
+            onCheckForUpdates={() => setUpdateCheckSignal((current) => current + 1)}
+          />
+        )}
+      </Suspense>
 
       <HostKeyTrustDialog
         open={hostKeyTrustOpen}

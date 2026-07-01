@@ -8,7 +8,7 @@ import { Progress } from '../ui/progress';
 import type { MonitorPanelProps, SystemStats } from './monitor-types';
 import { getProgressColor, getUsageColor, scheduleIdleTask } from './monitor-utils';
 
-export function SystemOverviewPanel({ connectionId }: MonitorPanelProps) {
+export function SystemOverviewPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [stats, setStats] = useState<SystemStats>({
     cpu: 0,
@@ -18,6 +18,8 @@ export function SystemOverviewPanel({ connectionId }: MonitorPanelProps) {
   });
 
   useEffect(() => {
+    if (!active) return;
+
     const fetchSystemStats = async (isCancelled: () => boolean = () => false): Promise<void> => {
       const result = await invoke<{
         cpu_percent: number;
@@ -63,7 +65,7 @@ export function SystemOverviewPanel({ connectionId }: MonitorPanelProps) {
       cancelled = true;
       clearInterval(statsInterval);
     };
-  }, [connectionId]);
+  }, [connectionId, active]);
 
   return (
     <div className="space-y-1.5">

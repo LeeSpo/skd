@@ -515,20 +515,6 @@ export function FileBrowserView({
     [activePanel, handleUploadButton, handleDownloadButton],
   );
 
-  // ------ Selection tracking ------
-  // Update selection counts periodically (via a simple interval)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLocalSelCount(
-        localPanelRef.current?.getSelectedEntries().length ?? 0,
-      );
-      setRemoteSelCount(
-        remotePanelRef.current?.getSelectedEntries().length ?? 0,
-      );
-    }, 200);
-    return () => clearInterval(interval);
-  }, []);
-
   // ------ Disconnected overlay ------
   if (!isConnected) {
     return (
@@ -581,6 +567,7 @@ export function FileBrowserView({
               onTransferToOther={enqueueUpload}
               onTransferDirectoryToOther={handleUploadDirectory}
               onFocus={() => setActivePanel("local")}
+              onSelectionCountChange={setLocalSelCount}
               showPermissions={false}
             />
           </ResizablePanel>
@@ -627,6 +614,7 @@ export function FileBrowserView({
               onTransferToOther={enqueueDownload}
               onTransferDirectoryToOther={handleDownloadDirectory}
               onFocus={() => setActivePanel("remote")}
+              onSelectionCountChange={setRemoteSelCount}
               showPermissions={true}
               disabled={!isConnected}
               onOsFilesDropped={handleOsFilesDropped}

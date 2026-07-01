@@ -1,21 +1,39 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { loadEnabledPanels, saveEnabledPanels } from '@/lib/monitor-panel-storage';
 import type { MonitorPanelId } from '@/lib/monitor-panel-types';
 import { ScrollArea } from './ui/scroll-area';
 import { MonitorPanelPicker } from './monitor/monitor-panel-picker';
-import { SystemOverviewPanel } from './monitor/system-overview-panel';
-import { ProcessesPanel } from './monitor/processes-panel';
-import { DiskUsagePanel } from './monitor/disk-usage-panel';
-import { GpuMonitorPanel } from './monitor/gpu-monitor-panel';
-import { NetworkUsagePanel } from './monitor/network-usage-panel';
-import { NetworkLatencyPanel } from './monitor/network-latency-panel';
 
 interface SystemMonitorProps {
   connectionId?: string;
+  active?: boolean;
 }
 
-export function SystemMonitor({ connectionId }: SystemMonitorProps) {
+const SystemOverviewPanel = lazy(() => import('./monitor/system-overview-panel').then((module) => ({
+  default: module.SystemOverviewPanel,
+})));
+const ProcessesPanel = lazy(() => import('./monitor/processes-panel').then((module) => ({
+  default: module.ProcessesPanel,
+})));
+const DiskUsagePanel = lazy(() => import('./monitor/disk-usage-panel').then((module) => ({
+  default: module.DiskUsagePanel,
+})));
+const GpuMonitorPanel = lazy(() => import('./monitor/gpu-monitor-panel').then((module) => ({
+  default: module.GpuMonitorPanel,
+})));
+const NetworkUsagePanel = lazy(() => import('./monitor/network-usage-panel').then((module) => ({
+  default: module.NetworkUsagePanel,
+})));
+const NetworkLatencyPanel = lazy(() => import('./monitor/network-latency-panel').then((module) => ({
+  default: module.NetworkLatencyPanel,
+})));
+
+function MonitorFallback() {
+  return <div className="h-16 rounded border bg-muted/20" />;
+}
+
+export function SystemMonitor({ connectionId, active = true }: SystemMonitorProps) {
   const { t } = useTranslation();
   const [enabledPanels, setEnabledPanels] = useState(() => loadEnabledPanels());
 
@@ -39,24 +57,26 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
           </p>
         )}
 
-        {enabledPanels.has('overview') && (
-          <SystemOverviewPanel connectionId={connectionId} />
-        )}
-        {enabledPanels.has('processes') && (
-          <ProcessesPanel connectionId={connectionId} />
-        )}
-        {enabledPanels.has('gpu') && (
-          <GpuMonitorPanel connectionId={connectionId} />
-        )}
-        {enabledPanels.has('disk') && (
-          <DiskUsagePanel connectionId={connectionId} />
-        )}
-        {enabledPanels.has('network') && (
-          <NetworkUsagePanel connectionId={connectionId} />
-        )}
-        {enabledPanels.has('latency') && (
-          <NetworkLatencyPanel connectionId={connectionId} />
-        )}
+        <Suspense fallback={<MonitorFallback />}>
+          {enabledPanels.has('overview') && (
+            <SystemOverviewPanel connectionId={connectionId} active={active} />
+          )}
+          {enabledPanels.has('processes') && (
+            <ProcessesPanel connectionId={connectionId} active={active} />
+          )}
+          {enabledPanels.has('gpu') && (
+            <GpuMonitorPanel connectionId={connectionId} active={active} />
+          )}
+          {enabledPanels.has('disk') && (
+            <DiskUsagePanel connectionId={connectionId} active={active} />
+          )}
+          {enabledPanels.has('network') && (
+            <NetworkUsagePanel connectionId={connectionId} active={active} />
+          )}
+          {enabledPanels.has('latency') && (
+            <NetworkLatencyPanel connectionId={connectionId} active={active} />
+          )}
+        </Suspense>
       </div>
     </ScrollArea>
   );

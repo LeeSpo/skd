@@ -7,66 +7,53 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { loadEditorConfig, EDITOR_CONFIG_CHANGED_EVENT, type EditorConfig } from "@/lib/editor-config";
 
-// Language imports
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { python } from "@codemirror/lang-python";
-import { html } from "@codemirror/lang-html";
-import { css } from "@codemirror/lang-css";
-import { markdown } from "@codemirror/lang-markdown";
-import { xml } from "@codemirror/lang-xml";
-import { yaml } from "@codemirror/lang-yaml";
-import { rust } from "@codemirror/lang-rust";
-import { cpp } from "@codemirror/lang-cpp";
-import { java } from "@codemirror/lang-java";
-import { sql } from "@codemirror/lang-sql";
-import { php } from "@codemirror/lang-php";
+type LanguageLoader = () => Promise<Extension | null>;
 
-/** Map file extension to a CodeMirror language extension */
-function getLanguageExtension(filename: string): Extension | null {
+/** Map file extension to a lazy CodeMirror language loader. */
+function getLanguageLoader(filename: string): LanguageLoader | null {
   const ext = filename.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "js":
     case "mjs":
     case "cjs":
-      return javascript();
+      return async () => (await import("@codemirror/lang-javascript")).javascript();
     case "ts":
     case "mts":
     case "cts":
-      return javascript({ typescript: true });
+      return async () => (await import("@codemirror/lang-javascript")).javascript({ typescript: true });
     case "jsx":
-      return javascript({ jsx: true });
+      return async () => (await import("@codemirror/lang-javascript")).javascript({ jsx: true });
     case "tsx":
-      return javascript({ jsx: true, typescript: true });
+      return async () => (await import("@codemirror/lang-javascript")).javascript({ jsx: true, typescript: true });
     case "json":
     case "jsonc":
-      return json();
+      return async () => (await import("@codemirror/lang-json")).json();
     case "py":
     case "pyw":
-      return python();
+      return async () => (await import("@codemirror/lang-python")).python();
     case "html":
     case "htm":
     case "svelte":
     case "vue":
-      return html();
+      return async () => (await import("@codemirror/lang-html")).html();
     case "css":
     case "scss":
     case "less":
-      return css();
+      return async () => (await import("@codemirror/lang-css")).css();
     case "md":
     case "mdx":
     case "markdown":
-      return markdown();
+      return async () => (await import("@codemirror/lang-markdown")).markdown();
     case "xml":
     case "svg":
     case "xsl":
     case "xslt":
-      return xml();
+      return async () => (await import("@codemirror/lang-xml")).xml();
     case "yml":
     case "yaml":
-      return yaml();
+      return async () => (await import("@codemirror/lang-yaml")).yaml();
     case "rs":
-      return rust();
+      return async () => (await import("@codemirror/lang-rust")).rust();
     case "c":
     case "h":
     case "cpp":
@@ -74,15 +61,15 @@ function getLanguageExtension(filename: string): Extension | null {
     case "cc":
     case "hpp":
     case "hxx":
-      return cpp();
+      return async () => (await import("@codemirror/lang-cpp")).cpp();
     case "java":
     case "kt":
     case "kts":
-      return java();
+      return async () => (await import("@codemirror/lang-java")).java();
     case "sql":
-      return sql();
+      return async () => (await import("@codemirror/lang-sql")).sql();
     case "php":
-      return php();
+      return async () => (await import("@codemirror/lang-php")).php();
     case "sh":
     case "bash":
     case "zsh":
@@ -126,6 +113,7 @@ export function CodeEditor({
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(() => loadEditorConfig());
+  const [languageExtension, setLanguageExtension] = useState<Extension | null>(null);
 
   // Reload config whenever it changes in settings
   useEffect(() => {
@@ -138,6 +126,27 @@ export function CodeEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loader = getLanguageLoader(filename);
+    setLanguageExtension(null);
+    if (!loader) return;
+
+    void loader().then((extension) => {
+      if (!cancelled) {
+        setLanguageExtension(extension);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLanguageExtension(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filename]);
 
   const buildExtensions = useCallback((): Extension[] => {
     const exts: Extension[] = [
@@ -199,13 +208,12 @@ export function CodeEditor({
       exts.push(EditorState.readOnly.of(true));
     }
 
-    const lang = getLanguageExtension(filename);
-    if (lang) {
-      exts.push(lang);
+    if (languageExtension) {
+      exts.push(languageExtension);
     }
 
     return exts;
-  }, [filename, readOnly, dark, editorConfig]);
+  }, [readOnly, dark, editorConfig, languageExtension]);
 
   // Create editor on mount
   useEffect(() => {

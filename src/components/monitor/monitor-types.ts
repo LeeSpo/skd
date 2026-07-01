@@ -96,4 +96,5 @@ export interface GpuHistoryData {
 
 export interface MonitorPanelProps {
   connectionId: string;
+  active?: boolean;
 }

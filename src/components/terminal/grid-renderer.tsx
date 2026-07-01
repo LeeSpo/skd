@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { GridNode } from '../../lib/terminal-group-types';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
@@ -36,15 +36,42 @@ function minLeafGroupId(node: GridNode): string {
   return min;
 }
 
+function sizesEqual(a: number[] | undefined, b: number[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  return a.every((value, index) => Math.abs(value - b[index]) < 0.01);
+}
+
 export function GridRenderer({ node, path }: GridRendererProps) {
   const { dispatch } = useTerminalGroups();
+  const frameRef = useRef<number | null>(null);
+  const pendingSizesRef = useRef<number[] | null>(null);
 
   const handleLayout = useCallback(
     (sizes: number[]) => {
-      dispatch({ type: 'UPDATE_GRID_SIZES', path, sizes });
+      if (node.type === 'branch' && sizesEqual(node.sizes, sizes)) {
+        return;
+      }
+
+      pendingSizesRef.current = sizes;
+      if (frameRef.current !== null) return;
+
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null;
+        const pendingSizes = pendingSizesRef.current;
+        pendingSizesRef.current = null;
+        if (pendingSizes) {
+          dispatch({ type: 'UPDATE_GRID_SIZES', path, sizes: pendingSizes });
+        }
+      });
     },
-    [dispatch, path],
+    [dispatch, path, node],
   );
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+    }
+  }, []);
 
   if (node.type === 'leaf') {
     return <TerminalGroupView groupId={node.groupId} />;

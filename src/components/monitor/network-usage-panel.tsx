@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { MonitorPanelProps, NetworkHistoryData, NetworkUsage } from './monitor-types';
 import { scheduleIdleTask } from './monitor-utils';
 
-export function NetworkUsagePanel({ connectionId }: MonitorPanelProps) {
+export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [networkUsage, setNetworkUsage] = useState<NetworkUsage>({
     upload: 0,
@@ -22,6 +22,8 @@ export function NetworkUsagePanel({ connectionId }: MonitorPanelProps) {
   const [selectedInterface, setSelectedInterface] = useState<string>('all');
 
   useEffect(() => {
+    if (!active) return;
+
     let cancelled = false;
 
     const fetchBandwidth = async (isCancelled: () => boolean = () => false) => {
@@ -111,7 +113,7 @@ export function NetworkUsagePanel({ connectionId }: MonitorPanelProps) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [connectionId, selectedInterface]);
+  }, [connectionId, selectedInterface, active]);
 
   return (
     <div className="space-y-1.5">

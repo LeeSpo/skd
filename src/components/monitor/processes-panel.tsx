@@ -19,7 +19,7 @@ import {
 import type { MonitorPanelProps, Process } from './monitor-types';
 import { getUsageColor, scheduleIdleTask } from './monitor-utils';
 
-export function ProcessesPanel({ connectionId }: MonitorPanelProps) {
+export function ProcessesPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
   const [processes, setProcesses] = useState<Process[]>([]);
   const [processToKill, setProcessToKill] = useState<Process | null>(null);
@@ -80,6 +80,8 @@ export function ProcessesPanel({ connectionId }: MonitorPanelProps) {
   };
 
   useEffect(() => {
+    if (!active) return;
+
     let cancelled = false;
 
     void withRetry(() => fetchProcesses(() => cancelled), () => cancelled, { maxRetries: 2 })
@@ -94,7 +96,7 @@ export function ProcessesPanel({ connectionId }: MonitorPanelProps) {
       clearInterval(processInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProcesses depends on processSortBy
-  }, [connectionId, processSortBy]);
+  }, [connectionId, processSortBy, active]);
 
   return (
     <>

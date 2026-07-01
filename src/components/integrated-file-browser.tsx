@@ -805,15 +805,12 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const handleFileClick = (file: FileItem, event: React.MouseEvent) => {
-    console.log('handleFileClick called', { file, ctrlKey: event.ctrlKey, metaKey: event.metaKey });
-    
     if (event.ctrlKey || event.metaKey) {
       // Ctrl/Cmd + Click: toggle selection
       handleFileSelect(file.name, event);
     } else {
       // Regular click on directory: navigate into it
       if (file.type === 'directory') {
-        console.log('Click - navigating to directory:', file.path);
         navigateTo(file.path);
       }
       // Regular click on file: do nothing (or optionally preview)
@@ -980,21 +977,14 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   function handleDeleteFile(file: FileItem) {
-    console.log('[FileBrowser] Opening delete confirmation for:', file.name);
     setDeletingFile(file);
   };
 
   const confirmDeleteFile = async () => {
     if (!deletingFile) return;
-    
-    console.log('[FileBrowser] Confirming delete for:', deletingFile.name);
+
     try {
       const filePath = deletingFile.path;
-      console.log('[FileBrowser] Deleting file', { 
-        filePath,
-        isDirectory: deletingFile.type === 'directory',
-        connectionId
-      });
 
       await invoke<boolean>('delete_file', {
         connectionId,
@@ -1014,7 +1004,6 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const cancelDeleteFile = () => {
-    console.log('[FileBrowser] User cancelled deletion');
     setDeletingFile(null);
   };
 
