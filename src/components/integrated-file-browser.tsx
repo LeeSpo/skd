@@ -2,7 +2,7 @@ import React, { useState, useEffect, useReducer, useRef, useCallback, useMemo } 
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
-import { withRetry, CancelledError } from '@/lib/async-retry';
+import { CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { PanelToolbar } from './ui/panel-chrome';
@@ -71,32 +71,32 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, C
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { toast } from 'sonner';
 import { isEditableTarget } from '@/lib/keyboard-shortcuts';
+import {
+  createLocalAdapter,
+  createRemoteAdapter,
+  type FileBrowserAdapter,
+  type FileBrowserFileItem as FileItem,
+} from '@/lib/file-browser-adapter';
 
-interface FileItem {
-  name: string;
-  type: 'file' | 'directory';
-  size: number;
-  modified: Date;
-  permissions: string;
-  owner: string;
-  group: string;
-  path: string;
-}
-
-interface IntegratedFileBrowserProps {
-  connectionId: string;
-  host?: string;
-  isConnected: boolean;
-  onClose: () => void;
-  /** Called when user wants to open a file in the Log Monitor */
-  onOpenInLogMonitor?: (filePath: string) => void;
-  /** Called when user wants to open a file in the editor window */
-  onOpenInEditor?: (
-    filePath: string,
-    fileName: string,
-    options?: { readOnly?: boolean },
-  ) => void;
-}
+type IntegratedFileBrowserProps =
+  | {
+      mode: 'local';
+    }
+  | {
+      mode: 'remote';
+      connectionId: string;
+      host?: string;
+      isConnected: boolean;
+      onClose: () => void;
+      /** Called when user wants to open a file in the Log Monitor */
+      onOpenInLogMonitor?: (filePath: string) => void;
+      /** Called when user wants to open a file in the editor window */
+      onOpenInEditor?: (
+        filePath: string,
+        fileName: string,
+        options?: { readOnly?: boolean },
+      ) => void;
+    };
 
 // Cache to store state per session
 const sessionStateCache = new Map<string, {
@@ -117,9 +117,30 @@ const treeStateCache = new Map<string, {
 // Cache to store the directory tree scroll position per connection.
 const treeScrollCache = new Map<string, number>();
 
-export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, onClose: _onClose, onOpenInLogMonitor, onOpenInEditor }: IntegratedFileBrowserProps) {
+export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
+  const isLocalMode = props.mode === 'local';
+  const connectionId = props.mode === 'remote' ? props.connectionId : undefined;
+  const onOpenInLogMonitor =
+    props.mode === 'remote' ? props.onOpenInLogMonitor : undefined;
+  const onOpenInEditor =
+    props.mode === 'remote' ? props.onOpenInEditor : undefined;
+
+  const remoteConnectionId =
+    props.mode === 'remote' ? props.connectionId : '';
+  const remoteIsConnected =
+    props.mode === 'remote' ? props.isConnected : false;
+  const adapter = useMemo<FileBrowserAdapter>(
+    () =>
+      isLocalMode
+        ? createLocalAdapter()
+        : createRemoteAdapter(remoteConnectionId, remoteIsConnected),
+    [isLocalMode, remoteConnectionId, remoteIsConnected],
+  );
+  const sessionKey = adapter.sessionKey;
+  const isAvailable = adapter.isAvailable;
+
   const { t } = useTranslation();
-  const [currentPath, setCurrentPath] = useState('/home');
+  const [currentPath, setCurrentPath] = useState(adapter.defaultHomePath);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [transfers, dispatchTransfer] = useReducer(transferQueueReducer, []);
@@ -130,20 +151,20 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // Tracks which connectionId the current path/files state belongs to.
   // Updated synchronously (via ref) in the restore effect so the save effect
   // never writes stale data from the previous connection under the new id.
-  const effectiveConnectionIdRef = useRef<string | undefined>(undefined);
+  const effectiveSessionKeyRef = useRef<string | undefined>(undefined);
   // Monotonic counter: each loadFiles call stamps its own gen; stale responses are discarded.
   const loadGenRef = useRef(0);
-  // Tracks the connectionId for which files were last successfully loaded.
-  const lastLoadedConnectionIdRef = useRef<string | null>(null);
-  // Tracks the previous connectionId so the main load effect can skip
-  // connection-change loads (leaving them to the safety-net) and only handle
-  // path / isConnected changes within the same connection.
-  const prevConnectionIdRef = useRef<string | undefined>(undefined);
-  // Tracks the path that is authoritative for the current connectionId.
+  // Tracks the session for which files were last successfully loaded.
+  const lastLoadedSessionKeyRef = useRef<string | null>(null);
+  // Tracks the previous session so the main load effect can skip
+  // session-change loads (leaving them to the safety-net) and only handle
+  // path / availability changes within the same session.
+  const prevSessionKeyRef = useRef<string | undefined>(undefined);
+  // Tracks the path that is authoritative for the current session.
   // Updated synchronously in the restore effect (before setState), so the load
   // effect always uses the correct path even before React re-renders with the
   // new state value. This prevents the stale-path → error-toast race on tab switch.
-  const committedPathRef = useRef('/home');
+  const committedPathRef = useRef(adapter.defaultHomePath);
   committedPathRef.current = currentPath; // mirror latest state every render
   const [clipboard, setClipboard] = useState<{ files: FileItem[], operation: 'copy' | 'cut' } | null>(null);
   const [renamingFile, setRenamingFile] = useState<FileItem | null>(null);
@@ -170,7 +191,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // which owns the global Tauri `onDragDropEvent` subscription.
 
   // Navigation history state (back/forward)
-  const [navHistory, setNavHistory] = useState<string[]>(['/home']);
+  const [navHistory, setNavHistory] = useState<string[]>([adapter.defaultHomePath]);
   const [navIndex, setNavIndex] = useState(0);
   const navInProgress = React.useRef(false);
 
@@ -203,24 +224,34 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // For a brand-new connection (no cache), we reset state to defaults so the
   // UI starts clean.
   useEffect(() => {
-    effectiveConnectionIdRef.current = connectionId;
-    if (connectionId) {
-      const cached = sessionStateCache.get(connectionId);
-      const newPath = cached?.currentPath ?? '/home';
-      committedPathRef.current = newPath;
-      if (!cached) {
-        // New connection — reset state to defaults.
-        setCurrentPath('/home');
-        setFiles([]);
-        setSelectedFiles(new Set());
-        setSearchTerm('');
-        setNavHistory(['/home']);
-        setNavIndex(0);
-      }
-      // Cached connection: skip setState to avoid re-render.
-      // The safety-net effect will load fresh files.
+    effectiveSessionKeyRef.current = sessionKey;
+    const cached = sessionStateCache.get(sessionKey);
+    const newPath = cached?.currentPath ?? adapter.defaultHomePath;
+    committedPathRef.current = newPath;
+    if (!cached) {
+      setCurrentPath(adapter.defaultHomePath);
+      setFiles([]);
+      setSelectedFiles(new Set());
+      setSearchTerm('');
+      setNavHistory([adapter.defaultHomePath]);
+      setNavIndex(0);
     }
-  }, [connectionId]);
+  }, [sessionKey, adapter.defaultHomePath]);
+
+  useEffect(() => {
+    if (!isLocalMode) return;
+    let cancelled = false;
+    void adapter.homePath().then((home) => {
+      if (cancelled) return;
+      committedPathRef.current = home;
+      setCurrentPath(home);
+      setNavHistory([home]);
+      setNavIndex(0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [adapter, isLocalMode]);
 
   // Persist state to cache whenever data changes.
   // connectionId is intentionally omitted from deps: we only want this to fire
@@ -228,7 +259,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // switch connections (which would write the old connection's path under the
   // new connection's id before the restore effect sets the correct data).
   useEffect(() => {
-    const id = effectiveConnectionIdRef.current;
+    const id = effectiveSessionKeyRef.current;
     if (id) {
       sessionStateCache.set(id, {
         currentPath,
@@ -244,26 +275,19 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // safety-net effect below, avoiding duplicate concurrent loads that race
   // on the generation counter and can leave the file list empty.
   useEffect(() => {
-    if (!isConnected || !connectionId) return;
-    // Skip if connectionId just changed — the safety-net effect handles that.
-    if (prevConnectionIdRef.current !== connectionId) return;
+    if (!isAvailable) return;
+    if (prevSessionKeyRef.current !== sessionKey) return;
     void loadFiles(committedPathRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is a stable inline fn; adding it would cause infinite re-renders
-  }, [currentPath, isConnected, connectionId]);
+  }, [currentPath, isAvailable, sessionKey]);
 
-  // Safety-net: fires on every connectionId change AND when the connection
-  // (re-)establishes.  Guarantees a fresh directory load when switching
-  // connections, even if the main load effect was short-circuited by the
-  // generation counter during a rapid switch (A→B→A).  Also covers the
-  // case where isConnected was false at switch time (e.g. PtyTerminal
-  // auto-reconnecting) and later became true.
   useEffect(() => {
-    prevConnectionIdRef.current = connectionId;
-    if (isConnected && connectionId) {
+    prevSessionKeyRef.current = sessionKey;
+    if (isAvailable) {
       void loadFiles(committedPathRef.current);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is a stable inline fn
-  }, [connectionId, isConnected]);
+  }, [sessionKey, isAvailable]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -372,8 +396,9 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
     };
   }, [resizingColumn]);
 
-  // Transfer processing loop — modeled on file-browser-view.tsx
+  // Transfer processing loop — remote mode only
   useEffect(() => {
+    if (!adapter.supportsTransfer || !connectionId) return;
     const nextItem = getNextQueuedTransfer(transfers);
     if (!nextItem || processTransferRef.current) return;
 
@@ -456,7 +481,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
 
     void doTransfer();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is a stable inline fn; adding it would cause infinite re-renders
-  }, [transfers, connectionId]);
+  }, [transfers, connectionId, adapter.supportsTransfer]);
 
   const handleResizeStart = (columnName: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -465,194 +490,71 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   /** SSH-specific directory loader for the DirectoryTree component. */
-  const loadSSHDirectories = useCallback(async (path: string): Promise<string[]> => {
-    if (!connectionId || !isConnected) return [];
-    try {
-      const output = await invoke<string>('list_files', { connectionId, path });
-      if (!output) return [];
-      const lines = output.split('\n').filter(l => l.trim() && !l.startsWith('total'));
-      const dirs: string[] = [];
-      for (const line of lines) {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length >= 8 && parts[0].startsWith('d')) {
-          const name = parts.slice(7).join(' ');
-          if (name && name !== '.' && name !== '..') dirs.push(name);
-        }
-      }
-      return dirs;
-    } catch {
-      return [];
-    }
-  }, [connectionId, isConnected]);
+  const loadTreeDirectories = useCallback(
+    async (path: string): Promise<string[]> => {
+      if (!isAvailable) return [];
+      return adapter.listChildDirs(path);
+    },
+    [adapter, isAvailable],
+  );
 
-  // Stable callbacks for DirectoryTree to persist its state per connection.
-  // These read connectionId from the closure, but since they're only invoked
-  // by DirectoryTree (which re-sets up its save effects on loadDirectory
-  // change), they always write to the correct connection's cache slot.
   const handleSaveTreeState = useCallback(
     (exp: Set<string>, nds: Map<string, Array<{ path: string; name: string }>>) => {
-      if (connectionId) treeStateCache.set(connectionId, { expanded: exp, nodes: nds });
+      treeStateCache.set(sessionKey, { expanded: exp, nodes: nds });
     },
-    [connectionId],
+    [sessionKey],
   );
 
   const handleSaveTreeScroll = useCallback(
     (scrollTop: number) => {
-      if (connectionId) treeScrollCache.set(connectionId, scrollTop);
+      treeScrollCache.set(sessionKey, scrollTop);
     },
-    [connectionId],
+    [sessionKey],
   );
 
-  // Compute the initial tree state from cache for the current connection.
-  // Memoized so DirectoryTree's reset effect sees stable deps between
-  // connection switches.
   const treeInitialExpanded = useMemo(() => {
-    const cached = connectionId ? treeStateCache.get(connectionId) : undefined;
+    const cached = treeStateCache.get(sessionKey);
     return cached ? new Set(cached.expanded) : undefined;
-  }, [connectionId]);
+  }, [sessionKey]);
 
   const treeInitialNodes = useMemo(() => {
-    const cached = connectionId ? treeStateCache.get(connectionId) : undefined;
+    const cached = treeStateCache.get(sessionKey);
     return cached ? new Map(cached.nodes) : undefined;
-  }, [connectionId]);
+  }, [sessionKey]);
 
   const treeInitialScrollTop = useMemo(
-    () => (connectionId ? treeScrollCache.get(connectionId) : undefined),
-    [connectionId],
+    () => treeScrollCache.get(sessionKey),
+    [sessionKey],
   );
 
   async function loadFiles(pathOverride?: string) {
-    if (!connectionId || !isConnected) {
-      // Don't clear files on disconnect — preserve the cached file list so
-      // the user still sees their directory contents when reconnecting or
-      // when isConnected briefly flickers during a tab switch.
+    if (!isAvailable) {
       return;
     }
-    
+
     const targetPath = pathOverride ?? currentPath;
     const gen = ++loadGenRef.current;
     const isCancelled = () => gen !== loadGenRef.current;
     setIsLoading(true);
     try {
-      // withRetry checks isCancelled() before each attempt and after the
-      // successful await, so stale calls from a previous connection are
-      // discarded without showing an error toast.  maxRetries=2 means up
-      // to 3 total attempts with 1 s → 2 s backoff.
-      const output = await withRetry(
-        () => invoke<string>('list_files', { connectionId, path: targetPath }),
-        isCancelled,
-        { maxRetries: 2, baseDelayMs: 1000 },
-      );
-      
-      if (output && output.trim()) {
-        // Parse ls -la --time-style=long-iso output to FileItem format
-        // Format: perms links owner group size date time filename
-        // Example: drwxr-xr-x  5 root root 72 2025-09-17 03:38 giga-sls
-        const lines = output.split('\n').filter(l => l.trim() && !l.startsWith('total'));
-        
-        const parsedFiles: FileItem[] = lines.map(line => {
-          const parts = line.trim().split(/\s+/);
-          
-          if (parts.length < 8) {
-            return null;
-          }
-          
-          const permissions = parts[0];
-          const owner = parts[2];
-          const group = parts[3];
-          const size = parseInt(parts[4]) || 0;
-          // parts[5] is date (YYYY-MM-DD), parts[6] is time (HH:MM), parts[7+] is filename
-          const dateStr = parts[5];
-          const timeStr = parts[6];
-          const name = parts.slice(7).join(' ');
-          const type: 'directory' | 'file' = permissions.startsWith('d') ? 'directory' : 'file';
-          
-          // Parse the modification date from ls output
-          let modifiedDate = new Date();
-          if (dateStr && timeStr) {
-            // Combine date and time: "2025-01-15 14:30" -> "2025-01-15T14:30"
-            modifiedDate = new Date(`${dateStr}T${timeStr}`);
-          }
-          
-          // Skip . and .. entries
-          if (name === '.' || name === '..') {
-            return null;
-          }
-          
-          return {
-            name,
-            type,
-            size,
-            modified: modifiedDate,
-            permissions,
-            owner,
-            group,
-            path: targetPath === '/' ? `/${name}` : `${targetPath}/${name}`
-          };
-        }).filter(f => f !== null);
-        
-        // Add parent directory navigation
-        if (targetPath !== '/') {
-          parsedFiles.unshift({
-            name: '..',
-            type: 'directory',
-            size: 0,
-            modified: new Date(),
-            permissions: 'drwxr-xr-x',
-            owner: '-',
-            group: '-',
-            path: targetPath.split('/').slice(0, -1).join('/') || '/'
-          });
-        }
-        
-        if (gen !== loadGenRef.current) return; // stale — a newer load superseded us
-        setFiles(parsedFiles);
-        // Sync the breadcrumb path with what was actually loaded.
-        // This is essential on connection switch: the restore effect
-        // intentionally skips setCurrentPath to avoid an extra re-render,
-        // so we update it here together with files in a single batched
-        // setState — breadcrumb and file list stay consistent.
-        if (currentPath !== targetPath) {
-          setCurrentPath(targetPath);
-          setNavHistory([targetPath]);
-          setNavIndex(0);
-          setSelectedFiles(new Set());
-        }
-        lastLoadedConnectionIdRef.current = connectionId;
-      } else {
-        // Empty or whitespace-only output — directory is genuinely empty
-        // or the SSH command returned nothing.
-        if (gen !== loadGenRef.current) return;
-        const emptyFiles: FileItem[] = targetPath !== '/' ? [{
-          name: '..',
-          type: 'directory',
-          size: 0,
-          modified: new Date(),
-          permissions: 'drwxr-xr-x',
-          owner: '-',
-          group: '-',
-          path: targetPath.split('/').slice(0, -1).join('/') || '/'
-        }] : [];
-        setFiles(emptyFiles);
-        if (currentPath !== targetPath) {
-          setCurrentPath(targetPath);
-          setNavHistory([targetPath]);
-          setNavIndex(0);
-          setSelectedFiles(new Set());
-        }
-        lastLoadedConnectionIdRef.current = connectionId;
+      const parsedFiles = await adapter.listDirectory(targetPath, isCancelled);
+
+      if (gen !== loadGenRef.current) return;
+      setFiles(parsedFiles);
+      if (currentPath !== targetPath) {
+        setCurrentPath(targetPath);
+        setNavHistory([targetPath]);
+        setNavIndex(0);
+        setSelectedFiles(new Set());
       }
+      lastLoadedSessionKeyRef.current = sessionKey;
     } catch (error) {
-      // CancelledError means a newer load superseded this one — discard silently.
       if (error instanceof CancelledError || gen !== loadGenRef.current) return;
 
-      // If the target path doesn't exist on this server (ls exit code 2),
-      // fall back to /home.  This commonly happens when switching to a
-      // connection whose cached path from a previous session doesn't exist
-      // on the new server (e.g. /etc/nginx on server A, but not on B).
-      if (targetPath !== '/home') {
-        committedPathRef.current = '/home';
-        void loadFiles('/home');
+      const fallbackPath = adapter.fallbackPathOnError(targetPath);
+      if (fallbackPath) {
+        committedPathRef.current = fallbackPath;
+        void loadFiles(fallbackPath);
         return;
       }
 
@@ -704,9 +606,8 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const goUp = () => {
-    if (currentPath === '/') return;
-    const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
-    navigateTo(parent);
+    if (adapter.isRootPath(currentPath)) return;
+    navigateTo(adapter.parentPath(currentPath));
   };
 
   /** Build breadcrumb segments from a path string */
@@ -725,7 +626,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   const handlePathSubmit = () => {
     const trimmed = editPathValue.trim();
     if (trimmed && trimmed !== currentPath) {
-      navigateTo(trimmed.startsWith('/') ? trimmed : '/' + trimmed);
+      navigateTo(adapter.normalizeNavPath(trimmed));
     }
     setIsEditingPath(false);
   };
@@ -783,8 +684,9 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   const handleFileDoubleClick = (file: FileItem) => {
     if (file.type === 'directory') {
       navigateTo(file.path);
+    } else if (isLocalMode) {
+      void adapter.openInOS(file.path);
     } else {
-      // Double-click opens read-only preview (same as context menu Open)
       openFileInEditor(file, { readOnly: true });
     }
   };
@@ -960,11 +862,8 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
     const folderName = prompt(t('fileBrowser.toast.enterFolderName'));
     if (folderName) {
       try {
-        const folderPath = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
-        await invoke<boolean>('create_directory', {
-          connectionId,
-          path: folderPath
-        });
+        const folderPath = adapter.joinPath(currentPath, folderName);
+        await adapter.createDirectory(folderPath);
         toast.success(t('fileBrowser.toast.folderCreated', { name: folderName }));
         void loadFiles();
       } catch (error) {
@@ -984,14 +883,11 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
     if (!deletingFile) return;
 
     try {
-      const filePath = deletingFile.path;
+      await adapter.deleteItem(
+        deletingFile.path,
+        deletingFile.type === 'directory',
+      );
 
-      await invoke<boolean>('delete_file', {
-        connectionId,
-        path: filePath,
-        isDirectory: deletingFile.type === 'directory'
-      });
-      
       toast.success(t('fileBrowser.toast.deleted', { name: deletingFile.name }));
       setDeletingFile(null);
       void loadFiles();
@@ -1018,36 +914,27 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   async function handlePasteFiles() {
-    if (clipboard) {
-      try {
-        for (const file of clipboard.files) {
-          const destPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
-          
-          if (clipboard.operation === 'copy') {
-            await invoke<boolean>('copy_file', {
-              connectionId,
-              sourcePath: file.path,
-              destPath: destPath
-            });
-          } else {
-            await invoke<boolean>('rename_file', {
-              connectionId,
-              oldPath: file.path,
-              newPath: destPath
-            });
-          }
+    if (!adapter.supportsClipboard || !clipboard) return;
+    try {
+      for (const file of clipboard.files) {
+        const destPath = adapter.joinPath(currentPath, file.name);
+
+        if (clipboard.operation === 'copy') {
+          await adapter.copyItem(file.path, destPath);
+        } else {
+          await adapter.renameItem(file.path, destPath);
         }
-        
-        const operation = clipboard.operation === 'copy' ? 'copied' : 'moved';
-        toast.success(t('fileBrowser.toast.pasted', { count: clipboard.files.length, operation }));
-        setClipboard(null);
-        void loadFiles();
-      } catch (error) {
-        console.error('Failed to paste files:', error);
-        toast.error(t('fileBrowser.toast.pasteFailed'), {
-          description: error instanceof Error ? error.message : t('fileBrowser.toast.pasteFailedDesc'),
-        });
       }
+
+      const operation = clipboard.operation === 'copy' ? 'copied' : 'moved';
+      toast.success(t('fileBrowser.toast.pasted', { count: clipboard.files.length, operation }));
+      setClipboard(null);
+      void loadFiles();
+    } catch (error) {
+      console.error('Failed to paste files:', error);
+      toast.error(t('fileBrowser.toast.pasteFailed'), {
+        description: error instanceof Error ? error.message : t('fileBrowser.toast.pasteFailedDesc'),
+      });
     }
   };
 
@@ -1059,15 +946,11 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   const handleRenameConfirm = async () => {
     if (renamingFile && newFileName.trim()) {
       try {
-        const oldPath = currentPath === '/' ? `/${renamingFile.name}` : `${currentPath}/${renamingFile.name}`;
-        const newPath = currentPath === '/' ? `/${newFileName}` : `${currentPath}/${newFileName}`;
-        
-        await invoke<boolean>('rename_file', {
-          connectionId,
-          oldPath: oldPath,
-          newPath: newPath
-        });
-        
+        const oldPath = adapter.joinPath(currentPath, renamingFile.name);
+        const newPath = adapter.joinPath(currentPath, newFileName);
+
+        await adapter.renameItem(oldPath, newPath);
+
         toast.success(t('fileBrowser.toast.renamed', { oldName: renamingFile.name, newName: newFileName }));
         setRenamingFile(null);
         setNewFileName('');
@@ -1087,8 +970,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const handleCopyPath = (file: FileItem) => {
-    const fullPath = `${currentPath}/${file.name}`;
-    void navigator.clipboard.writeText(fullPath);
+    void navigator.clipboard.writeText(file.path);
     toast.success(t('fileBrowser.toast.pathCopied'));
   };
 
@@ -1097,15 +979,12 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const handleNewFile = async () => {
+    if (!adapter.supportsNewFile) return;
     const fileName = prompt(t('fileBrowser.toast.enterFileName'));
     if (fileName) {
       try {
-        const filePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
-        await invoke<boolean>('create_file', {
-          connectionId,
-          path: filePath,
-          content: ''
-        });
+        const filePath = adapter.joinPath(currentPath, fileName);
+        await adapter.createFile(filePath, '');
         toast.success(t('fileBrowser.toast.fileCreated', { name: fileName }));
         void loadFiles();
       } catch (error) {
@@ -1118,17 +997,11 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   };
 
   const handleDuplicateFile = async (file: FileItem) => {
+    if (!adapter.supportsClipboard) return;
     const newName = `${file.name}_copy`;
     try {
-      const sourcePath = file.path;
-      const destPath = currentPath === '/' ? `/${newName}` : `${currentPath}/${newName}`;
-      
-      await invoke<boolean>('copy_file', {
-        connectionId,
-        sourcePath: sourcePath,
-        destPath: destPath
-      });
-      
+      const destPath = adapter.joinPath(currentPath, newName);
+      await adapter.copyItem(file.path, destPath);
       toast.success(t('fileBrowser.toast.duplicated', { name: file.name, newName }));
       void loadFiles();
     } catch (error) {
@@ -1154,7 +1027,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
     // the drop event (observed intermittently on macOS) and the overlay would
     // otherwise remain visible until the 10 s safety timer fires.
     clearDragOverRef.current();
-    if (!isConnected || paths.length === 0) return;
+    if (!adapter.supportsUpload || !isAvailable || paths.length === 0) return;
     try {
       // Stat each path in parallel so we know which are files vs directories.
       const stats = await Promise.all(
@@ -1243,10 +1116,10 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           error instanceof Error ? error.message : t('fileBrowser.toast.dropUploadFailedDesc'),
       });
     }
-  }, [connectionId, currentPath, isConnected, loadFiles]);
+  }, [adapter.supportsUpload, connectionId, currentPath, isAvailable, loadFiles]);
 
   const { isDragOver: isDraggingOver, clearDragOver } = useWebviewFileDrop({
-    enabled: isConnected,
+    enabled: adapter.supportsUpload && isAvailable,
     targetRef: dropZoneRef,
     onDrop: handleOsFilesDropped,
     priority: 0,
@@ -1304,7 +1177,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   // Count actual files/folders (excluding ".." navigation entry)
   const actualItemCount = filteredFiles.filter(file => file.name !== '..').length;
 
-  if (!isConnected) {
+  if (!isLocalMode && !isAvailable) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <div className="text-center">
@@ -1316,7 +1189,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
   }
 
   return (
-    <div className={`flex h-full flex-col bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
+    <div className={`flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
       <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} gap-1 overflow-x-auto whitespace-nowrap scrollbar-none`}>
           {/* Back */}
           <Button
@@ -1346,7 +1219,7 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
             size="icon"
             className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.parentDir')}
-            disabled={currentPath === '/'}
+            disabled={adapter.isRootPath(currentPath)}
             onClick={goUp}
           >
             <ArrowUp className="h-3.5 w-3.5" />
@@ -1357,7 +1230,9 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
             size="icon"
             className="h-6 w-6 shrink-0"
             title={t('fileBrowser.toolbar.home')}
-            onClick={() => navigateTo('/home')}
+            onClick={() => {
+              void adapter.homePath().then((home) => navigateTo(home));
+            }}
           >
             <Home className="h-3.5 w-3.5" />
           </Button>
@@ -1420,12 +1295,16 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
           <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" onClick={handleCreateFolder}>
             <FolderPlus className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFiles')} onClick={handleUpload}>
-            <Upload className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFolder')} onClick={handleUploadFolder}>
-            <FolderUp className="h-3.5 w-3.5" />
-          </Button>
+          {adapter.supportsUpload && (
+            <>
+              <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFiles')} onClick={handleUpload}>
+                <Upload className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFolder')} onClick={handleUploadFolder}>
+                <FolderUp className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
 
           <div className="mx-1 h-4 w-px shrink-0 bg-border/60" />
 
@@ -1463,10 +1342,10 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
             maxSize={40}
           >
             <DirectoryTree
-              loadDirectory={loadSSHDirectories}
+              loadDirectory={loadTreeDirectories}
               currentPath={currentPath}
               onNavigate={navigateTo}
-              disabled={!isConnected}
+              disabled={!isAvailable}
               initialExpanded={treeInitialExpanded}
               initialNodes={treeInitialNodes}
               initialScrollTop={treeInitialScrollTop}
@@ -1552,33 +1431,37 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                     <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
                   </div>
                 </div>
-                <div 
-                  className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
-                  style={{ width: `${columnWidths.permissions}px` }}
-                  onClick={() => handleSort('permissions')}
-                >
-                  <span>{t('fileBrowser.column.permissions')}</span>
-                  {sortField === 'permissions' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                  ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                  <div 
-                    className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
-                    onMouseDown={(e) => handleResizeStart('permissions', e)}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                  </div>
-                </div>
-                <div 
-                  className="flex items-center cursor-pointer hover:text-foreground select-none" 
-                  style={{ width: `${columnWidths.owner}px` }}
-                  onClick={() => handleSort('owner')}
-                >
-                  <span>{t('fileBrowser.column.owner')}</span>
-                  {sortField === 'owner' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                  ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                </div>
+                {!isLocalMode && (
+                  <>
+                    <div
+                      className="flex items-center relative cursor-pointer hover:text-foreground select-none"
+                      style={{ width: `${columnWidths.permissions}px` }}
+                      onClick={() => handleSort('permissions')}
+                    >
+                      <span>{t('fileBrowser.column.permissions')}</span>
+                      {sortField === 'permissions' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
+                      ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
+                      <div
+                        className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
+                        onMouseDown={(e) => handleResizeStart('permissions', e)}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
+                      </div>
+                    </div>
+                    <div
+                      className="flex items-center cursor-pointer hover:text-foreground select-none"
+                      style={{ width: `${columnWidths.owner}px` }}
+                      onClick={() => handleSort('owner')}
+                    >
+                      <span>{t('fileBrowser.column.owner')}</span>
+                      {sortField === 'owner' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
+                      ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
+                    </div>
+                  </>
+                )}
               </div>
 
               <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]]:[scrollbar-gutter:stable]">
@@ -1614,11 +1497,13 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                           value={newFileName}
                           onChange={(e) => setNewFileName(e.target.value)}
                           onKeyDown={(e) => {
+                            e.stopPropagation();
                             if (e.key === 'Enter') void handleRenameConfirm();
                             if (e.key === 'Escape') handleRenameCancel();
                           }}
+                          onClick={(e) => e.stopPropagation()}
                           onBlur={handleRenameConfirm}
-                          className="h-5 px-1"
+                          className="h-5 min-h-0 rounded-sm border-border/50 bg-background px-1 py-0 text-inherit shadow-none focus-visible:border-border focus-visible:ring-0 focus-visible:outline-none"
                           autoFocus
                         />
                       ) : (
@@ -1631,12 +1516,16 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                     <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
                       {file.name !== '..' ? formatDate(file.modified) : '-'}
                     </div>
-                    <div className="truncate font-mono text-muted-foreground" style={{ width: `${columnWidths.permissions}px` }}>
-                      {file.permissions}
-                    </div>
-                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.owner}px` }}>
-                      {file.owner}:{file.group}
-                    </div>
+                    {!isLocalMode && (
+                      <>
+                        <div className="truncate font-mono text-muted-foreground" style={{ width: `${columnWidths.permissions}px` }}>
+                          {file.permissions}
+                        </div>
+                        <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.owner}px` }}>
+                          {file.owner}:{file.group}
+                        </div>
+                      </>
+                    )}
                             </div>
                           </ContextMenuTrigger>
 
@@ -1644,24 +1533,28 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                   {/* File-specific actions */}
                   {file.type === 'file' && (
                     <>
-                      <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: true })}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.open')}
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: false })}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.edit')}
-                      </ContextMenuItem>
-                      {onOpenInLogMonitor && (
-                        <ContextMenuItem onClick={() => {
-                          const fullPath = currentPath.endsWith('/')
-                            ? `${currentPath}${file.name}`
-                            : `${currentPath}/${file.name}`;
-                          onOpenInLogMonitor(fullPath);
-                        }}>
-                          <ScrollText className="mr-2 h-4 w-4" />
-                          {t('fileBrowser.contextMenu.openInLogMonitor')}
+                      {isLocalMode ? (
+                        <ContextMenuItem onClick={() => void adapter.openInOS(file.path)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          {t('filePanel.contextMenu.openInOS')}
                         </ContextMenuItem>
+                      ) : (
+                        <>
+                          <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: true })}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            {t('fileBrowser.contextMenu.open')}
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: false })}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            {t('fileBrowser.contextMenu.edit')}
+                          </ContextMenuItem>
+                          {onOpenInLogMonitor && (
+                            <ContextMenuItem onClick={() => onOpenInLogMonitor(file.path)}>
+                              <ScrollText className="mr-2 h-4 w-4" />
+                              {t('fileBrowser.contextMenu.openInLogMonitor')}
+                            </ContextMenuItem>
+                          )}
+                        </>
                       )}
                       <ContextMenuSeparator />
                     </>
@@ -1681,36 +1574,42 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                   {/* Common actions */}
                   {file.name !== '..' && (
                     <>
-                      <ContextMenuItem onClick={() => handleCopyFiles([file])}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.copy')}
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => handleCutFiles([file])}>
-                        <Scissors className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.cut')}
-                      </ContextMenuItem>
-                      {clipboard && (
-                        <ContextMenuItem onClick={handlePasteFiles}>
-                          <ClipboardPaste className="mr-2 h-4 w-4" />
-                          {t('fileBrowser.contextMenu.paste')} {clipboard.files.length} item(s)
-                        </ContextMenuItem>
+                      {adapter.supportsClipboard && (
+                        <>
+                          <ContextMenuItem onClick={() => handleCopyFiles([file])}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            {t('fileBrowser.contextMenu.copy')}
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => handleCutFiles([file])}>
+                            <Scissors className="mr-2 h-4 w-4" />
+                            {t('fileBrowser.contextMenu.cut')}
+                          </ContextMenuItem>
+                          {clipboard && (
+                            <ContextMenuItem onClick={handlePasteFiles}>
+                              <ClipboardPaste className="mr-2 h-4 w-4" />
+                              {t('fileBrowser.contextMenu.paste')} {clipboard.files.length} item(s)
+                            </ContextMenuItem>
+                          )}
+                          <ContextMenuSeparator />
+                        </>
                       )}
-                      <ContextMenuSeparator />
-                      
+
                       <ContextMenuItem onClick={() => handleRenameFile(file)}>
                         <FileEdit className="mr-2 h-4 w-4" />
                         {t('fileBrowser.contextMenu.rename')}
                       </ContextMenuItem>
-                      <ContextMenuItem onClick={() => handleDuplicateFile(file)}>
-                        <Layers className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.duplicate')}
-                      </ContextMenuItem>
+                      {adapter.supportsClipboard && (
+                        <ContextMenuItem onClick={() => handleDuplicateFile(file)}>
+                          <Layers className="mr-2 h-4 w-4" />
+                          {t('fileBrowser.contextMenu.duplicate')}
+                        </ContextMenuItem>
+                      )}
                       <ContextMenuSeparator />
                     </>
                   )}
 
                   {/* Download for files */}
-                  {file.type === 'file' && (
+                  {adapter.supportsTransfer && file.type === 'file' && (
                     <>
                       <ContextMenuItem onClick={() => handleDownload(file)}>
                         <Download className="mr-2 h-4 w-4" />
@@ -1757,17 +1656,19 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
 
                   {/* Empty space context menu */}
                   <ContextMenuContent className="w-48">
-              <ContextMenuItem onClick={handleNewFile}>
-                <File className="mr-2 h-4 w-4" />
-                {t('fileBrowser.contextMenu.newFile')}
-              </ContextMenuItem>
+              {adapter.supportsNewFile && (
+                <ContextMenuItem onClick={handleNewFile}>
+                  <File className="mr-2 h-4 w-4" />
+                  {t('fileBrowser.contextMenu.newFile')}
+                </ContextMenuItem>
+              )}
               <ContextMenuItem onClick={handleCreateFolder}>
                 <FolderPlus className="mr-2 h-4 w-4" />
                 {t('fileBrowser.contextMenu.newFolder')}
               </ContextMenuItem>
               <ContextMenuSeparator />
               
-              {clipboard && (
+              {adapter.supportsClipboard && clipboard && (
                 <>
                   <ContextMenuItem onClick={handlePasteFiles}>
                     <ClipboardPaste className="mr-2 h-4 w-4" />
@@ -1776,15 +1677,19 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
                   <ContextMenuSeparator />
                 </>
               )}
-              
-              <ContextMenuItem onClick={handleUpload}>
-                <Upload className="mr-2 h-4 w-4" />
-                {t('fileBrowser.contextMenu.upload')}
-              </ContextMenuItem>
-              <ContextMenuItem onClick={handleUploadFolder}>
-                <FolderUp className="mr-2 h-4 w-4" />
-                {t('fileBrowser.contextMenu.uploadFolder')}
-              </ContextMenuItem>
+
+              {adapter.supportsUpload && (
+                <>
+                  <ContextMenuItem onClick={handleUpload}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    {t('fileBrowser.contextMenu.upload')}
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={handleUploadFolder}>
+                    <FolderUp className="mr-2 h-4 w-4" />
+                    {t('fileBrowser.contextMenu.uploadFolder')}
+                  </ContextMenuItem>
+                </>
+              )}
               <ContextMenuItem onClick={() => loadFiles()}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {t('fileBrowser.contextMenuRefresh')}
@@ -1803,13 +1708,14 @@ export function IntegratedFileBrowser({ connectionId, host: _host, isConnected, 
         </ResizablePanelGroup>
       </div>
 
-      {/* Transfer Queue */}
-      <TransferQueue
-        transfers={transfers}
-        dispatch={dispatchTransfer}
-        expanded={queueExpanded}
-        onToggleExpanded={() => setQueueExpanded(p => !p)}
-      />
+      {adapter.supportsTransfer && (
+        <TransferQueue
+          transfers={transfers}
+          dispatch={dispatchTransfer}
+          expanded={queueExpanded}
+          onToggleExpanded={() => setQueueExpanded(p => !p)}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingFile} onOpenChange={(open) => !open && setDeletingFile(null)}>

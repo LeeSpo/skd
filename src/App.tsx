@@ -53,9 +53,7 @@ const SettingsModal = lazy(() => import('./components/settings-modal').then((mod
 const IntegratedFileBrowser = lazy(() => import('./components/integrated-file-browser').then((module) => ({
   default: module.IntegratedFileBrowser,
 })));
-const LocalFileBrowser = lazy(() => import('./components/local-file-browser').then((module) => ({
-  default: module.LocalFileBrowser,
-})));
+
 const ComposePane = lazy(() => import('./components/compose-pane').then((module) => ({
   default: module.ComposePane,
 })));
@@ -1390,18 +1388,19 @@ function AppContent() {
                                 label={isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
                               >
                                 <Suspense fallback={<PanelFallback />}>
-                                  {isLocalTab ? (
-                                    <LocalFileBrowser />
-                                  ) : (
-                                    <IntegratedFileBrowser
-                                      connectionId={activeConnection.connectionId}
-                                      host={activeConnection.host}
-                                      isConnected={activeConnection.status === 'connected'}
-                                      onClose={() => {}}
-                                      onOpenInLogMonitor={handleOpenInLogMonitor}
-                                      onOpenInEditor={handleOpenInEditor}
-                                    />
-                                  )}
+                                  <IntegratedFileBrowser
+                                    {...(isLocalTab
+                                      ? { mode: 'local' as const }
+                                      : {
+                                          mode: 'remote' as const,
+                                          connectionId: activeConnection.connectionId,
+                                          host: activeConnection.host,
+                                          isConnected: activeConnection.status === 'connected',
+                                          onClose: () => {},
+                                          onOpenInLogMonitor: handleOpenInLogMonitor,
+                                          onOpenInEditor: handleOpenInEditor,
+                                        })}
+                                  />
                                 </Suspense>
                               </ErrorBoundary>
                             </TabsContent>

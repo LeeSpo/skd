@@ -43,6 +43,7 @@ describe('IntegratedFileBrowser keyboard shortcuts', () => {
   it('does not intercept document shortcuts from editable targets', () => {
     render(
       <IntegratedFileBrowser
+        mode="remote"
         connectionId="conn-1"
         isConnected={false}
         onClose={() => {}}
