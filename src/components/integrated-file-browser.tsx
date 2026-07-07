@@ -5,7 +5,7 @@ import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { PanelToolbar } from './ui/panel-chrome';
+import { PanelToolbar, ToolbarDivider } from './ui/panel-chrome';
 import {
   FILE_BROWSER_CHROME_TEXT,
   FILE_BROWSER_LIST_ICONS,
@@ -117,6 +117,59 @@ const treeStateCache = new Map<string, {
 // Cache to store the directory tree scroll position per connection.
 const treeScrollCache = new Map<string, number>();
 
+type SortField = 'name' | 'size' | 'modified' | 'permissions' | 'owner';
+type SortDirection = 'asc' | 'desc';
+
+interface SortableColumnHeaderProps {
+  label: string;
+  field: SortField;
+  width: number;
+  sortField: SortField;
+  sortDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  onResizeStart?: (columnName: string, e: React.MouseEvent) => void;
+  resizable?: boolean;
+}
+
+function SortableColumnHeader({
+  label,
+  field,
+  width,
+  sortField,
+  sortDirection,
+  onSort,
+  onResizeStart,
+  resizable = true,
+}: SortableColumnHeaderProps) {
+  return (
+    <div
+      className="relative flex cursor-pointer select-none items-center hover:text-foreground"
+      style={{ width: `${width}px` }}
+      onClick={() => onSort(field)}
+    >
+      <span>{label}</span>
+      {sortField === field ? (
+        sortDirection === 'asc' ? (
+          <ArrowUp className="ml-1 h-3 w-3" />
+        ) : (
+          <ArrowDown className="ml-1 h-3 w-3" />
+        )
+      ) : (
+        <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
+      )}
+      {resizable && onResizeStart && (
+        <div
+          className="group absolute top-0 right-[-4px] bottom-0 flex w-2 cursor-col-resize items-center justify-center hover:bg-accent/50"
+          onMouseDown={(e) => onResizeStart(field, e)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const isLocalMode = props.mode === 'local';
   const connectionId = props.mode === 'remote' ? props.connectionId : undefined;
@@ -182,8 +235,6 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
   
   // Sort state
-  type SortField = 'name' | 'size' | 'modified' | 'permissions' | 'owner';
-  type SortDirection = 'asc' | 'desc';
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
@@ -1194,8 +1245,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           {/* Back */}
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0"
+            size="toolbar"
             title={t('fileBrowser.toolbar.back')}
             disabled={!canGoBack}
             onClick={goBack}
@@ -1205,8 +1255,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           {/* Forward */}
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0"
+            size="toolbar"
             title={t('fileBrowser.toolbar.forward')}
             disabled={!canGoForward}
             onClick={goForward}
@@ -1216,8 +1265,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           {/* Go Up */}
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0"
+            size="toolbar"
             title={t('fileBrowser.toolbar.parentDir')}
             disabled={adapter.isRootPath(currentPath)}
             onClick={goUp}
@@ -1227,8 +1275,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           {/* Home */}
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0"
+            size="toolbar"
             title={t('fileBrowser.toolbar.home')}
             onClick={() => {
               void adapter.homePath().then((home) => navigateTo(home));
@@ -1286,11 +1333,11 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           </div>
 
           {/* Refresh */}
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
+          <Button variant="ghost" size="toolbar" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
-          <div className="mx-1 h-4 w-px shrink-0 bg-border/60" />
+          <ToolbarDivider />
 
           <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" onClick={handleCreateFolder}>
             <FolderPlus className="h-3.5 w-3.5" />
@@ -1306,7 +1353,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             </>
           )}
 
-          <div className="mx-1 h-4 w-px shrink-0 bg-border/60" />
+          <ToolbarDivider />
 
           <div className="w-32 min-w-[7rem] shrink-0 sm:w-40">
             <Input
@@ -1327,7 +1374,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       </PanelToolbar>
 
       {/* File List + Directory Tree */}
-      <div className="min-h-0 flex-1 pb-2">
+      <div className="min-h-0 flex-1 overflow-hidden border-x border-b border-panel-border bg-background">
         <ResizablePanelGroup
           direction="horizontal"
           autoSaveId="integrated-file-browser-split"
@@ -1354,13 +1401,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             />
           </ResizablePanel>
 
-          <ResizableHandle />
+          <ResizableHandle dividerTone="panel" />
 
           {/* File list panel */}
           <ResizablePanel id="ssh-file-list" order={2} defaultSize={78} minSize={40}>
             <div
               ref={dropZoneRef}
-              className="relative flex flex-col h-full overflow-hidden rounded-md border border-border/50 bg-background/50 shadow-sm ring-1 ring-black/5 dark:ring-white/5 transition-all"
+              className="relative flex h-full flex-col overflow-hidden bg-background transition-all"
               // Required on Linux/WebKit2GTK: without preventDefault the browser
               // never signals "drop accepted", so Tauri's native drop signal
               // never fires. Also suppresses the browser's default file-open
@@ -1379,90 +1426,60 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               )}
 
               {/* Column Headers — outside ScrollArea so they never move */}
-              <div className={`panel-toolbar flex shrink-0 gap-2 px-2 py-px font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}>
-                <div 
-                  className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
-                  style={{ width: `${columnWidths.name}px` }}
-                  onClick={() => handleSort('name')}
-                >
-                  <span>{t('fileBrowser.column.name')}</span>
-                  {sortField === 'name' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                  ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                  <div 
-                    className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
-                    onMouseDown={(e) => handleResizeStart('name', e)}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                  </div>
-                </div>
-                <div 
-                  className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
-                  style={{ width: `${columnWidths.size}px` }}
-                  onClick={() => handleSort('size')}
-                >
-                  <span>{t('fileBrowser.column.size')}</span>
-                  {sortField === 'size' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                  ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                  <div 
-                    className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
-                    onMouseDown={(e) => handleResizeStart('size', e)}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                  </div>
-                </div>
-                <div 
-                  className="flex items-center relative cursor-pointer hover:text-foreground select-none" 
-                  style={{ width: `${columnWidths.modified}px` }}
-                  onClick={() => handleSort('modified')}
-                >
-                  <span>{t('fileBrowser.column.modified')}</span>
-                  {sortField === 'modified' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                  ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                  <div 
-                    className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
-                    onMouseDown={(e) => handleResizeStart('modified', e)}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                  </div>
-                </div>
+              <PanelToolbar
+                density="dense"
+                className={`gap-2 px-2 font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
+              >
+                <SortableColumnHeader
+                  label={t('fileBrowser.column.name')}
+                  field="name"
+                  width={columnWidths.name}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  onResizeStart={handleResizeStart}
+                />
+                <SortableColumnHeader
+                  label={t('fileBrowser.column.size')}
+                  field="size"
+                  width={columnWidths.size}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  onResizeStart={handleResizeStart}
+                />
+                <SortableColumnHeader
+                  label={t('fileBrowser.column.modified')}
+                  field="modified"
+                  width={columnWidths.modified}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  onResizeStart={handleResizeStart}
+                />
                 {!isLocalMode && (
                   <>
-                    <div
-                      className="flex items-center relative cursor-pointer hover:text-foreground select-none"
-                      style={{ width: `${columnWidths.permissions}px` }}
-                      onClick={() => handleSort('permissions')}
-                    >
-                      <span>{t('fileBrowser.column.permissions')}</span>
-                      {sortField === 'permissions' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                      ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                      <div
-                        className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize hover:bg-accent/50 group flex items-center justify-center"
-                        onMouseDown={(e) => handleResizeStart('permissions', e)}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <GripVertical className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                      </div>
-                    </div>
-                    <div
-                      className="flex items-center cursor-pointer hover:text-foreground select-none"
-                      style={{ width: `${columnWidths.owner}px` }}
-                      onClick={() => handleSort('owner')}
-                    >
-                      <span>{t('fileBrowser.column.owner')}</span>
-                      {sortField === 'owner' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
-                      ) : <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />}
-                    </div>
+                    <SortableColumnHeader
+                      label={t('fileBrowser.column.permissions')}
+                      field="permissions"
+                      width={columnWidths.permissions}
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                      onSort={handleSort}
+                      onResizeStart={handleResizeStart}
+                    />
+                    <SortableColumnHeader
+                      label={t('fileBrowser.column.owner')}
+                      field="owner"
+                      width={columnWidths.owner}
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                      onSort={handleSort}
+                      resizable={false}
+                    />
                   </>
                 )}
-              </div>
+              </PanelToolbar>
 
               <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]]:[scrollbar-gutter:stable]">
                 <ContextMenu>
@@ -1478,7 +1495,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         }}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer gap-2 border-b border-border/30 px-2 py-px hover:bg-muted/50 ${
+                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer gap-2 px-2 py-px hover:bg-muted/50 ${
                                 selectedFiles.has(file.name) ? 'bg-accent' : ''
                               }`}
                               onClick={(e) => handleFileClick(file, e)}
@@ -1719,7 +1736,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingFile} onOpenChange={(open) => !open && setDeletingFile(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent position="tauri">
           <AlertDialogHeader>
             <AlertDialogTitle>{deletingFile?.type === 'directory' ? t('fileBrowser.deleteFolderTitle') : t('fileBrowser.deleteFileTitle')}</AlertDialogTitle>
             <AlertDialogDescription>

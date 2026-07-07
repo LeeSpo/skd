@@ -58,7 +58,7 @@ export function MenuBar({
 
   return (
     <div
-      className="flex h-8 items-center gap-1 border-b border-border bg-background"
+      className="flex h-8 items-center gap-1 border-b border-panel-border bg-background"
       // macOS traffic-light inset — keeps native window controls unobstructed
       style={{ paddingLeft: '80px' }}
     >
@@ -73,7 +73,7 @@ export function MenuBar({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onToggleLeftSidebar}>
+              <Button variant="ghost" size="menubar" onClick={onToggleLeftSidebar}>
                 {leftSidebarVisible
                   ? <PanelLeftClose className="w-4 h-4" />
                   : <PanelLeftOpen className="w-4 h-4" />}
@@ -85,7 +85,7 @@ export function MenuBar({
           {showBottomPanelToggle && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onToggleBottomPanel}>
+                <Button variant="ghost" size="menubar" onClick={onToggleBottomPanel}>
                   {bottomPanelVisible
                     ? <PanelBottomClose className="w-4 h-4" />
                     : <PanelBottomOpen className="w-4 h-4" />}
@@ -98,7 +98,7 @@ export function MenuBar({
           {showRightPanelToggle && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onToggleRightSidebar}>
+                <Button variant="ghost" size="menubar" onClick={onToggleRightSidebar}>
                   {rightSidebarVisible
                     ? <PanelRightClose className="w-4 h-4" />
                     : <PanelRightOpen className="w-4 h-4" />}
@@ -112,8 +112,8 @@ export function MenuBar({
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="sm"
-                className={`h-7 w-7 p-0 ${zenMode ? 'bg-accent' : ''}`}
+                size="menubar"
+                className={zenMode ? 'bg-accent' : undefined}
                 onClick={onToggleZenMode}
               >
                 <Maximize2 className="w-4 h-4" />
@@ -126,7 +126,7 @@ export function MenuBar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                  <Button variant="ghost" size="menubar">
                     <LayoutGrid className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -147,7 +147,7 @@ export function MenuBar({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onOpenSettings}>
+              <Button variant="ghost" size="menubar" onClick={onOpenSettings}>
                 <Settings className="w-4 h-4" />
               </Button>
             </TooltipTrigger>

@@ -125,7 +125,7 @@ function GridRendererChild({ child, index, path, defaultSize, isLast, onHandleDo
       <ResizablePanel id={panelId} order={index} defaultSize={defaultSize} minSize={10}>
         <GridRenderer node={child} path={childPath} />
       </ResizablePanel>
-      {!isLast && <ResizableHandle onDoubleClick={onHandleDoubleClick} />}
+      {!isLast && <ResizableHandle dividerTone="panel" onDoubleClick={onHandleDoubleClick} />}
     </>
   );
 }

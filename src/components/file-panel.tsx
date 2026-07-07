@@ -527,14 +527,14 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
     );
     const segments = getSegments(currentPath);
     const activeBorderColor =
-      mode === "local" ? "border-blue-500/40 ring-1 ring-blue-500/10 shadow-sm" : "border-emerald-500/40 ring-1 ring-emerald-500/10 shadow-sm";
+      mode === "local" ? "border-primary/40 ring-1 ring-primary/10 shadow-sm" : "border-success/40 ring-1 ring-success/10 shadow-sm";
     const borderClass = isActive
       ? `border ${activeBorderColor} transition-all duration-200`
       : "border border-border transition-all duration-200";
     const selectedBg =
       mode === "local"
-        ? "bg-blue-500/20 dark:bg-blue-400/20"
-        : "bg-emerald-500/20 dark:bg-emerald-400/20";
+        ? "bg-primary/20 dark:bg-primary/20"
+        : "bg-success/20 dark:bg-success/20";
 
     // Show the ring overlay for either cross-panel drag or OS drop;
     // the inner banner picks the right copy below.
@@ -885,7 +885,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         )}
 
         {/* Status bar */}
-        <div className={`panel-toolbar flex shrink-0 items-center justify-between border-t px-2 py-0.5 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
+        <PanelToolbar density="dense" className={`justify-between border-t px-2 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
           <span>
             {t('filePanel.statusBar.items', { count: filteredEntries.length })}
             {selectedNames.size > 0 && (
@@ -907,7 +907,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
           <span className="truncate max-w-[200px]" title={currentPath}>
             {currentPath}
           </span>
-        </div>
+        </PanelToolbar>
       </div>
     );
   },

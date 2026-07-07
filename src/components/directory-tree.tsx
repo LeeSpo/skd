@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ChevronRight, Folder, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
+import { PanelHeader } from "./ui/panel-chrome";
+import { FILE_BROWSER_LIST_TEXT } from "@/lib/file-browser-typography";
+import { treeIndent, treeRowState } from "@/lib/panel-layout-styles";
 import { parentPath } from "@/lib/file-entry-types";
 
 interface DirectoryTreeProps {
@@ -332,10 +335,13 @@ export function DirectoryTree({
   const selectedPath = normalizePath(currentPath);
 
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden rounded-lg border border-border/70 bg-background/80 shadow-sm">
-      <div className="px-2 py-1 flex items-center border-b bg-muted/30 text-xs font-medium text-muted-foreground backdrop-blur-sm supports-[backdrop-filter]:bg-background/55">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <PanelHeader
+        density="dense"
+        className={`font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
+      >
         {t('directoryTree.directories')}
-      </div>
+      </PanelHeader>
       <div
         ref={scrollContainerRef}
         className="flex-1 min-h-0 overflow-auto p-1.5 outline-none [scrollbar-gutter:stable]"
@@ -356,14 +362,8 @@ export function DirectoryTree({
           return (
             <div key={row.path} role="treeitem" aria-expanded={canExpand ? isExpanded : undefined}>
               <div
-                className={`group flex items-center rounded-sm ${
-                  isSelected
-                    ? "bg-accent"
-                    : isFocused
-                      ? "bg-muted"
-                      : "hover:bg-muted/60"
-                }`}
-                style={{ paddingLeft: `${row.depth * 14 + 4}px` }}
+                className={treeRowState({ selected: isSelected, focused: isFocused, className: "group" })}
+                style={treeIndent(row.depth, 4, 14)}
                 data-testid={`tree-row-${row.path}`}
                   ref={(element) => {
                     rowRefs.current.set(row.path, element);
@@ -371,8 +371,7 @@ export function DirectoryTree({
               >
                 <Button
                   variant="ghost"
-                  size="icon"
-                    className="h-6 w-6 shrink-0"
+                  size="toolbar"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (canExpand) {
@@ -390,7 +389,7 @@ export function DirectoryTree({
 
                 <button
                   type="button"
-                  className="flex-1 min-w-0 h-6 pr-2 text-left text-sm flex items-center gap-2"
+                  className={`flex h-6 min-w-0 flex-1 items-center gap-2 pr-2 text-left ${FILE_BROWSER_LIST_TEXT}`}
                   onClick={() => {
                     setFocusPath(row.path);
                     onNavigate(row.path);

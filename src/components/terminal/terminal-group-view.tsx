@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import { GroupTabBar } from './group-tab-bar';
+import { PanelSurfaceFallback } from '../ui/panel-chrome';
 import { WelcomeScreen } from '../welcome-screen';
 
 interface TerminalGroupViewProps {
@@ -18,10 +19,6 @@ const FileBrowserView = lazy(() => import('../file-browser-view').then((module) 
 const FileEditorView = lazy(() => import('../file-editor-view').then((module) => ({
   default: module.FileEditorView,
 })));
-
-function TabFallback() {
-  return <div className="h-full w-full bg-background" />;
-}
 
 function useThemeKey(): number {
   const [themeKey, setThemeKey] = useState(0);
@@ -108,15 +105,11 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const isLastGroup = Object.keys(state.groups).length === 1;
   const showWelcome = group.tabs.length === 0 && isLastGroup;
 
-  const containerClass = isActive
-    ? 'h-full w-full flex flex-col border border-primary/40 ring-1 ring-primary/10 shadow-sm transition-all duration-200'
-    : 'h-full w-full flex flex-col border border-border transition-all duration-200';
-
   return (
     <section
       data-group-id={groupId}
       data-testid={`terminal-group-view-${groupId}`}
-      className={containerClass}
+      className="flex h-full w-full flex-col"
       onMouseDownCapture={handleMouseDown}
       onKeyDown={handleKeyDown}
       aria-label={`Terminal group ${groupId}`}
@@ -129,7 +122,11 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
         onDuplicateTab={onDuplicateTab}
         onNewTab={onNewTab}
       />
-      <div className="flex-1 relative overflow-hidden">
+      <div
+        className={`relative min-h-0 flex-1 overflow-hidden ${
+          isActive ? 'ring-inset ring-1 ring-border/50' : ''
+        }`}
+      >
         {showWelcome ? (
           <WelcomeScreen onNewConnection={() => {}} onOpenSettings={() => {}} />
         ) : (
@@ -146,7 +143,7 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
                   </div>
                 </div>
               ) : (
-                <Suspense fallback={<TabFallback />}>
+                <Suspense fallback={<PanelSurfaceFallback />}>
                   {tab.tabType === 'file-browser' ? (
                     <FileBrowserView
                       connectionId={tab.id}

@@ -48,6 +48,8 @@ import {
 import { toast } from 'sonner';
 import { StatusDot } from './ui/status-dot';
 import { PanelHeader, PanelToolbar } from './ui/panel-chrome';
+import { treeIndent, treeRowState } from '@/lib/panel-layout-styles';
+import { cn } from './ui/utils';
 
 interface ConnectionNode {
   id: string;
@@ -425,10 +427,12 @@ export function ConnectionManager({
 
     const nodeContent = (
       <div
-        className={`flex items-center gap-2 px-2 py-1 hover:bg-sidebar-accent cursor-pointer ${
-          isSelected ? 'bg-sidebar-accent' : ''
-        } ${isDragging ? 'opacity-50' : ''}`}
-        style={{ paddingLeft: `${level * 16 + 8}px` }}
+        className={cn(
+          treeRowState({ selected: isSelected, variant: 'sidebar' }),
+          'gap-2 px-2 py-1 cursor-pointer',
+          isDragging && 'opacity-50',
+        )}
+        style={treeIndent(level)}
         onClick={handleNodeClick}
         onDoubleClick={handleNodeDoubleClick}
         draggable={node.path !== 'All Connections'}
@@ -564,10 +568,10 @@ export function ConnectionManager({
 
   return (
     <>
-    <div className="flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <div className="flex h-full min-w-0 flex-col bg-sidebar">
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-        <PanelHeader className="border-b border-sidebar-border px-2">
+        <PanelHeader tone="sidebar">
           <h3 className="min-w-0 flex-1 truncate font-medium text-sm">
             {t('connectionManager.connectionsHeader')}
           </h3>
@@ -579,7 +583,7 @@ export function ConnectionManager({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                    <Button variant="ghost" size="toolbar">
                       <Zap className="w-3.5 h-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -621,9 +625,8 @@ export function ConnectionManager({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="toolbar"
                   onClick={() => openNewFolderDialog()}
-                  className="h-6 w-6 p-0"
                 >
                   <FolderPlus className="w-3.5 h-3.5" />
                 </Button>
@@ -636,9 +639,8 @@ export function ConnectionManager({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="toolbar"
                   onClick={onNewConnection}
-                  className="h-6 w-6 p-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </Button>
@@ -652,9 +654,8 @@ export function ConnectionManager({
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="toolbar"
                     onClick={onNewLocalTerminal}
-                    className="h-6 w-6 p-0"
                     aria-label={t('connectionManager.newLocalTerminal')}
                   >
                     <Terminal className="w-3.5 h-3.5" />

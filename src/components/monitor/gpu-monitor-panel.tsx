@@ -8,6 +8,7 @@ import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Progress } from '../ui/progress';
 import { Badge } from '../ui/badge';
+import { CHART_COLORS } from '@/lib/chart-colors';
 import type {
   GpuDetectionResult,
   GpuHistoryData,
@@ -388,12 +389,12 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                             >
                               <defs>
                                 <linearGradient id="gpuUtilGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.05} />
+                                  <stop offset="0%" stopColor={CHART_COLORS.chart5} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={CHART_COLORS.chart5} stopOpacity={0.05} />
                                 </linearGradient>
                                 <linearGradient id="gpuMemGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.3} />
-                                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.05} />
+                                  <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={CHART_COLORS.chart1} stopOpacity={0.05} />
                                 </linearGradient>
                               </defs>
                               <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
@@ -428,7 +429,7 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               <Area
                                 type="monotone"
                                 dataKey="utilization"
-                                stroke="#8b5cf6"
+                                stroke={CHART_COLORS.chart5}
                                 strokeWidth={2}
                                 fill="url(#gpuUtilGradient)"
                                 dot={false}
@@ -437,7 +438,7 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               <Area
                                 type="monotone"
                                 dataKey="memory"
-                                stroke="#06b6d4"
+                                stroke={CHART_COLORS.chart1}
                                 strokeWidth={2}
                                 fill="url(#gpuMemGradient)"
                                 dot={false}
@@ -448,11 +449,11 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                         </div>
                         <div className="flex gap-3 justify-center mt-1">
                           <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-[#8b5cf6]" />
+                            <div className="w-2 h-2 rounded-full bg-chart-5" />
                             <span className="text-[8px] text-muted-foreground">{t('systemMonitor.gpuLabel')}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-[#06b6d4]" />
+                            <div className="w-2 h-2 rounded-full bg-chart-1" />
                             <span className="text-[8px] text-muted-foreground">{t('systemMonitor.vram')}</span>
                           </div>
                         </div>

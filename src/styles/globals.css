@@ -315,6 +315,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Default border color — without this, bare `border` uses currentColor (light in dark mode) */
+*,
+::before,
+::after {
+  border-color: var(--border);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -416,8 +423,20 @@ body {
   cursor: row-resize !important;
 }
 
-/* Focus ring styles */
-:focus-visible {
+/* Focus ring styles — skip interactive elements that manage their own ring */
+:focus-visible:not(:is(
+  button,
+  input,
+  textarea,
+  select,
+  a,
+  [role="slider"],
+  [role="tab"],
+  [role="menuitem"],
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="resizable-handle"]
+)) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }

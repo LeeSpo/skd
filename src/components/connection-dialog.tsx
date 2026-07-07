@@ -47,7 +47,6 @@ import {
 } from 'lucide-react';
 import { getDefaultPort, getAuthMethods, getHiddenFields } from '@/lib/protocol-config';
 import { connectionNameUpdateForHostChange } from '@/lib/connection-name-sync';
-import { cn } from '@/lib/utils';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -665,11 +664,8 @@ export function ConnectionDialog({
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className={cn(
-          '!top-0 !left-0 !translate-x-0 !translate-y-0 !inset-0 !m-auto',
-          '!flex !flex-col !w-full sm:!max-w-4xl',
-          '!max-h-[85vh] overflow-hidden p-0 gap-0 min-w-0 !h-fit',
-        )}
+        position="tauri"
+        className="w-full overflow-hidden p-0 gap-0 min-w-0 h-fit sm:max-w-4xl"
       >
         <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
@@ -690,31 +686,38 @@ export function ConnectionDialog({
           onValueChange={setActiveTab}
           className="flex flex-col overflow-hidden shrink-0"
         >
-          <TabsList className="shrink-0 w-full justify-start rounded-none border-b bg-transparent h-auto p-0 px-4 overflow-x-auto">
+          <TabsList
+            variant="underline"
+            className="h-auto shrink-0 w-full overflow-x-auto px-4"
+          >
             <TabsTrigger
+              variant="underline"
               value="connection"
-              className="flex items-center gap-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
             >
               <Server className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.connection')}</span>
             </TabsTrigger>
             <TabsTrigger
+              variant="underline"
               value="authentication"
-              className="flex items-center gap-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
             >
               <Shield className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.auth')}</span>
             </TabsTrigger>
             <TabsTrigger
+              variant="underline"
               value="proxy"
-              className="flex items-center gap-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
             >
               <Network className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.proxy')}</span>
             </TabsTrigger>
             <TabsTrigger
+              variant="underline"
               value="advanced"
-              className="flex items-center gap-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
             >
               <TerminalIcon className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.advanced')}</span>

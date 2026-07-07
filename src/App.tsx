@@ -41,7 +41,9 @@ import {
 } from './lib/ssh-connect';
 import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 
+import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
+import { tabContentPanel, tabContentWrapper } from './lib/panel-layout-styles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 
 const ConnectionDialog = lazy(() => import('./components/connection-dialog').then((module) => ({
@@ -66,10 +68,6 @@ const LogMonitor = lazy(() => import('./components/log-monitor').then((module) =
 const UpdateChecker = lazy(() => import('./components/update-checker').then((module) => ({
   default: module.UpdateChecker,
 })));
-
-function PanelFallback() {
-  return <div className="h-full w-full bg-background" />;
-}
 
 interface ConnectionNode {
   id: string;
@@ -1325,7 +1323,7 @@ function AppContent() {
                 />
               </ResizablePanel>
 
-              <ResizableHandle />
+              <ResizableHandle dividerTone="sidebar" />
             </>
           )}
 
@@ -1355,7 +1353,7 @@ function AppContent() {
 
                   {layout.bottomPanelVisible && !hideBottomPanels && activeConnection && (
                     <>
-                      <ResizableHandle />
+                      <ResizableHandle dividerTone="panel" />
 
                       <ResizablePanel
                         id="bottom-panel"
@@ -1379,15 +1377,15 @@ function AppContent() {
                             </TabsTrigger>
                           </TabsList>
 
-                          <div className="relative mt-0 min-h-0 flex-1 overflow-hidden bg-background">
+                          <div className={tabContentWrapper()}>
                             <TabsContent
                               value="file-browser"
-                              className="absolute inset-0 mt-0 data-[state=inactive]:hidden"
+                              className={tabContentPanel()}
                             >
                               <ErrorBoundary
                                 label={isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
                               >
-                                <Suspense fallback={<PanelFallback />}>
+                                <Suspense fallback={<PanelSurfaceFallback />}>
                                   <IntegratedFileBrowser
                                     {...(isLocalTab
                                       ? { mode: 'local' as const }
@@ -1407,10 +1405,10 @@ function AppContent() {
 
                             <TabsContent
                               value="compose"
-                              className="absolute inset-0 mt-0 data-[state=inactive]:hidden"
+                              className={tabContentPanel()}
                             >
                               <ErrorBoundary label={t('app.composePane')}>
-                                <Suspense fallback={<PanelFallback />}>
+                                <Suspense fallback={<PanelSurfaceFallback />}>
                                   <ComposePane />
                                 </Suspense>
                               </ErrorBoundary>
@@ -1427,7 +1425,7 @@ function AppContent() {
 
           {layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels && (
             <>
-              <ResizableHandle />
+              <ResizableHandle dividerTone="panel" />
 
               {/* Right Sidebar - Monitor/Logs using activeConnection from context */}
               <ResizablePanel
@@ -1444,12 +1442,12 @@ function AppContent() {
                     <TabsTrigger variant="underline" value="logs">{t('app.logs')}</TabsTrigger>
                   </TabsList>
 
-                  <div className="flex-1 mt-0 overflow-hidden relative">
-                    <TabsContent value="monitor" forceMount className="absolute inset-0 mt-0 data-[state=inactive]:hidden">
+                  <div className={tabContentWrapper("flex-1")}>
+                    <TabsContent value="monitor" forceMount className={tabContentPanel()}>
                       <div className="h-full overflow-hidden px-1 py-2">
                         {activeConnection ? (
                           <ErrorBoundary label={t('app.systemMonitor')}>
-                            <Suspense fallback={<PanelFallback />}>
+                            <Suspense fallback={<PanelSurfaceFallback />}>
                               <SystemMonitor
                                 connectionId={activeConnection.connectionId}
                                 active={monitorActive}
@@ -1460,10 +1458,10 @@ function AppContent() {
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="logs" className="absolute inset-0 mt-0 data-[state=inactive]:hidden">
+                    <TabsContent value="logs" className={tabContentPanel()}>
                       {activeConnection ? (
                         <ErrorBoundary label={t('app.logMonitor')}>
-                          <Suspense fallback={<PanelFallback />}>
+                          <Suspense fallback={<PanelSurfaceFallback />}>
                             <LogMonitor
                               connectionId={activeConnection.connectionId}
                               externalLogPath={externalLogPath}

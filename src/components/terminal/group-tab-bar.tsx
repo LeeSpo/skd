@@ -264,12 +264,12 @@ export function GroupTabBar({
 
   return (
     <>
-      <div className="bg-muted border-b border-border flex items-center">
+      <div className="flex items-center border-b border-panel-border bg-muted/30">
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`flex items-center overflow-x-auto relative flex-1 transition-colors ${
-            isDragOver ? 'bg-primary/10 ring-2 ring-primary/40 ring-inset' : ''
+          className={`relative flex flex-1 items-center overflow-x-auto transition-colors ${
+            isDragOver ? 'bg-accent/40' : ''
           }`}
         >
           {tabs.map((tab, index) => (
@@ -282,8 +282,10 @@ export function GroupTabBar({
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    className={`flex items-center gap-2 px-3 py-2 border-r border-border cursor-pointer group min-w-0 select-none ${
-                      tab.id === activeTabId ? 'bg-background' : 'hover:bg-background/50'
+                    className={`group flex min-w-0 cursor-pointer select-none items-center gap-2 border-r border-panel-border px-3 py-2 outline-none focus:outline-none focus-visible:outline-none ${
+                      tab.id === activeTabId
+                        ? 'bg-background text-foreground'
+                        : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
                     onDragStart={handleNativeDragStart}
@@ -312,8 +314,8 @@ export function GroupTabBar({
 
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="p-0 h-4 w-4 opacity-0 group-hover:opacity-100"
+                      size="toolbar"
+                      className="size-4 opacity-0 group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleTabClose(tab.id);

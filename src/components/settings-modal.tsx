@@ -294,11 +294,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        position={isTallTab ? "tauriTopTall" : "tauriTop"}
         className={cn(
-          '!top-0 !left-0 !translate-x-0 !translate-y-0 !inset-0 !m-auto',
-          '!flex !flex-col !w-full sm:!max-w-4xl',
-          '!max-h-[85vh] overflow-hidden p-0 gap-0 min-w-0',
-          isTallTab ? '!h-[85vh]' : '!h-fit',
+          "w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl",
+          !isTallTab && "h-fit",
         )}
       >
         <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">

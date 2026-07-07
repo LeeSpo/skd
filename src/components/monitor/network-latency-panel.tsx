@@ -6,6 +6,7 @@ import { withRetry, CancelledError } from '@/lib/async-retry';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent } from '../ui/card';
 import type { LatencyData, MonitorPanelProps } from './monitor-types';
+import { CHART_COLORS } from '@/lib/chart-colors';
 import { scheduleIdleTask } from './monitor-utils';
 
 export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPanelProps) {
@@ -67,8 +68,8 @@ export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPane
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
                 <defs>
                   <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={CHART_COLORS.chart1} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis
@@ -96,13 +97,13 @@ export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPane
                 <Area
                   type="monotone"
                   dataKey="latency"
-                  stroke="#3b82f6"
+                  stroke={CHART_COLORS.chart1}
                   strokeWidth={3}
                   fill="url(#latencyGradient)"
                   dot={false}
                   activeDot={{
                     r: 5,
-                    fill: '#3b82f6',
+                    fill: CHART_COLORS.chart1,
                     stroke: '#fff',
                     strokeWidth: 2,
                     filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.4))',

@@ -417,7 +417,10 @@ export function SyncDialog({
 
   return (
     <Dialog open={open} onOpenChange={isBusy ? undefined : onOpenChange}>
-      <DialogContent className={`!top-0 !left-0 !translate-x-0 !translate-y-0 !inset-0 !m-auto !flex !flex-col sm:!max-w-3xl !max-h-[85vh] overflow-hidden ${compared ? "!h-[85vh]" : "!h-fit"}`}>
+      <DialogContent
+        position={compared ? "tauriTall" : "tauri"}
+        className="w-full overflow-hidden h-fit sm:max-w-3xl"
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft className="h-5 w-5" />

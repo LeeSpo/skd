@@ -355,8 +355,11 @@ export function SFTPPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
+      <DialogContent
+        position="tauriTall"
+        className="max-h-[90vh] overflow-hidden p-0 gap-0 sm:max-w-6xl"
+      >
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             SFTP File Transfer - {host}
@@ -367,7 +370,7 @@ export function SFTPPanel({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4 px-6 py-4 flex-1 overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-hidden px-6 pb-6">
           {/* Local Files (Left Panel) */}
           <div className="border rounded-lg">
             <div className="p-3 border-b bg-muted/50">

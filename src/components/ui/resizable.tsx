@@ -28,35 +28,44 @@ function ResizablePanel({
   return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
 }
 
+const dividerToneClasses = {
+  default: "before:bg-transparent hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
+  panel: "before:bg-panel-border hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
+  sidebar: "before:bg-sidebar-border hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
+} as const;
+
 function ResizableHandle({
   withHandle,
+  dividerTone = "default",
   className,
   ...props
 }: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
   withHandle?: boolean;
+  dividerTone?: keyof typeof dividerToneClasses;
 }) {
   return (
     <ResizablePrimitive.PanelResizeHandle
       data-slot="resizable-handle"
       className={cn(
-        // Base styles - transparent background, wide hit area
-        "group relative flex items-center justify-center",
-        // Horizontal resize (default)
-        "w-[6px]",
-        // The visible line - centered, appears on hover
-        "before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2",
-        "before:bg-transparent before:transition-colors before:duration-150",
-        "hover:before:bg-primary active:before:bg-primary",
-        "data-[resize-handle-state=drag]:before:bg-primary",
-        // Focus styles
-        "focus-visible:outline-hidden focus-visible:before:bg-primary",
+        // Zero layout footprint — panels sit flush; hit area extends via ::after
+        "group relative flex shrink-0 items-center justify-center overflow-visible",
+        "w-0",
+        "after:absolute after:inset-y-0 after:left-1/2 after:z-10 after:w-4 after:-translate-x-1/2 after:content-['']",
+        // Visible divider on hover/drag
+        "before:absolute before:inset-y-0 before:left-1/2 before:z-20 before:w-px before:-translate-x-1/2",
+        "before:transition-colors before:duration-150",
+        dividerToneClasses[dividerTone],
+        "focus-visible:outline-hidden",
         // Vertical resize overrides
-        "data-[panel-group-direction=vertical]:h-[6px] data-[panel-group-direction=vertical]:w-full",
+        "data-[panel-group-direction=vertical]:h-0 data-[panel-group-direction=vertical]:w-full",
+        "data-[panel-group-direction=vertical]:after:inset-x-0 data-[panel-group-direction=vertical]:after:inset-y-auto",
+        "data-[panel-group-direction=vertical]:after:top-1/2 data-[panel-group-direction=vertical]:after:left-0",
+        "data-[panel-group-direction=vertical]:after:h-4 data-[panel-group-direction=vertical]:after:w-full",
+        "data-[panel-group-direction=vertical]:after:-translate-y-1/2 data-[panel-group-direction=vertical]:after:translate-x-0",
         "data-[panel-group-direction=vertical]:before:inset-x-0 data-[panel-group-direction=vertical]:before:inset-y-auto",
         "data-[panel-group-direction=vertical]:before:top-1/2 data-[panel-group-direction=vertical]:before:left-0",
-        "data-[panel-group-direction=vertical]:before:h-[2px] data-[panel-group-direction=vertical]:before:w-full",
+        "data-[panel-group-direction=vertical]:before:h-px data-[panel-group-direction=vertical]:before:w-full",
         "data-[panel-group-direction=vertical]:before:-translate-y-1/2 data-[panel-group-direction=vertical]:before:translate-x-0",
-        // Rotate handle icon for vertical
         "[&[data-panel-group-direction=vertical]>div]:rotate-90",
         className,
       )}

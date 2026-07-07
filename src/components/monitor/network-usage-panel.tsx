@@ -7,6 +7,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { MonitorPanelProps, NetworkHistoryData, NetworkUsage } from './monitor-types';
+import { CHART_COLORS } from '@/lib/chart-colors';
 import { scheduleIdleTask } from './monitor-utils';
 
 export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelProps) {
@@ -151,7 +152,7 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
           <div className="grid grid-cols-2 gap-1.5">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#3b82f6] shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full bg-chart-1 shrink-0" />
                 <div className="text-[9px] text-muted-foreground">{t('systemMonitor.down')}</div>
               </div>
               <div className="font-medium text-[10px] truncate" title={networkUsage.downloadFormatted}>
@@ -160,7 +161,7 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
             </div>
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#ef4444] shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full bg-chart-4 shrink-0" />
                 <div className="text-[9px] text-muted-foreground">{t('systemMonitor.up')}</div>
               </div>
               <div className="font-medium text-[10px] truncate" title={networkUsage.uploadFormatted}>
@@ -183,12 +184,12 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
                 >
                   <defs>
                     <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#ef4444" stopOpacity={0.05} />
+                      <stop offset="0%" stopColor={CHART_COLORS.chart4} stopOpacity={0.3} />
+                      <stop offset="100%" stopColor={CHART_COLORS.chart4} stopOpacity={0.05} />
                     </linearGradient>
                     <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.05} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.05} />
+                      <stop offset="100%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
@@ -235,21 +236,21 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
                   <Area
                     type="monotone"
                     dataKey="uploadPositive"
-                    stroke="#ef4444"
+                    stroke={CHART_COLORS.chart4}
                     strokeWidth={2}
                     fill="url(#uploadGradient)"
                     dot={false}
-                    activeDot={{ r: 3, fill: '#ef4444', stroke: '#ef4444' }}
+                    activeDot={{ r: 3, fill: CHART_COLORS.chart4, stroke: CHART_COLORS.chart4 }}
                     isAnimationActive={false}
                   />
                   <Area
                     type="monotone"
                     dataKey="downloadNegative"
-                    stroke="#3b82f6"
+                    stroke={CHART_COLORS.chart1}
                     strokeWidth={2}
                     fill="url(#downloadGradient)"
                     dot={false}
-                    activeDot={{ r: 3, fill: '#3b82f6', stroke: '#3b82f6' }}
+                    activeDot={{ r: 3, fill: CHART_COLORS.chart1, stroke: CHART_COLORS.chart1 }}
                     isAnimationActive={false}
                   />
                 </AreaChart>
