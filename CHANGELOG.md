@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-07
+
+### Added
+
+- 🔑 **macOS Keychain Integration**: Implemented secure credential storage using native macOS Keychain to safely store SSH passwords and private key passphrases.
+- 🔐 **SSH Private Key & Host Key Verification**: Added support for SSH private key authentication (either by uploading a key file or pasting text directly) along with interactive remote host key verification.
+- ⚡ **Asynchronous SSH Connecting**: Re-engineered SSH connection flow to connect asynchronously, displaying a pending tab state and allowing users to cancel or queue connection attempts.
+- 📂 **Local File Browser**: Introduced a local filesystem browser side-by-side with remote SFTP, refactored into a unified `IntegratedFileBrowser`.
+- 📊 **Modular System Monitor**: Built a modular, customizable monitoring pane showing CPU, memory, and network activity with configurable and persistent panel layouts.
+- 📝 **Terminal Compose Pane**: Added a multi-line text compose pane in the bottom panel for drafting and executing commands in active terminals.
+- 🎨 **UI & Dark Theme Refinements**: Standardized on a cohesive dark theme color palette and refined visual borders, drop shadows, and layout panels for a premium feel.
+- 🔄 **Auto Connection Naming**: Implemented automatic connection profile naming based on hostname input.
+- 📏 **Window Size Persistence**: Added support for persisting and restoring app window sizes between sessions.
+- 📦 **Release DMG Workflow**: Added a GitHub Actions workflow to compile, build, and publish release-ready DMG packages.
+
+### Changed
+
+- 🧹 **Legacy Code Cleanup**: Removed legacy session-restoration logic, retired connection security note UI elements, and simplified welcome screen elements.
+- ⚙️ **Performance & Type Safety**: Replaced polling with callback-based selection tracking in the file browser, and improved settings type-safety.
+- 🖥️ **Local Shell Optimization**: Automatically hide panel action buttons that are irrelevant for local shell connections.
+
 ## [0.1.0] - 2026-06-28
 
 ### Changed
