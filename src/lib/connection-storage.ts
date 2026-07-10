@@ -6,15 +6,19 @@
 import {
   deleteConnectionSecrets,
   KEYCHAIN_MIGRATION_FLAG,
+  KEYCHAIN_MIGRATION_FLAG_V1,
   loadConnectionSecrets,
+  mergeConnectionSecrets,
+  pruneSecretsForAuthMethod,
   storeConnectionSecrets,
   updateConnectionSecrets,
   type ConnectionSecrets,
   type ConnectionSecretUpdate,
+  type CredentialStoreOptions,
   copyConnectionSecrets,
 } from './credential-storage';
 
-export type { ConnectionSecretUpdate } from './credential-storage';
+export type { ConnectionSecretUpdate, CredentialAuthMethod, CredentialStoreOptions } from './credential-storage';
 
 export interface ConnectionData {
   id: string;
@@ -58,6 +62,24 @@ function sanitizeConnectionForStorage(connection: ConnectionData): ConnectionDat
   } = connection;
 
   return persisted;
+}
+
+/** Strip secrets and Keychain presence flags (export/import must not imply stored secrets). */
+function stripCredentialMetadata(connection: ConnectionData): ConnectionData {
+  const sanitized = sanitizeConnectionForStorage(connection);
+  const {
+    hasStoredPassword: _hasStoredPassword,
+    hasStoredPassphrase: _hasStoredPassphrase,
+    hasStoredPrivateKey: _hasStoredPrivateKey,
+    ...withoutFlags
+  } = sanitized;
+
+  return {
+    ...withoutFlags,
+    hasStoredPassword: false,
+    hasStoredPassphrase: false,
+    hasStoredPrivateKey: false,
+  };
 }
 
 function sanitizeConnectionsForStorage(connections: ConnectionData[]): ConnectionData[] {
@@ -484,16 +506,17 @@ export class ConnectionStorageManager {
   }
 
   /**
-   * Export connections as JSON
+   * Export connections as JSON (secrets and hasStored* flags excluded).
    */
   static exportConnections(): string {
-    const connections = sanitizeConnectionsForStorage(this.getConnections());
+    const connections = this.getConnections().map(stripCredentialMetadata);
     const folders = this.getFolders();
     return JSON.stringify({ connections, folders, secretsExcluded: true }, null, 2);
   }
 
   /**
-   * Import connections from JSON
+   * Import connections from JSON.
+   * New UUIDs break Keychain linkage; credential flags are always reset.
    */
   static importConnections(json: string, merge: boolean = false): number {
     try {
@@ -522,10 +545,10 @@ export class ConnectionStorageManager {
         });
       }
 
-      // Import connections with new IDs
+      // Import connections with new IDs; never rehydrate secrets or hasStored* flags
       imported.connections.forEach(connection => {
         connections.push({
-          ...connection,
+          ...stripCredentialMetadata(connection),
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
         });
@@ -542,7 +565,8 @@ export class ConnectionStorageManager {
   }
 
   /**
-   * Clear all connections and folders (use with caution!)
+   * Clear all connections and folders from localStorage only.
+   * Prefer {@link clearAllConnectionsWithCredentials} so Keychain entries are removed too.
    */
   static clearAll(): void {
     localStorage.removeItem(CONNECTIONS_STORAGE_KEY);
@@ -579,9 +603,14 @@ export async function saveConnectionWithCredentials(
   id: string,
   connection: Omit<ConnectionData, 'id' | 'createdAt'>,
   secrets?: ConnectionSecrets,
-  options?: { rememberPassword?: boolean },
+  options?: CredentialStoreOptions,
 ): Promise<ConnectionData> {
-  const credentialFlags = await storeConnectionSecrets(id, secrets ?? {}, options);
+  const authMethod = options?.authMethod ?? connection.authMethod;
+  let credentialFlags = await storeConnectionSecrets(id, secrets ?? {}, options);
+
+  if (authMethod && (credentialFlags.hasStoredPassword || credentialFlags.hasStoredPassphrase || credentialFlags.hasStoredPrivateKey)) {
+    credentialFlags = await pruneSecretsForAuthMethod(id, authMethod, credentialFlags);
+  }
 
   return ConnectionStorageManager.saveConnectionWithId(id, {
     ...connection,
@@ -595,12 +624,16 @@ export async function updateConnectionWithCredentials(
   id: string,
   updates: Partial<Omit<ConnectionData, 'id' | 'createdAt'>>,
   secrets?: ConnectionSecretUpdate,
-  options?: { rememberPassword?: boolean },
+  options?: CredentialStoreOptions,
 ): Promise<ConnectionData | null> {
   const existing = ConnectionStorageManager.getConnection(id);
   if (!existing) return null;
 
-  const credentialFlags = await updateConnectionSecrets(id, secrets ?? {}, existing, options);
+  const authMethod = options?.authMethod ?? updates.authMethod ?? existing.authMethod;
+  const credentialFlags = await updateConnectionSecrets(id, secrets ?? {}, existing, {
+    ...options,
+    authMethod,
+  });
 
   return ConnectionStorageManager.updateConnection(id, {
     ...updates,
@@ -613,6 +646,15 @@ export async function updateConnectionWithCredentials(
 export async function deleteConnectionWithCredentials(id: string): Promise<boolean> {
   await deleteConnectionSecrets(id);
   return ConnectionStorageManager.deleteConnection(id);
+}
+
+/**
+ * Delete every connection's Keychain secrets, then wipe localStorage connections/folders.
+ */
+export async function clearAllConnectionsWithCredentials(): Promise<void> {
+  const ids = ConnectionStorageManager.getConnections().map((c) => c.id);
+  await Promise.all(ids.map((id) => deleteConnectionSecrets(id)));
+  ConnectionStorageManager.clearAll();
 }
 
 export async function duplicateConnectionWithCredentials(
@@ -637,28 +679,36 @@ export async function migratePlaintextCredentialsToKeychain(): Promise<number> {
     connections.map(async (connection) => {
       const legacyPassword = connection.password;
       const legacyPassphrase = connection.passphrase;
+      const legacyPrivateKey = connection.privateKeyContent;
 
-      if (!legacyPassword && !legacyPassphrase) {
+      if (!legacyPassword && !legacyPassphrase && !legacyPrivateKey) {
         return sanitizeConnectionForStorage(connection);
       }
 
-      const flags = await storeConnectionSecrets(
-        connection.id,
-        { password: legacyPassword, passphrase: legacyPassphrase },
-        { force: true },
-      );
+      // Merge-only: do not full-replace, so already-migrated Keychain types stay.
+      const flags = await mergeConnectionSecrets(connection.id, {
+        password: legacyPassword,
+        passphrase: legacyPassphrase,
+        privateKey: legacyPrivateKey,
+      });
 
       migratedCount += 1;
       return sanitizeConnectionForStorage({
         ...connection,
-        hasStoredPassword: flags.hasStoredPassword || !!legacyPassword,
-        hasStoredPassphrase: flags.hasStoredPassphrase || !!legacyPassphrase,
+        hasStoredPassword:
+          flags.hasStoredPassword || !!connection.hasStoredPassword || !!legacyPassword,
+        hasStoredPassphrase:
+          flags.hasStoredPassphrase || !!connection.hasStoredPassphrase || !!legacyPassphrase,
+        hasStoredPrivateKey:
+          flags.hasStoredPrivateKey || !!connection.hasStoredPrivateKey || !!legacyPrivateKey,
       });
     }),
   );
 
   ConnectionStorageManager.replaceAllConnections(updatedConnections);
   localStorage.setItem(KEYCHAIN_MIGRATION_FLAG, '1');
+  // Clear v1 flag so only v2 is authoritative going forward.
+  localStorage.removeItem(KEYCHAIN_MIGRATION_FLAG_V1);
 
   return migratedCount;
 }

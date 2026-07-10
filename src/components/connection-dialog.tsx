@@ -182,6 +182,7 @@ export function ConnectionDialog({
         credentialSecrets,
         {
           rememberPassword,
+          authMethod: config.authMethod,
         },
       );
     } else if (saveAsConnection) {
@@ -196,6 +197,7 @@ export function ConnectionDialog({
         ...connectionMeta,
       }, credentialSecrets, {
         rememberPassword,
+        authMethod: config.authMethod,
       });
     }
 
@@ -502,6 +504,7 @@ export function ConnectionDialog({
             credentialSecrets,
             {
               rememberPassword,
+              authMethod: config.authMethod,
             },
           );
         } else if (saveAsConnection) {
@@ -517,6 +520,7 @@ export function ConnectionDialog({
             ftpsEnabled: config.ftpsEnabled,
           }, credentialSecrets, {
             rememberPassword,
+            authMethod: config.authMethod,
           });
         }
 

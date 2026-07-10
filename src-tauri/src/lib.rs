@@ -315,6 +315,7 @@ pub fn run() {
             commands::update_menu_language,
             commands::store_connection_secret,
             commands::get_connection_secret,
+            commands::delete_connection_secret,
             commands::delete_connection_secrets,
             commands::validate_private_key_path,
             commands::read_private_key_file_command,

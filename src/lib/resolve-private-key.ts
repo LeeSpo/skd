@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ConnectionData } from './connection-storage';
+import { loadConnectionSecrets } from './credential-storage';
 
 export type PrivateKeySource = 'path' | 'paste';
 
@@ -9,6 +10,8 @@ export interface PrivateKeyInput {
   privateKeyContent?: string;
   hasStoredPrivateKey?: boolean;
   storedPrivateKey?: string;
+  /** When set, Keychain can be loaded for this connection id */
+  connectionId?: string;
 }
 
 const PEM_MARKERS = ['BEGIN OPENSSH PRIVATE KEY', 'BEGIN PRIVATE KEY', 'BEGIN RSA PRIVATE KEY', 'BEGIN EC PRIVATE KEY'];
@@ -25,6 +28,15 @@ export async function resolvePrivateKeyContent(input: PrivateKeyInput): Promise<
 
   if (input.storedPrivateKey?.trim()) {
     return input.storedPrivateKey.trim();
+  }
+
+  if (input.hasStoredPrivateKey && input.connectionId) {
+    const secrets = await loadConnectionSecrets(input.connectionId, {
+      hasStoredPrivateKey: true,
+    });
+    if (secrets.privateKey?.trim()) {
+      return secrets.privateKey.trim();
+    }
   }
 
   if (input.privateKeyPath?.trim()) {
@@ -58,13 +70,20 @@ export async function resolvePrivateKeyForStorage(
     return input.privateKeyContent.trim();
   }
 
+  if (input.hasStoredPrivateKey && input.connectionId) {
+    const secrets = await loadConnectionSecrets(input.connectionId, {
+      hasStoredPrivateKey: true,
+    });
+    return secrets.privateKey?.trim();
+  }
+
   return undefined;
 }
 
 export async function getPrivateKeyContentForConnection(
   connection: Pick<
     ConnectionData,
-    'privateKeyContent' | 'privateKeyPath' | 'hasStoredPrivateKey' | 'privateKeySource'
+    'id' | 'privateKeyContent' | 'privateKeyPath' | 'hasStoredPrivateKey' | 'privateKeySource'
   >,
 ): Promise<string | null> {
   const content = await resolvePrivateKeyContent({
@@ -73,6 +92,7 @@ export async function getPrivateKeyContentForConnection(
     hasStoredPrivateKey: connection.hasStoredPrivateKey,
     storedPrivateKey: connection.privateKeyContent,
     privateKeySource: connection.privateKeySource,
+    connectionId: connection.id,
   });
   return content ?? null;
 }

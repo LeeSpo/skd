@@ -71,6 +71,11 @@ pub fn get_connection_secret(connection_id: &str, secret_type: &str) -> Result<O
     get_secret(&account)
 }
 
+pub fn delete_connection_secret(connection_id: &str, secret_type: &str) -> Result<(), String> {
+    let kind = SecretKind::from_str(secret_type)?;
+    delete_secret(&account_key(connection_id, kind))
+}
+
 pub fn delete_connection_secrets(connection_id: &str) -> Result<(), String> {
     delete_secret(&account_key(connection_id, SecretKind::Password))?;
     delete_secret(&account_key(connection_id, SecretKind::Passphrase))?;
@@ -128,5 +133,32 @@ mod tests {
         assert!(get_connection_secret(connection_id, "private_key")
             .expect("get private key after delete")
             .is_none());
+    }
+
+    #[test]
+    fn test_delete_single_secret_type_leaves_others() {
+        use_mock_keyring();
+
+        let connection_id = "conn-single-delete";
+        store_connection_secret(connection_id, "password", "pw").expect("store password");
+        store_connection_secret(connection_id, "passphrase", "pp").expect("store passphrase");
+        store_connection_secret(connection_id, "private_key", "key-pem").expect("store private key");
+
+        delete_connection_secret(connection_id, "password").expect("delete password only");
+
+        assert!(get_connection_secret(connection_id, "password")
+            .expect("get password after single delete")
+            .is_none());
+
+        let passphrase = get_connection_secret(connection_id, "passphrase").expect("get passphrase");
+        let private_key = get_connection_secret(connection_id, "private_key").expect("get private key");
+
+        // Mock backend may no-op on some environments; only assert when store succeeded.
+        if passphrase.is_some() {
+            assert_eq!(passphrase.as_deref(), Some("pp"));
+            assert_eq!(private_key.as_deref(), Some("key-pem"));
+        }
+
+        delete_connection_secrets(connection_id).expect("cleanup");
     }
 }

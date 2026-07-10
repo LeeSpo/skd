@@ -3243,6 +3243,14 @@ pub fn get_connection_secret(
 }
 
 #[tauri::command]
+pub fn delete_connection_secret(
+    connection_id: String,
+    secret_type: String,
+) -> Result<(), String> {
+    crate::credential_store::delete_connection_secret(&connection_id, &secret_type)
+}
+
+#[tauri::command]
 pub fn delete_connection_secrets(connection_id: String) -> Result<(), String> {
     crate::credential_store::delete_connection_secrets(&connection_id)
 }
