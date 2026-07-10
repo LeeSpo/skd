@@ -2,6 +2,7 @@ use base64::Engine as _;
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
 use crate::os_detect::{self, OsInfo};
+use crate::port_forward::LocalForwardInfo;
 use crate::sftp_client::{FileEntry, FileEntryType, SftpAuthMethod, SftpConfig};
 use crate::ssh::{AuthMethod, SshConfig};
 use serde::{Deserialize, Serialize};
@@ -132,6 +133,78 @@ pub async fn ssh_disconnect(
             error: Some(e.to_string()),
         }),
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LocalForwardRequest {
+    pub connection_id: String,
+    pub name: Option<String>,
+    pub local_bind_host: Option<String>,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+}
+
+/// Start a local (OpenSSH `-L`) port forward on an active SSH session.
+#[tauri::command]
+pub async fn ssh_start_local_forward(
+    request: LocalForwardRequest,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<LocalForwardInfo, String> {
+    let local_bind_host = request
+        .local_bind_host
+        .filter(|h| !h.trim().is_empty())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let remote_host = if request.remote_host.trim().is_empty() {
+        "localhost".to_string()
+    } else {
+        request.remote_host
+    };
+
+    state
+        .start_local_forward(
+            request.connection_id,
+            request.name.filter(|n| !n.trim().is_empty()),
+            local_bind_host,
+            request.local_port,
+            remote_host,
+            request.remote_port,
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Stop a local port forward by id.
+#[tauri::command]
+pub async fn ssh_stop_local_forward(
+    connection_id: String,
+    forward_id: String,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<CommandResponse, String> {
+    match state
+        .stop_local_forward(&connection_id, &forward_id)
+        .await
+    {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            output: Some("Port forward stopped".to_string()),
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            output: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+/// List active local port forwards for a connection.
+#[tauri::command]
+pub async fn ssh_list_local_forwards(
+    connection_id: String,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<Vec<LocalForwardInfo>, String> {
+    Ok(state.list_local_forwards(&connection_id).await)
 }
 
 #[tauri::command]

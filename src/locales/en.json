@@ -380,6 +380,7 @@
     "previousTab": "Previous Tab",
     "reconnect": "Reconnect",
     "disconnect": "Disconnect",
+    "portForwarding": "Port Forwarding…",
     "undo": "Undo",
     "redo": "Redo",
     "minimize": "Minimize",
@@ -439,7 +440,53 @@
     "justNow": "Just now",
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago"
+    "daysAgo": "{{count}}d ago",
+    "portForwarding": "Port Forwarding"
+  },
+  "portForward": {
+    "title": "SSH Port Forwarding",
+    "description": "Forward a local TCP port through the active SSH session (local / -L).",
+    "descriptionWithSession": "Local port forwards for {{session}}.",
+    "noActiveSsh": "Connect an SSH session to manage port forwards.",
+    "section": {
+      "add": "New local forward",
+      "active": "Active forwards"
+    },
+    "label": {
+      "name": "Name (optional)",
+      "localBindHost": "Local bind address",
+      "localPort": "Local port",
+      "remoteHost": "Remote host",
+      "remotePort": "Remote port"
+    },
+    "placeholder": {
+      "name": "e.g. Postgres",
+      "localPort": "8080 (0 = auto)",
+      "remoteHost": "localhost",
+      "remotePort": "5432"
+    },
+    "action": {
+      "start": "Start",
+      "stop": "Stop"
+    },
+    "empty": "No active port forwards for this session.",
+    "status": {
+      "listening": "Listening"
+    },
+    "validation": {
+      "localBindHostRequired": "Local bind address is required.",
+      "localPortInvalid": "Local port must be between 0 and 65535.",
+      "remoteHostRequired": "Remote host is required.",
+      "remotePortInvalid": "Remote port must be between 1 and 65535."
+    },
+    "toast": {
+      "started": "Port forward started",
+      "startFailed": "Failed to start port forward",
+      "stopped": "Port forward stopped",
+      "stopFailed": "Failed to stop port forward",
+      "listFailed": "Failed to load port forwards",
+      "needSsh": "Port forwarding requires a connected SSH session"
+    }
   },
   "fileBrowser": {
     "connectPrompt": "Connect to SSH to browse remote files",

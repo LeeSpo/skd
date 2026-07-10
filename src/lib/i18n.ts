@@ -10,7 +10,7 @@ const NATIVE_MENU_KEYS = [
   'menuBar.find', 'menuBar.clearScreen',
   'menuBar.options', 'menuBar.checkForUpdates',
   'menuBar.newTab', 'menuBar.duplicateTab', 'menuBar.nextTab', 'menuBar.previousTab',
-  'menuBar.reconnect', 'menuBar.disconnect',
+  'menuBar.reconnect', 'menuBar.disconnect', 'menuBar.portForwarding',
   'menuBar.undo', 'menuBar.redo', 'menuBar.cut', 'menuBar.copy', 'menuBar.paste', 'menuBar.selectAll',
   'menuBar.minimize', 'menuBar.zoom', 'menuBar.fullscreen',
 ] as const;

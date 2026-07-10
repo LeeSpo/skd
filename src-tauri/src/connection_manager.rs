@@ -1,10 +1,11 @@
 use crate::ftp_client::FtpClient;
 use crate::os_detect::OsInfoCache;
+use crate::port_forward::{LocalForwardInfo, PortForwardManager};
 use crate::sftp_client::StandaloneSftpClient;
 use crate::local_shell;
 use crate::pty_session::PtySession;
 use crate::ssh::{SshClient, SshConfig};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -25,6 +26,8 @@ pub struct ConnectionManager {
     connection_types: Arc<RwLock<HashMap<String, String>>>,
     /// Cached OS info per SSH connection (auto-detected on first monitoring call)
     os_info_cache: OsInfoCache,
+    /// Session-scoped local port forwards (cleaned up on disconnect)
+    port_forwards: PortForwardManager,
 }
 
 impl ConnectionManager {
@@ -38,6 +41,7 @@ impl ConnectionManager {
             ftp_connections: Arc::new(RwLock::new(HashMap::new())),
             connection_types: Arc::new(RwLock::new(HashMap::new())),
             os_info_cache: OsInfoCache::new(),
+            port_forwards: PortForwardManager::new(),
         }
     }
 
@@ -88,6 +92,11 @@ impl ConnectionManager {
     }
 
     pub async fn close_connection(&self, connection_id: &str) -> Result<()> {
+        // Stop listeners before tearing down the SSH session so accept loops exit cleanly.
+        self.port_forwards
+            .stop_all_for_connection(connection_id)
+            .await;
+
         let mut connections = self.connections.write().await;
         if let Some(client) = connections.remove(connection_id) {
             let mut client = client.write().await;
@@ -96,6 +105,48 @@ impl ConnectionManager {
         // Clean up cached OS info for this connection
         self.os_info_cache.remove(connection_id).await;
         Ok(())
+    }
+
+    /// Start a local TCP → SSH direct-tcpip port forward on an active SSH session.
+    pub async fn start_local_forward(
+        &self,
+        connection_id: String,
+        name: Option<String>,
+        local_bind_host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+    ) -> Result<LocalForwardInfo> {
+        let client = self
+            .get_connection(&connection_id)
+            .await
+            .ok_or_else(|| anyhow!("SSH connection not found"))?;
+        let session = {
+            let guard = client.read().await;
+            guard
+                .session_handle()
+                .ok_or_else(|| anyhow!("SSH session is not connected"))?
+        };
+
+        self.port_forwards
+            .start_local(
+                connection_id,
+                session,
+                name,
+                local_bind_host,
+                local_port,
+                remote_host,
+                remote_port,
+            )
+            .await
+    }
+
+    pub async fn stop_local_forward(&self, connection_id: &str, forward_id: &str) -> Result<()> {
+        self.port_forwards.stop(connection_id, forward_id).await
+    }
+
+    pub async fn list_local_forwards(&self, connection_id: &str) -> Vec<LocalForwardInfo> {
+        self.port_forwards.list(connection_id).await
     }
 
     /// Access the OS info cache (for distro-aware monitoring commands).

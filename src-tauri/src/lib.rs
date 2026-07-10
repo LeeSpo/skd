@@ -5,6 +5,7 @@ mod known_hosts;
 mod ftp_client;
 mod local_shell;
 mod os_detect;
+mod port_forward;
 mod pty_session;
 mod sftp_client;
 mod ssh;
@@ -146,6 +147,14 @@ fn build_app_menu<F: Fn(&str) -> String>(
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "reconnect", &t("menuBar.reconnect"), true, Some("F5"))?,
             &MenuItem::with_id(app, "disconnect", &t("menuBar.disconnect"), true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(
+                app,
+                "port_forwarding",
+                &t("menuBar.portForwarding"),
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -197,6 +206,7 @@ fn default_menu_text(key: &str) -> String {
         "menuBar.previousTab" => "Previous Tab",
         "menuBar.reconnect" => "Reconnect",
         "menuBar.disconnect" => "Disconnect",
+        "menuBar.portForwarding" => "Port Forwarding…",
         "menuBar.undo" => "Undo",
         "menuBar.redo" => "Redo",
         "menuBar.cut" => "Cut",
@@ -258,6 +268,9 @@ pub fn run() {
             commands::ssh_connect,
             commands::ssh_cancel_connect,
             commands::ssh_disconnect,
+            commands::ssh_start_local_forward,
+            commands::ssh_stop_local_forward,
+            commands::ssh_list_local_forwards,
             commands::local_shell_connect,
             commands::local_shell_disconnect,
             commands::ssh_execute_command,

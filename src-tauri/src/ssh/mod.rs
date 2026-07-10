@@ -249,6 +249,12 @@ impl SshClient {
         self.session.is_some()
     }
 
+    /// Clone of the authenticated session handle for concurrent channels
+    /// (PTY, SFTP, local port forwarding, etc.).
+    pub fn session_handle(&self) -> Option<Arc<client::Handle<Client>>> {
+        self.session.clone()
+    }
+
     /// Create a persistent PTY shell session (like ttyd)
     /// This enables interactive commands like vim, less, more, top, etc.
     pub async fn create_pty_session(&self, cols: u32, rows: u32) -> Result<PtySession> {

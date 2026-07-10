@@ -21,10 +21,13 @@ import {
   PanelBottomOpen,
   Maximize2,
   LayoutGrid,
+  Network,
 } from 'lucide-react';
 
 interface MenuBarProps {
   onOpenSettings?: () => void;
+  onOpenPortForward?: () => void;
+  portForwardEnabled?: boolean;
   onToggleLeftSidebar?: () => void;
   onToggleRightSidebar?: () => void;
   onToggleBottomPanel?: () => void;
@@ -41,6 +44,8 @@ interface MenuBarProps {
 
 export function MenuBar({
   onOpenSettings,
+  onOpenPortForward,
+  portForwardEnabled = false,
   onToggleLeftSidebar,
   onToggleRightSidebar,
   onToggleBottomPanel,
@@ -144,6 +149,20 @@ export function MenuBar({
               <DropdownMenuItem onClick={() => onApplyPreset?.('Zen Mode')}>{t('menuBar.zenMode')}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="menubar"
+                onClick={onOpenPortForward}
+                disabled={!portForwardEnabled}
+              >
+                <Network className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('menuBar.portForwarding')}</TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>

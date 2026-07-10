@@ -52,6 +52,9 @@ const ConnectionDialog = lazy(() => import('./components/connection-dialog').the
 const SettingsModal = lazy(() => import('./components/settings-modal').then((module) => ({
   default: module.SettingsModal,
 })));
+const PortForwardDialog = lazy(() => import('./components/port-forward-dialog').then((module) => ({
+  default: module.PortForwardDialog,
+})));
 const IntegratedFileBrowser = lazy(() => import('./components/integrated-file-browser').then((module) => ({
   default: module.IntegratedFileBrowser,
 })));
@@ -93,6 +96,7 @@ function AppContent() {
   // Modal states
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
   const [updateCheckSignal, setUpdateCheckSignal] = useState(0);
   const [keyboardShortcutSettings, setKeyboardShortcutSettings] = useState<SplitViewShortcutBindings>(
@@ -998,6 +1002,17 @@ function AppContent() {
     setSettingsModalOpen(true);
   }, []);
 
+  const canManagePortForward =
+    activeConnection?.protocol === 'SSH' && activeConnection.status === 'connected';
+
+  const handleOpenPortForward = useCallback(() => {
+    if (!canManagePortForward) {
+      toast.error(t('portForward.toast.needSsh'));
+      return;
+    }
+    setPortForwardDialogOpen(true);
+  }, [canManagePortForward, t]);
+
   // Listen for native macOS menu events forwarded by Rust via app.emit("menu-action", id)
   useEffect(() => {
     const unlistenPromise = listen<string>('menu-action', (event) => {
@@ -1037,13 +1052,16 @@ function AppContent() {
         case 'settings':
           handleOpenSettings();
           break;
+        case 'port_forwarding':
+          handleOpenPortForward();
+          break;
         case 'check_updates':
           setUpdateCheckSignal(c => c + 1);
           break;
       }
     });
     return () => { unlistenPromise.then(fn => fn()); };
-  }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleTabClose, handleOpenSettings, handleDuplicateTab, dispatch]);
+  }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleTabClose, handleOpenSettings, handleOpenPortForward, handleDuplicateTab, dispatch]);
 
   const handleEditConnection = useCallback((connection: ConnectionNode) => {
     if (connection.type === 'connection') {
@@ -1284,6 +1302,8 @@ function AppContent() {
       </Suspense>
       <MenuBar
         onOpenSettings={handleOpenSettings}
+        onOpenPortForward={handleOpenPortForward}
+        portForwardEnabled={canManagePortForward}
         onToggleLeftSidebar={toggleLeftSidebar}
         onToggleRightSidebar={toggleRightSidebar}
         onToggleBottomPanel={toggleBottomPanel}
@@ -1501,6 +1521,17 @@ function AppContent() {
               // via their own settings listeners in TerminalGroupView
             }}
             onCheckForUpdates={() => setUpdateCheckSignal((current) => current + 1)}
+          />
+        )}
+
+        {portForwardDialogOpen && (
+          <PortForwardDialog
+            open={portForwardDialogOpen}
+            onOpenChange={setPortForwardDialogOpen}
+            connectionId={canManagePortForward ? activeConnection?.connectionId ?? null : null}
+            connectionName={activeConnection?.name}
+            connectionHost={activeConnection?.host}
+            canManage={!!canManagePortForward}
           />
         )}
       </Suspense>
