@@ -45,10 +45,12 @@ interface PtyTerminalProps {
 
 /** Per-session output cap. When cumulative bytes written to xterm exceed this
  *  value the scrollback is cleared automatically so V8 heap stays bounded.
- *  2 MB of decoded text ≈ ~25k typical 80-char terminal lines. Kept low to
- *  prevent V8 heap fragmentation and WebGL texture-cache bloat during
- *  sustained high-throughput output (e.g. `yes`). */
-const SESSION_OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024;
+ *  32 MB of decoded text ≈ ~400k typical 80-char terminal lines — enough for
+ *  normal builds, logs, and long interactive sessions without frequent wipes,
+ *  while still bounding runaway high-throughput output (e.g. `yes`).
+ *  xterm's own scrollback option already limits retained history; this cap is
+ *  a cumulative session safety net against heap / WebGL cache growth. */
+const SESSION_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024;
 
 const terminalDebug = (...args: unknown[]) => {
   if (import.meta.env.DEV) {
