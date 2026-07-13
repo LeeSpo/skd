@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-13
+
+### Added
+
+- 🔀 **SSH Port Forwarding & Bookmark Management**: Implemented local SSH port forwarding with user-friendly configurations in the UI. Added port forward bookmark management, health checks, and active connection diagnostic status tracking.
+- 🎨 **Theme Palettes & Custom Styling**: Introduced configurable application color palettes with real-time live preview in Settings, storing theme settings in localStorage.
+- 🔑 **Granular Keychain Access**: Enhanced keychain integration with granular, credential-specific storage and recovery for SSH passwords and private keys.
+- 📁 **Global Tab Drag-and-Drop State**: Refactored tab drag-and-drop states globally to provide smoother UI feedback when dragging tabs and splitting terminal groups.
+
+### Changed
+
+- 🪵 **Terminal Session Buffer Limit**: Increased the active session output buffer size limit from 2MB to 32MB to support significantly longer terminal scrollback history.
+
+### Fixed
+
+- 🛠️ **Stability Improvements**: Strengthened WebSocket reconnect reliability, SFTP client file operation error handling, and connection lifecycle diagnostic tracking.
+
 ## [0.1.2] - 2026-07-07
 
 ### Added

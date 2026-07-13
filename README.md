@@ -6,13 +6,14 @@ skd is a macOS lightweight terminal workspace focused on SSH, local shells, SFTP
 
 - **SSH terminal sessions** — Interactive PTY terminals over SSH with password and public-key authentication
 - **Local shell sessions** — Open a local terminal tab alongside remote sessions
-- **Multi-tab terminal workspace** — Tab groups with split panes (up, down, left, right) and drag-and-drop tab management
+- **Multi-tab terminal workspace** — Tab groups with split panes (up, down, left, right) and smooth global drag-and-drop tab management
 - **SFTP file manager** — Dual-panel local/remote browser with upload, download, rename, delete, and transfer queue
 - **Host profiles** — Save connections in a tree-view sidebar with folders
 - **Private key authentication** — RSA, Ed25519, and ECDSA key support (file path or pasted key content)
 - **Host key verification** — Interactive trust prompts against a local known_hosts store
-- **macOS Keychain** — Optional secure storage for passwords and private-key passphrases
-- **SSH local port forwarding** — Forward local ports through an active SSH session
+- **macOS Keychain** — Secure, granular storage for connection passwords and private-key passphrases using native macOS Keychain
+- **SSH local port forwarding** — Local SSH port forwarding with bookmark management, automated health checks, and active connection diagnostic tracking
+- **Theme Palettes** — Multiple configurable application color palettes with real-time live preview in settings
 - **Remote file editor** — Edit remote files with CodeMirror 6
 - **System monitor** — Optional CPU, memory, disk, network, and process panels for remote hosts
 - **FTP / FTPS** — Legacy protocol support remains available (not the primary focus)
