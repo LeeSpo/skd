@@ -1361,7 +1361,7 @@ function AppContent() {
     && !hideRightPanels;
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-workspace">
       <Suspense fallback={null}>
         <UpdateChecker checkSignal={updateCheckSignal} />
       </Suspense>

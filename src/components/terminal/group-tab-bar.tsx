@@ -308,7 +308,7 @@ export function GroupTabBar({
 
   return (
     <>
-      <div className="flex items-center border-b border-panel-border bg-muted/30">
+      <div className="flex items-center border-b border-panel-border bg-panel-toolbar">
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
@@ -326,10 +326,10 @@ export function GroupTabBar({
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    className={`group flex min-w-0 cursor-pointer select-none items-center gap-2 border-r border-panel-border px-3 py-2 outline-none focus:outline-none focus-visible:outline-none ${
+                    className={`group flex min-w-0 cursor-pointer select-none items-center gap-2 border-r border-t-2 border-panel-border px-3 py-2 outline-none focus:outline-none focus-visible:outline-none ${
                       tab.id === activeTabId
-                        ? 'bg-background text-foreground'
-                        : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'
+                        ? 'border-t-primary bg-surface-raised text-foreground'
+                        : 'border-t-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
                     onDragStart={handleNativeDragStart}

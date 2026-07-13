@@ -40,7 +40,7 @@ export function WelcomeScreen({ onNewConnection, onOpenSettings }: WelcomeScreen
   ];
 
   return (
-    <div className="flex h-full items-center overflow-auto bg-gradient-to-br from-background via-background to-muted/20 dark:to-muted/10">
+    <div className="flex h-full items-center overflow-auto bg-gradient-to-br from-workspace via-workspace to-surface-raised">
       <div className="max-w-3xl w-full mx-auto p-6 space-y-8 animate-in fade-in duration-500">
         {/* Hero Section */}
         <div className="flex items-center justify-center gap-3">

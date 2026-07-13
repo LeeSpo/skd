@@ -25,7 +25,7 @@ function toStatusDotVariant(
 export function StatusBar({ activeConnection }: StatusBarProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-7 items-center justify-between border-t border-border bg-muted px-4 text-xs">
+    <div className="flex h-7 items-center justify-between border-t border-panel-border bg-statusbar px-4 text-xs">
       <div className="flex items-center gap-4">
         {activeConnection && (
           <>

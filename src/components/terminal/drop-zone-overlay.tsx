@@ -37,19 +37,19 @@ export function DropZoneOverlay({ groupId, visible, activeZone }: DropZoneOverla
       aria-hidden
     >
       {activeZone === 'up' && (
-        <div data-testid="drop-zone-up" className="absolute inset-x-0 top-0 h-1/4 bg-blue-500/20" />
+        <div data-testid="drop-zone-up" className="absolute inset-x-0 top-0 h-1/4 bg-drop-zone ring-1 ring-inset ring-primary/50" />
       )}
       {activeZone === 'down' && (
-        <div data-testid="drop-zone-down" className="absolute inset-x-0 bottom-0 h-1/4 bg-blue-500/20" />
+        <div data-testid="drop-zone-down" className="absolute inset-x-0 bottom-0 h-1/4 bg-drop-zone ring-1 ring-inset ring-primary/50" />
       )}
       {activeZone === 'left' && (
-        <div data-testid="drop-zone-left" className="absolute inset-y-0 left-0 w-1/4 bg-blue-500/20" />
+        <div data-testid="drop-zone-left" className="absolute inset-y-0 left-0 w-1/4 bg-drop-zone ring-1 ring-inset ring-primary/50" />
       )}
       {activeZone === 'right' && (
-        <div data-testid="drop-zone-right" className="absolute inset-y-0 right-0 w-1/4 bg-blue-500/20" />
+        <div data-testid="drop-zone-right" className="absolute inset-y-0 right-0 w-1/4 bg-drop-zone ring-1 ring-inset ring-primary/50" />
       )}
       {activeZone === 'center' && (
-        <div data-testid="drop-zone-center" className="absolute inset-0 m-[25%] bg-blue-500/20" />
+        <div data-testid="drop-zone-center" className="absolute inset-0 m-[25%] bg-drop-zone ring-1 ring-inset ring-primary/50" />
       )}
     </div>
   );

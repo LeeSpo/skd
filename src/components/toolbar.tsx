@@ -80,7 +80,7 @@ export function Toolbar({
 
   return (
     <TooltipProvider>
-      <div className="border-b border-border bg-background px-2 py-1 flex items-center gap-1">
+      <div className="border-b border-panel-border bg-panel-toolbar px-2 py-1 flex items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="sm" onClick={onNewConnection}>

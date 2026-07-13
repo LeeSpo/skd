@@ -387,13 +387,13 @@ export function ConnectionManager({
 
     switch (node.protocol) {
       case 'SSH':
-        return <Server className="w-4 h-4 text-green-500" />;
+        return <Server className="w-4 h-4 text-success" />;
       case 'CMD':
       case 'PowerShell':
       case 'Shell':
-        return <Monitor className="w-4 h-4 text-blue-500" />;
+        return <Monitor className="w-4 h-4 text-primary" />;
       case 'WSL':
-        return <HardDrive className="w-4 h-4 text-orange-500" />;
+        return <HardDrive className="w-4 h-4 text-warning" />;
       default:
         return <Monitor className="w-4 h-4" />;
     }

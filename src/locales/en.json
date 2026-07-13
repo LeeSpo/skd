@@ -312,6 +312,8 @@
       "title": "Interface Settings",
       "desc": "Customize the application interface and panels.",
       "appTheme": "Application Theme",
+      "colorPalette": "Workspace Color Palette",
+      "colorPaletteDesc": "Choose a deep workspace palette. Selecting one also suggests a matching terminal theme.",
       "panelVisibility": "Panel Visibility",
       "connectionManager": "Connection Manager",
       "systemMonitor": "System Monitor",
@@ -346,6 +348,20 @@
       "dark": "Dark",
       "light": "Light",
       "auto": "Auto (System)"
+    },
+    "palette": {
+      "graphite": {
+        "name": "Graphite",
+        "description": "Neutral charcoal with crisp blue accents"
+      },
+      "midnight": {
+        "name": "Midnight",
+        "description": "Deep navy with cool indigo highlights"
+      },
+      "nordic": {
+        "name": "Nordic",
+        "description": "Soft slate with calm arctic cyan"
+      }
     },
     "cursor": {
       "block": "Block",

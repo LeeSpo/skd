@@ -91,6 +91,12 @@
   --panel-header-bg: color-mix(in srgb, var(--muted) 50%, transparent);
   --panel-toolbar-bg: color-mix(in srgb, var(--muted) 30%, transparent);
   --panel-border: color-mix(in srgb, var(--border) 50%, transparent);
+  --surface-raised: #ffffff;
+  --surface-selected: #e8f0fe;
+  --surface-hover: #f1f5f9;
+  --workspace-bg: #ffffff;
+  --statusbar-bg: #f1f5f9;
+  --drop-zone: rgba(37, 99, 235, 0.2);
 
   /* File browser typography */
   --file-chrome-font-size: 0.75rem;
@@ -103,92 +109,217 @@
   --font-weight-normal: 400;
 }
 
-.dark {
+.dark,
+.dark[data-color-palette="graphite"] {
   color-scheme: dark;
 
-  /* Base colors — VS Code Dark+ neutral charcoal */
-  --background: #1e1e1e;
-  --foreground: #cccccc;
+  /* Graphite — neutral macOS workspace */
+  --background: #15171a;
+  --foreground: #e6eaf0;
   
   /* Card & Surface */
-  --card: #252526;
-  --card-foreground: #cccccc;
+  --card: #1b1e23;
+  --card-foreground: #e6eaf0;
   
   /* Popover */
-  --popover: #252526;
-  --popover-foreground: #cccccc;
+  --popover: #22262c;
+  --popover-foreground: #e6eaf0;
   
   /* Primary */
-  --primary: #3794ff;
-  --primary-foreground: #ffffff;
-  --primary-hover: #4da3ff;
+  --primary: #5ea7ff;
+  --primary-foreground: #0c1622;
+  --primary-hover: #75b4ff;
   
   /* Secondary */
-  --secondary: #2d2d2d;
-  --secondary-foreground: #cccccc;
+  --secondary: #22262c;
+  --secondary-foreground: #e6eaf0;
   
   /* Muted */
-  --muted: #2d2d2d;
-  --muted-foreground: #858585;
+  --muted: #22262c;
+  --muted-foreground: #929ba8;
   
   /* Accent */
-  --accent: #2d2d2d;
-  --accent-foreground: #cccccc;
+  --accent: #273546;
+  --accent-foreground: #e6eaf0;
   
   /* Destructive */
-  --destructive: #f85149;
-  --destructive-foreground: #ffffff;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1a0b0b;
   
   /* Success */
-  --success: #3fb950;
-  --success-foreground: #ffffff;
+  --success: #4fd6a0;
+  --success-foreground: #071a13;
   
   /* Warning */
-  --warning: #d29922;
-  --warning-foreground: #ffffff;
+  --warning: #f0c674;
+  --warning-foreground: #201704;
   
   /* Border & Input */
-  --border: #3e3e42;
-  --input: #252526;
-  --input-background: #252526;
-  --ring: #3794ff;
+  --border: #303640;
+  --input: #22262c;
+  --input-background: #1b1e23;
+  --ring: #5ea7ff;
   
   /* Switch */
-  --switch-background: #3e3e42;
+  --switch-background: #454d59;
 
   /* Chart colors */
-  --chart-1: #3794ff;
-  --chart-2: #3fb950;
-  --chart-3: #d29922;
-  --chart-4: #f85149;
-  --chart-5: #a371f7;
+  --chart-1: #5ea7ff;
+  --chart-2: #4fd6a0;
+  --chart-3: #f0c674;
+  --chart-4: #ff6b6b;
+  --chart-5: #b89cff;
 
   /* Sidebar */
-  --sidebar: #252526;
-  --sidebar-foreground: #cccccc;
-  --sidebar-primary: #3794ff;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #2a2d2e;
-  --sidebar-accent-foreground: #cccccc;
-  --sidebar-border: #3e3e42;
-  --sidebar-ring: #3794ff;
+  --sidebar: #1b1e23;
+  --sidebar-foreground: #e6eaf0;
+  --sidebar-primary: #5ea7ff;
+  --sidebar-primary-foreground: #0c1622;
+  --sidebar-accent: #22262c;
+  --sidebar-accent-foreground: #e6eaf0;
+  --sidebar-border: #303640;
+  --sidebar-ring: #5ea7ff;
 
   /* Terminal */
   --terminal-bg: #1e1e1e;
-  --terminal-fg: #cccccc;
+  --terminal-fg: #e6eaf0;
   --terminal-cursor: #aeafad;
-  --terminal-selection: rgba(55, 148, 255, 0.3);
+  --terminal-selection: rgba(94, 167, 255, 0.3);
 
   /* Status colors */
-  --status-connected: #3fb950;
-  --status-connecting: #d29922;
-  --status-disconnected: #f85149;
-  --status-pending: #3794ff;
+  --status-connected: #4fd6a0;
+  --status-connecting: #f0c674;
+  --status-disconnected: #ff6b6b;
+  --status-pending: #5ea7ff;
 
   /* Panel chrome */
-  --panel-header-bg: color-mix(in srgb, var(--muted) 35%, transparent);
-  --panel-toolbar-bg: color-mix(in srgb, var(--muted) 20%, transparent);
-  --panel-border: color-mix(in srgb, var(--border) 50%, transparent);
+  --panel-header-bg: #22262c;
+  --panel-toolbar-bg: #1b1e23;
+  --panel-border: #303640;
+  --surface-raised: #22262c;
+  --surface-selected: #273546;
+  --surface-hover: #252a31;
+  --workspace-bg: #15171a;
+  --statusbar-bg: #1b1e23;
+  --drop-zone: rgba(94, 167, 255, 0.22);
+}
+
+.dark[data-color-palette="midnight"] {
+  --background: #0b1020;
+  --foreground: #e7ecf5;
+  --card: #11182a;
+  --card-foreground: #e7ecf5;
+  --popover: #18223a;
+  --popover-foreground: #e7ecf5;
+  --primary: #7aa2f7;
+  --primary-foreground: #08101f;
+  --primary-hover: #8eb2ff;
+  --secondary: #18223a;
+  --secondary-foreground: #e7ecf5;
+  --muted: #18223a;
+  --muted-foreground: #8f9ab3;
+  --accent: #1b2d50;
+  --accent-foreground: #e7ecf5;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1a0b0b;
+  --success: #4fd6a0;
+  --success-foreground: #071a13;
+  --warning: #f0c674;
+  --warning-foreground: #201704;
+  --border: #283552;
+  --input: #18223a;
+  --input-background: #11182a;
+  --ring: #7aa2f7;
+  --switch-background: #42506c;
+  --chart-1: #7aa2f7;
+  --chart-2: #4fd6a0;
+  --chart-3: #f0c674;
+  --chart-4: #ff6b6b;
+  --chart-5: #bb9af7;
+  --sidebar: #11182a;
+  --sidebar-foreground: #e7ecf5;
+  --sidebar-primary: #7aa2f7;
+  --sidebar-primary-foreground: #08101f;
+  --sidebar-accent: #18223a;
+  --sidebar-accent-foreground: #e7ecf5;
+  --sidebar-border: #283552;
+  --sidebar-ring: #7aa2f7;
+  --terminal-bg: #0b1020;
+  --terminal-fg: #e7ecf5;
+  --terminal-cursor: #c0caf5;
+  --terminal-selection: rgba(122, 162, 247, 0.3);
+  --status-connected: #4fd6a0;
+  --status-connecting: #f0c674;
+  --status-disconnected: #ff6b6b;
+  --status-pending: #7aa2f7;
+  --panel-header-bg: #18223a;
+  --panel-toolbar-bg: #11182a;
+  --panel-border: #283552;
+  --surface-raised: #18223a;
+  --surface-selected: #1b2d50;
+  --surface-hover: #1a2540;
+  --workspace-bg: #0b1020;
+  --statusbar-bg: #11182a;
+  --drop-zone: rgba(122, 162, 247, 0.22);
+}
+
+.dark[data-color-palette="nordic"] {
+  --background: #242933;
+  --foreground: #eceff4;
+  --card: #2e3440;
+  --card-foreground: #eceff4;
+  --popover: #3b4252;
+  --popover-foreground: #eceff4;
+  --primary: #88c0d0;
+  --primary-foreground: #152027;
+  --primary-hover: #9acbd8;
+  --secondary: #3b4252;
+  --secondary-foreground: #eceff4;
+  --muted: #3b4252;
+  --muted-foreground: #aeb8c7;
+  --accent: #3a4b59;
+  --accent-foreground: #eceff4;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1a0b0b;
+  --success: #4fd6a0;
+  --success-foreground: #071a13;
+  --warning: #f0c674;
+  --warning-foreground: #201704;
+  --border: #4c566a;
+  --input: #3b4252;
+  --input-background: #2e3440;
+  --ring: #88c0d0;
+  --switch-background: #5c677d;
+  --chart-1: #88c0d0;
+  --chart-2: #4fd6a0;
+  --chart-3: #f0c674;
+  --chart-4: #ff6b6b;
+  --chart-5: #b48ead;
+  --sidebar: #2e3440;
+  --sidebar-foreground: #eceff4;
+  --sidebar-primary: #88c0d0;
+  --sidebar-primary-foreground: #152027;
+  --sidebar-accent: #3b4252;
+  --sidebar-accent-foreground: #eceff4;
+  --sidebar-border: #4c566a;
+  --sidebar-ring: #88c0d0;
+  --terminal-bg: #242933;
+  --terminal-fg: #eceff4;
+  --terminal-cursor: #d8dee9;
+  --terminal-selection: rgba(136, 192, 208, 0.3);
+  --status-connected: #4fd6a0;
+  --status-connecting: #f0c674;
+  --status-disconnected: #ff6b6b;
+  --status-pending: #88c0d0;
+  --panel-header-bg: #3b4252;
+  --panel-toolbar-bg: #2e3440;
+  --panel-border: #4c566a;
+  --surface-raised: #3b4252;
+  --surface-selected: #3a4b59;
+  --surface-hover: #414959;
+  --workspace-bg: #242933;
+  --statusbar-bg: #2e3440;
+  --drop-zone: rgba(136, 192, 208, 0.22);
 }
 
 @theme inline {
@@ -245,6 +376,12 @@
   --color-panel-header: var(--panel-header-bg);
   --color-panel-toolbar: var(--panel-toolbar-bg);
   --color-panel-border: var(--panel-border);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-hover: var(--surface-hover);
+  --color-workspace: var(--workspace-bg);
+  --color-statusbar: var(--statusbar-bg);
+  --color-drop-zone: var(--drop-zone);
   --text-ui-2xs: 0.625rem;
   --text-ui-2xs--line-height: 0.875rem;
   --text-ui-xs: 0.6875rem;

@@ -89,6 +89,14 @@ export default {
           toolbar: 'var(--panel-toolbar-bg)',
           border: 'var(--panel-border)',
         },
+        surface: {
+          raised: 'var(--surface-raised)',
+          selected: 'var(--surface-selected)',
+          hover: 'var(--surface-hover)',
+        },
+        workspace: 'var(--workspace-bg)',
+        statusbar: 'var(--statusbar-bg)',
+        'drop-zone': 'var(--drop-zone)',
       },
       fontFamily: {
         sans: ['var(--font-sans)'],

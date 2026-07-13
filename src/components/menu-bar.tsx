@@ -63,7 +63,7 @@ export function MenuBar({
 
   return (
     <div
-      className="flex h-8 items-center gap-1 border-b border-panel-border bg-background"
+      className="flex h-8 items-center gap-1 border-b border-panel-border bg-surface-raised"
       // macOS traffic-light inset — keeps native window controls unobstructed
       style={{ paddingLeft: '80px' }}
     >

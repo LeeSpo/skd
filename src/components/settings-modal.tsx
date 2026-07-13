@@ -43,7 +43,18 @@ import {
   DEFAULT_APP_KEYBOARD_SHORTCUTS,
   loadKeyboardShortcutSettings,
 } from '../lib/keyboard-shortcuts';
-import { applyTheme, ThemeMode, cn } from '../lib/utils';
+import {
+  applyColorPalette,
+  applyTheme,
+  COLOR_PALETTES,
+  DEFAULT_COLOR_PALETTE,
+  getSavedColorPalette,
+  normalizeColorPalette,
+  PALETTE_TERMINAL_THEMES,
+  type ColorPalette,
+  type ThemeMode,
+  cn,
+} from '../lib/utils';
 import {
   loadEditorConfig,
   saveEditorConfig,
@@ -73,6 +84,7 @@ interface AppSettings {
   hostKeyVerification: boolean;
   autoLockTimeout: number;
   theme: ThemeMode;
+  colorPalette: ColorPalette;
   showConnectionManager: boolean;
   showSystemMonitor: boolean;
   showStatusBar: boolean;
@@ -86,10 +98,17 @@ interface AppSettings {
   checkUpdates: boolean;
 }
 
+const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> = {
+  graphite: ['#15171A', '#22262C', '#5EA7FF'],
+  midnight: ['#0B1020', '#18223A', '#7AA2F7'],
+  nordic: ['#242933', '#3B4252', '#88C0D0'],
+};
+
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {
   const { t } = useTranslation();
   const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearanceSettings>(defaultAppearanceSettings);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
+  const originalPaletteRef = useRef<ColorPalette>(getSavedColorPalette());
   
   const [settings, setSettings] = useState<AppSettings>({
     // Terminal settings
@@ -111,6 +130,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     
     // Interface settings
     theme: 'dark',
+    colorPalette: DEFAULT_COLOR_PALETTE,
     showConnectionManager: true,
     showSystemMonitor: true,
     showStatusBar: true,
@@ -131,6 +151,13 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   // Load settings when modal opens
   useEffect(() => {
     if (open) {
+      originalPaletteRef.current = normalizeColorPalette(
+        document.documentElement.dataset.colorPalette,
+      );
+      setSettings(prev => ({
+        ...prev,
+        colorPalette: getSavedColorPalette(),
+      }));
       const appearance = loadAppearanceSettings();
       setTerminalAppearance(appearance);
       setEditorConfig(loadEditorConfig());
@@ -145,6 +172,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           setSettings(prev => ({
             ...prev,
             ...rest,
+            colorPalette: normalizeColorPalette(rest.colorPalette),
             closeSession: keyboardShortcuts.closeTab,
             nextTab: keyboardShortcuts.nextTab,
             previousTab: keyboardShortcuts.prevTab,
@@ -167,6 +195,25 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const handlePaletteChange = (colorPalette: ColorPalette) => {
+    updateSetting('colorPalette', colorPalette);
+    applyColorPalette(colorPalette);
+    updateTerminalAppearance('theme', PALETTE_TERMINAL_THEMES[colorPalette]);
+  };
+
+  const handleCancel = () => {
+    applyColorPalette(originalPaletteRef.current);
+    onOpenChange(false);
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true);
+    } else {
+      handleCancel();
+    }
+  };
+
   const handleSave = () => {
     // Save terminal appearance settings
     saveAppearanceSettings(terminalAppearance);
@@ -182,7 +229,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     dispatchEditorConfigChanged();
     
     // Apply the theme immediately
-    applyTheme(settings.theme);
+    applyTheme(settings.theme, settings.colorPalette);
     
     // Save other settings to localStorage
     localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
@@ -193,7 +240,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const handleReset = () => {
     if (confirm(t('settings.resetConfirm'))) {
       // Reset terminal appearance
-      setTerminalAppearance(defaultAppearanceSettings);
+      setTerminalAppearance({
+        ...defaultAppearanceSettings,
+        theme: PALETTE_TERMINAL_THEMES[DEFAULT_COLOR_PALETTE],
+      });
       setEditorConfig(DEFAULT_EDITOR_CONFIG);
       
       // Reset other settings to default values
@@ -210,6 +260,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
         hostKeyVerification: true,
         autoLockTimeout: 30,
         theme: 'dark',
+        colorPalette: DEFAULT_COLOR_PALETTE,
         showConnectionManager: true,
         showSystemMonitor: true,
         showStatusBar: true,
@@ -224,7 +275,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
       });
       
       // Apply default theme
-      applyTheme('dark');
+      applyTheme('dark', DEFAULT_COLOR_PALETTE);
     }
   };
 
@@ -255,9 +306,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const scrollToActiveTab = useCallback(() => {
     const el = tabListRef.current;
     if (!el) return;
-    const activeTrigger = el.querySelector('[data-state="active"]');
+    const activeTrigger = el.querySelector<HTMLElement>('[data-state="active"]');
     if (!activeTrigger) return;
-    activeTrigger.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    const targetLeft = activeTrigger.offsetLeft
+      - (el.clientWidth - activeTrigger.offsetWidth) / 2;
+    el.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
@@ -292,7 +345,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         position={isTallTab ? "tauriTopTall" : "tauriTop"}
         className={cn(
@@ -990,7 +1043,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     onValueChange={(value) => {
                       updateSetting('theme', value);
                       // Apply theme immediately for instant preview
-                      applyTheme(value as ThemeMode);
+                      applyTheme(value as ThemeMode, settings.colorPalette);
                     }}
                   >
                     <SelectTrigger>
@@ -1002,6 +1055,50 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       <SelectItem value="auto">{t('settings.theme.auto')}</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <Label>{t('settings.interface.colorPalette')}</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t('settings.interface.colorPaletteDesc')}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {COLOR_PALETTES.map((palette) => {
+                      const selected = settings.colorPalette === palette;
+                      return (
+                        <button
+                          key={palette}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => handlePaletteChange(palette)}
+                          className={cn(
+                            'rounded-lg border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
+                            selected
+                              ? 'border-primary bg-surface-selected ring-1 ring-primary/50'
+                              : 'border-border',
+                          )}
+                        >
+                          <span className="mb-2 flex overflow-hidden rounded-md border border-white/10">
+                            {PALETTE_SWATCHES[palette].map((color) => (
+                              <span
+                                key={color}
+                                className="h-7 flex-1"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </span>
+                          <span className="block text-sm font-medium">
+                            {t(`settings.palette.${palette}.name`)}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {t(`settings.palette.${palette}.description`)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <Separator />
@@ -1166,7 +1263,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       onClick={() => {
                         onCheckForUpdates?.();
                         // Close the modal so the update dialog / toast is not obscured.
-                        onOpenChange(false);
+                        handleCancel();
                       }}
                       className="gap-1.5"
                     >
@@ -1189,7 +1286,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             {t('settings.button.resetToDefaults')}
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" onClick={handleCancel}>
               {t('common.cancel')}
             </Button>
             <Button onClick={handleSave} className="min-w-[120px]">
