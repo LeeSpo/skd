@@ -454,6 +454,50 @@ describe('MOVE_TAB_TO_NEW_GROUP', () => {
     });
     expect(next.groups['1']).toBeUndefined();
   });
+
+  it('splits relative to targetGroupId when dragging across panes', () => {
+    // Group 1: tab a,b | Group 2: tab c  (horizontal split)
+    let state = stateWithTabs('1', [makeTab('a'), makeTab('b')]);
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
+    state = terminalGroupReducer(state, { type: 'ADD_TAB', groupId: '2', tab: makeTab('c') });
+
+    // Drag tab a from group 1 onto group 2's right edge
+    const next = terminalGroupReducer(state, {
+      type: 'MOVE_TAB_TO_NEW_GROUP',
+      groupId: '1',
+      tabId: 'a',
+      direction: 'right',
+      targetGroupId: '2',
+    });
+
+    expect(next.groups['1'].tabs.map((t) => t.id)).toEqual(['b']);
+    expect(next.groups['2'].tabs.map((t) => t.id)).toEqual(['c']);
+    // New group holds the moved tab
+    const newGroupId = next.activeGroupId;
+    expect(next.groups[newGroupId].tabs.map((t) => t.id)).toEqual(['a']);
+    expect(next.tabToGroupMap['a']).toBe(newGroupId);
+
+    // Split was anchored at group 2: new leaf should be a sibling of group 2
+    expect(findLeafPath(next.gridLayout, '2')).not.toBeNull();
+    expect(findLeafPath(next.gridLayout, newGroupId)).not.toBeNull();
+    // Group 2 and new group share a common parent path prefix
+    const path2 = findLeafPath(next.gridLayout, '2')!;
+    const pathNew = findLeafPath(next.gridLayout, newGroupId)!;
+    expect(path2.slice(0, -1)).toEqual(pathNew.slice(0, -1));
+    expect(pathNew[pathNew.length - 1]).toBeGreaterThan(path2[path2.length - 1] ?? -1);
+  });
+
+  it('returns same state when targetGroupId does not exist', () => {
+    const state = stateWithTabs('1', [makeTab('a'), makeTab('b')]);
+    const next = terminalGroupReducer(state, {
+      type: 'MOVE_TAB_TO_NEW_GROUP',
+      groupId: '1',
+      tabId: 'a',
+      direction: 'right',
+      targetGroupId: 'missing',
+    });
+    expect(next).toBe(state);
+  });
 });
 
 // ── Reducer: UPDATE_TAB_STATUS ──

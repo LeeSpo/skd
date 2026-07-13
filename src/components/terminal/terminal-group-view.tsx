@@ -1,7 +1,15 @@
-import { lazy, Suspense, useCallback, useState, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
+import {
+  getActiveDrag,
+  getContentDropHover,
+  registerContentDropTarget,
+  subscribeTabDrag,
+  unregisterContentDropTarget,
+} from '../../lib/tab-drag-state';
+import { DropZoneOverlay } from './drop-zone-overlay';
 import { GroupTabBar } from './group-tab-bar';
 import { PanelSurfaceFallback } from '../ui/panel-chrome';
 import { WelcomeScreen } from '../welcome-screen';
@@ -44,6 +52,14 @@ function useThemeKey(): number {
   return themeKey;
 }
 
+function useActiveDrag() {
+  return useSyncExternalStore(subscribeTabDrag, getActiveDrag, getActiveDrag);
+}
+
+function useContentDropHover() {
+  return useSyncExternalStore(subscribeTabDrag, getContentDropHover, getContentDropHover);
+}
+
 export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const { t } = useTranslation();
   const { state, dispatch } = useTerminalGroups();
@@ -51,6 +67,19 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const group = state.groups[groupId];
   const isActive = state.activeGroupId === groupId;
   const themeKey = useThemeKey();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const activeDrag = useActiveDrag();
+  const contentDropHover = useContentDropHover();
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (el) {
+      registerContentDropTarget(groupId, el);
+      return () => {
+        unregisterContentDropTarget(groupId);
+      };
+    }
+  }, [groupId]);
 
   const handleMouseDown = useCallback(() => {
     if (!isActive) {
@@ -123,6 +152,8 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
         onNewTab={onNewTab}
       />
       <div
+        ref={contentRef}
+        data-group-content={groupId}
         className={`relative min-h-0 flex-1 overflow-hidden ${
           isActive ? 'ring-inset ring-1 ring-border/50' : ''
         }`}
@@ -183,6 +214,13 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
             </div>
           ))
         )}
+        <DropZoneOverlay
+          groupId={groupId}
+          visible={activeDrag != null}
+          activeZone={
+            contentDropHover?.groupId === groupId ? contentDropHover.zone : null
+          }
+        />
       </div>
     </section>
   );

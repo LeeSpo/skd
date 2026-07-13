@@ -1,10 +1,24 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, ArrowDown, MoveRight, FolderSync, Terminal, FileCode } from 'lucide-react';
 import type { TerminalTab, SplitDirection } from '../../lib/terminal-group-types';
 import { getTabDisplayName } from '../../lib/terminal-group-utils';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
+import {
+  calcTabInsertionIndex,
+  clearTabDrag,
+  findContentDropTargetAt,
+  findTabBarDropTargetAt,
+  getActiveDrag,
+  getContentDropHover,
+  registerTabBarDropTarget,
+  setActiveDrag,
+  setContentDropHover,
+  subscribeTabDrag,
+  unregisterTabBarDropTarget,
+} from '../../lib/tab-drag-state';
+import { getZoneFromPosition, isSplitDirection } from './drop-zone-overlay';
 import { Button } from '../ui/button';
 import { StatusDot } from '../ui/status-dot';
 import {
@@ -18,44 +32,6 @@ import {
   ContextMenuSubContent,
 } from '../ui/context-menu';
 
-// ── Module-level drag state (shared across all GroupTabBar instances) ──
-
-interface ActiveDrag {
-  tabId: string;
-  sourceGroupId: string;
-  tabName: string;
-}
-
-let activeDrag: ActiveDrag | null = null;
-const dragListeners = new Set<() => void>();
-
-function notifyDragChange() {
-  for (const fn of dragListeners) fn();
-}
-
-/** Registry of drop-target tab bar containers, keyed by groupId */
-const dropTargetRegistry = new Map<string, HTMLElement>();
-
-function findDropTargetAt(x: number, y: number): { groupId: string; element: HTMLElement } | null {
-  const elements = document.elementsFromPoint(x, y);
-  for (const el of elements) {
-    if (el.hasAttribute('data-tab-bar-group')) {
-      const gid = el.getAttribute('data-tab-bar-group');
-      if (gid) return { groupId: gid, element: el as HTMLElement };
-    }
-  }
-  return null;
-}
-
-function calcInsertionIndex(container: HTMLElement, clientX: number): number {
-  const tabElements = Array.from(container.querySelectorAll('[data-tab-id]'));
-  for (let i = 0; i < tabElements.length; i++) {
-    const rect = tabElements[i].getBoundingClientRect();
-    if (clientX < rect.left + rect.width / 2) return i;
-  }
-  return tabElements.length;
-}
-
 // ── Component ──
 
 interface GroupTabBarProps {
@@ -65,6 +41,10 @@ interface GroupTabBarProps {
   onNewTab?: () => void;
   onDuplicateTab?: (tabId: string) => void;
   onReconnect?: (tabId: string) => void;
+}
+
+function useActiveDrag() {
+  return useSyncExternalStore(subscribeTabDrag, getActiveDrag, getActiveDrag);
 }
 
 export function GroupTabBar({
@@ -77,6 +57,7 @@ export function GroupTabBar({
 }: GroupTabBarProps) {
   const { t } = useTranslation();
   const { dispatch } = useTerminalGroups();
+  const activeDrag = useActiveDrag();
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dragGhost, setDragGhost] = useState<{ x: number; y: number; name: string } | null>(null);
@@ -87,15 +68,17 @@ export function GroupTabBar({
   useEffect(() => {
     const el = tabBarRef.current;
     if (el) {
-      dropTargetRegistry.set(groupId, el);
-      return () => { dropTargetRegistry.delete(groupId); };
+      registerTabBarDropTarget(groupId, el);
+      return () => {
+        unregisterTabBarDropTarget(groupId);
+      };
     }
   }, [groupId]);
 
-  // Listen for module-level drag state changes to update visual feedback
+  // Clear local indicators when global drag ends (including when another bar owns the drag)
   useEffect(() => {
-    const handler = () => {
-      if (!activeDrag) {
+    const unsub = subscribeTabDrag(() => {
+      if (!getActiveDrag()) {
         setDropIndex(null);
         setIsDragOver(false);
         setDragGhost(null);
@@ -104,9 +87,8 @@ export function GroupTabBar({
           autoScrollRef.current = null;
         }
       }
-    };
-    dragListeners.add(handler);
-    return () => { dragListeners.delete(handler); };
+    });
+    return unsub;
   }, []);
 
   // ── Pointer-based custom drag ──
@@ -128,29 +110,30 @@ export function GroupTabBar({
         if (!dragging) {
           if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
           dragging = true;
-          activeDrag = { tabId, sourceGroupId: groupId, tabName };
+          setActiveDrag({ tabId, sourceGroupId: groupId, tabName });
           document.body.style.userSelect = 'none';
-          notifyDragChange();
         }
 
         // Update ghost position
         setDragGhost({ x: ev.clientX, y: ev.clientY, name: tabName });
 
-        // Hit-test drop targets
-        const target = findDropTargetAt(ev.clientX, ev.clientY);
-        if (target) {
-          const idx = calcInsertionIndex(target.element, ev.clientX);
-          if (target.groupId === groupId) {
+        // 1) Prefer tab-bar hit (reorder / move into group)
+        const tabBarTarget = findTabBarDropTargetAt(ev.clientX, ev.clientY);
+        if (tabBarTarget) {
+          setContentDropHover(null);
+          const idx = calcTabInsertionIndex(tabBarTarget.element, ev.clientX);
+          if (tabBarTarget.groupId === groupId) {
             setIsDragOver(true);
             setDropIndex(idx);
           } else {
-            // Different group — clear our indicator, the target group will show its own
+            // Different group — target bar owns its insertion line via hit-test on pointerup;
+            // we still clear our local indicator.
             setIsDragOver(false);
             setDropIndex(null);
           }
 
           // Auto-scroll the target tab bar near edges
-          const rect = target.element.getBoundingClientRect();
+          const rect = tabBarTarget.element.getBoundingClientRect();
           const EDGE_THRESHOLD = 50;
           const SCROLL_SPEED = 8;
 
@@ -160,16 +143,31 @@ export function GroupTabBar({
           }
           if (ev.clientX < rect.left + EDGE_THRESHOLD) {
             autoScrollRef.current = requestAnimationFrame(() => {
-              target.element.scrollLeft -= SCROLL_SPEED;
+              tabBarTarget.element.scrollLeft -= SCROLL_SPEED;
             });
           } else if (ev.clientX > rect.right - EDGE_THRESHOLD) {
             autoScrollRef.current = requestAnimationFrame(() => {
-              target.element.scrollLeft += SCROLL_SPEED;
+              tabBarTarget.element.scrollLeft += SCROLL_SPEED;
             });
           }
+          return;
+        }
+
+        // 2) Content area hit → edge split / center merge
+        if (autoScrollRef.current !== null) {
+          cancelAnimationFrame(autoScrollRef.current);
+          autoScrollRef.current = null;
+        }
+        setIsDragOver(false);
+        setDropIndex(null);
+
+        const contentTarget = findContentDropTargetAt(ev.clientX, ev.clientY);
+        if (contentTarget) {
+          const rect = contentTarget.element.getBoundingClientRect();
+          const zone = getZoneFromPosition(ev.clientX, ev.clientY, rect);
+          setContentDropHover({ groupId: contentTarget.groupId, zone });
         } else {
-          setIsDragOver(false);
-          setDropIndex(null);
+          setContentDropHover(null);
         }
       };
 
@@ -185,32 +183,45 @@ export function GroupTabBar({
           autoScrollRef.current = null;
         }
 
-        if (!dragging || !activeDrag) {
-          activeDrag = null;
-          notifyDragChange();
+        if (!dragging || !getActiveDrag()) {
+          clearTabDrag();
+          setDragGhost(null);
+          setDropIndex(null);
+          setIsDragOver(false);
           return;
         }
 
-        // Calculate drop target (only available for pointer events, not blur)
         const clientX = 'clientX' in ev ? ev.clientX : 0;
         const clientY = 'clientY' in ev ? ev.clientY : 0;
-        const dropTarget = (clientX || clientY) ? findDropTargetAt(clientX, clientY) : null;
+        const drag = getActiveDrag();
+        if (!drag) {
+          clearTabDrag();
+          setDragGhost(null);
+          return;
+        }
+
+        const { tabId: dragTabId, sourceGroupId } = drag;
+
+        // Prefer tab bar drops
+        const dropTarget =
+          clientX || clientY ? findTabBarDropTargetAt(clientX, clientY) : null;
         if (dropTarget) {
-          const targetIndex = calcInsertionIndex(dropTarget.element, clientX);
-          const { tabId: dragTabId, sourceGroupId } = activeDrag;
+          const targetIndex = calcTabInsertionIndex(dropTarget.element, clientX);
 
           if (sourceGroupId === dropTarget.groupId) {
-            // Same group — reorder
-            // Find fromIndex from the current state (accessed via closure tabs prop)
             const fromIndex = tabs.findIndex((t) => t.id === dragTabId);
             if (fromIndex !== -1) {
               const adjustedTarget = targetIndex > fromIndex ? targetIndex - 1 : targetIndex;
               if (adjustedTarget !== fromIndex) {
-                dispatch({ type: 'REORDER_TAB', groupId: sourceGroupId, fromIndex, toIndex: adjustedTarget });
+                dispatch({
+                  type: 'REORDER_TAB',
+                  groupId: sourceGroupId,
+                  fromIndex,
+                  toIndex: adjustedTarget,
+                });
               }
             }
           } else {
-            // Cross-group — move tab
             dispatch({
               type: 'MOVE_TAB',
               sourceGroupId,
@@ -219,10 +230,43 @@ export function GroupTabBar({
               targetIndex,
             });
           }
+        } else {
+          // Content-area drop: use last hover or re-hit-test
+          const hover =
+            getContentDropHover() ??
+            (() => {
+              if (!(clientX || clientY)) return null;
+              const contentTarget = findContentDropTargetAt(clientX, clientY);
+              if (!contentTarget) return null;
+              const rect = contentTarget.element.getBoundingClientRect();
+              const zone = getZoneFromPosition(clientX, clientY, rect);
+              return { groupId: contentTarget.groupId, zone };
+            })();
+
+          if (hover) {
+            if (isSplitDirection(hover.zone)) {
+              dispatch({
+                type: 'MOVE_TAB_TO_NEW_GROUP',
+                groupId: sourceGroupId,
+                tabId: dragTabId,
+                direction: hover.zone,
+                targetGroupId: hover.groupId,
+              });
+            } else if (hover.zone === 'center' && sourceGroupId !== hover.groupId) {
+              dispatch({
+                type: 'MOVE_TAB',
+                sourceGroupId,
+                targetGroupId: hover.groupId,
+                tabId: dragTabId,
+              });
+            }
+          }
         }
 
-        activeDrag = null;
-        notifyDragChange();
+        clearTabDrag();
+        setDragGhost(null);
+        setDropIndex(null);
+        setIsDragOver(false);
       };
 
       document.addEventListener('pointermove', onMove);

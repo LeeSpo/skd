@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
 import { DropZoneOverlay, getZoneFromPosition } from '../components/terminal/drop-zone-overlay';
 
 const makeRect = (left: number, top: number, width: number, height: number): DOMRect => ({
@@ -57,29 +57,23 @@ describe('getZoneFromPosition', () => {
 });
 
 describe('DropZoneOverlay component', () => {
-  const mockOnDrop = vi.fn();
-
-  beforeEach(() => {
-    mockOnDrop.mockClear();
-  });
-
   it('renders nothing when visible is false', () => {
     const { container } = render(
-      <DropZoneOverlay groupId="g1" visible={false} onDrop={mockOnDrop} />,
+      <DropZoneOverlay groupId="g1" visible={false} activeZone={null} />,
     );
     expect(container.innerHTML).toBe('');
   });
 
   it('renders overlay container when visible is true', () => {
     const { getByTestId } = render(
-      <DropZoneOverlay groupId="g1" visible={true} onDrop={mockOnDrop} />,
+      <DropZoneOverlay groupId="g1" visible={true} activeZone={null} />,
     );
     expect(getByTestId('drop-zone-overlay-g1')).toBeTruthy();
   });
 
-  it('shows no zone highlight initially', () => {
+  it('shows no zone highlight when activeZone is null', () => {
     const { queryByTestId } = render(
-      <DropZoneOverlay groupId="g1" visible={true} onDrop={mockOnDrop} />,
+      <DropZoneOverlay groupId="g1" visible={true} activeZone={null} />,
     );
     expect(queryByTestId('drop-zone-up')).toBeNull();
     expect(queryByTestId('drop-zone-down')).toBeNull();
@@ -88,37 +82,15 @@ describe('DropZoneOverlay component', () => {
     expect(queryByTestId('drop-zone-center')).toBeNull();
   });
 
-  it('calls onDrop on drop event when a zone is active', () => {
-    const { getByTestId } = render(
-      <DropZoneOverlay groupId="g1" visible={true} onDrop={mockOnDrop} />,
+  it('highlights the controlled activeZone', () => {
+    const { getByTestId, queryByTestId, rerender } = render(
+      <DropZoneOverlay groupId="g1" visible={true} activeZone="right" />,
     );
-    const overlay = getByTestId('drop-zone-overlay-g1');
-
-    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue(makeRect(0, 0, 400, 400));
-
-    // dragOver sets the zone, then drop triggers onDrop
-    fireEvent.dragOver(overlay, { clientX: 200, clientY: 200 });
-    fireEvent.drop(overlay);
-
-    expect(mockOnDrop).toHaveBeenCalledTimes(1);
-  });
-
-  it('clears zone highlight on drag leave', () => {
-    const { getByTestId, queryByTestId } = render(
-      <DropZoneOverlay groupId="g1" visible={true} onDrop={mockOnDrop} />,
-    );
-    const overlay = getByTestId('drop-zone-overlay-g1');
-
-    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue(makeRect(0, 0, 400, 400));
-
-    fireEvent.dragOver(overlay, { clientX: 200, clientY: 200 });
-    // Some zone should be highlighted
-    fireEvent.dragLeave(overlay);
-    // All zones should be cleared
-    expect(queryByTestId('drop-zone-up')).toBeNull();
-    expect(queryByTestId('drop-zone-down')).toBeNull();
+    expect(getByTestId('drop-zone-right')).toBeTruthy();
     expect(queryByTestId('drop-zone-left')).toBeNull();
+
+    rerender(<DropZoneOverlay groupId="g1" visible={true} activeZone="center" />);
+    expect(getByTestId('drop-zone-center')).toBeTruthy();
     expect(queryByTestId('drop-zone-right')).toBeNull();
-    expect(queryByTestId('drop-zone-center')).toBeNull();
   });
 });

@@ -444,17 +444,22 @@ export function terminalGroupReducer(
     }
 
     case 'MOVE_TAB_TO_NEW_GROUP': {
-      const { groupId, tabId, direction } = action;
-      const group = state.groups[groupId];
-      if (!group) return state;
-      const tab = group.tabs.find((t) => t.id === tabId);
+      const { groupId, tabId, direction, targetGroupId } = action;
+      const sourceGroupId = groupId;
+      const splitAt = targetGroupId ?? groupId;
+
+      const sourceGroup = state.groups[sourceGroupId];
+      if (!sourceGroup) return state;
+      if (!state.groups[splitAt]) return state;
+
+      const tab = sourceGroup.tabs.find((t) => t.id === tabId);
       if (!tab) return state;
 
       // Remove tab from source group
-      const newSourceTabs = group.tabs.filter((t) => t.id !== tabId);
-      const removedIndex = group.tabs.findIndex((t) => t.id === tabId);
-      let newSourceActiveTabId = group.activeTabId;
-      if (group.activeTabId === tabId) {
+      const newSourceTabs = sourceGroup.tabs.filter((t) => t.id !== tabId);
+      const removedIndex = sourceGroup.tabs.findIndex((t) => t.id === tabId);
+      let newSourceActiveTabId = sourceGroup.activeTabId;
+      if (sourceGroup.activeTabId === tabId) {
         newSourceActiveTabId = pickAdjacentTab(newSourceTabs, removedIndex);
       }
 
@@ -465,26 +470,25 @@ export function terminalGroupReducer(
         activeTabId: tab.id,
       };
 
-      // If source group becomes empty and it's not the last group, we need to handle that.
-      // But first, do the split on the source group's position.
+      // Split relative to target (may differ from source when dragging across panes).
       let newState: TerminalGroupState = {
         ...state,
         groups: {
           ...state.groups,
-          [groupId]: {
-            ...group,
+          [sourceGroupId]: {
+            ...sourceGroup,
             tabs: newSourceTabs,
             activeTabId: newSourceActiveTabId,
           },
           [newGroupId]: newGroup,
         },
-        gridLayout: insertSplit(state.gridLayout, groupId, newGroupId, direction),
+        gridLayout: insertSplit(state.gridLayout, splitAt, newGroupId, direction),
         nextGroupId: state.nextGroupId + 1,
         activeGroupId: newGroupId,
         tabToGroupMap: { ...state.tabToGroupMap, [tabId]: newGroupId },
       };
 
-      newState = maybeRemoveEmptyGroup(newState, groupId);
+      newState = maybeRemoveEmptyGroup(newState, sourceGroupId);
       return newState;
     }
 

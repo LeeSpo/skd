@@ -1,12 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
 import type { SplitDirection } from '../../lib/terminal-group-types';
+import type { DropZone } from '../../lib/tab-drag-state';
 
-type DropZone = SplitDirection | 'center';
+export type { DropZone };
 
 interface DropZoneOverlayProps {
   groupId: string;
   visible: boolean;
-  onDrop: (zone: DropZone) => void;
+  /** Controlled highlight zone from pointer drag hit-testing */
+  activeZone: DropZone | null;
 }
 
 const EDGE_THRESHOLD = 0.25;
@@ -26,69 +27,35 @@ export function getZoneFromPosition(
   return 'center';
 }
 
-export function DropZoneOverlay({ groupId, visible, onDrop }: DropZoneOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [activeZone, setActiveZone] = useState<DropZone | null>(null);
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      if (e.dataTransfer) {
-        e.dataTransfer.dropEffect = 'move';
-      }
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setActiveZone(getZoneFromPosition(e.clientX, e.clientY, rect));
-    },
-    [],
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      if (activeZone) {
-        onDrop(activeZone);
-      }
-      setActiveZone(null);
-    },
-    [activeZone, onDrop],
-  );
-
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      if (e.currentTarget === e.target) {
-        setActiveZone(null);
-      }
-    },
-    [],
-  );
-
+export function DropZoneOverlay({ groupId, visible, activeZone }: DropZoneOverlayProps) {
   if (!visible) return null;
 
   return (
     <div
-      ref={containerRef}
       data-testid={`drop-zone-overlay-${groupId}`}
-      className="absolute inset-0 z-50"
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      onDragLeave={handleDragLeave}
+      className="absolute inset-0 z-50 pointer-events-none"
+      aria-hidden
     >
       {activeZone === 'up' && (
-        <div data-testid="drop-zone-up" className="absolute inset-x-0 top-0 h-1/4 bg-blue-500/20 pointer-events-none" />
+        <div data-testid="drop-zone-up" className="absolute inset-x-0 top-0 h-1/4 bg-blue-500/20" />
       )}
       {activeZone === 'down' && (
-        <div data-testid="drop-zone-down" className="absolute inset-x-0 bottom-0 h-1/4 bg-blue-500/20 pointer-events-none" />
+        <div data-testid="drop-zone-down" className="absolute inset-x-0 bottom-0 h-1/4 bg-blue-500/20" />
       )}
       {activeZone === 'left' && (
-        <div data-testid="drop-zone-left" className="absolute inset-y-0 left-0 w-1/4 bg-blue-500/20 pointer-events-none" />
+        <div data-testid="drop-zone-left" className="absolute inset-y-0 left-0 w-1/4 bg-blue-500/20" />
       )}
       {activeZone === 'right' && (
-        <div data-testid="drop-zone-right" className="absolute inset-y-0 right-0 w-1/4 bg-blue-500/20 pointer-events-none" />
+        <div data-testid="drop-zone-right" className="absolute inset-y-0 right-0 w-1/4 bg-blue-500/20" />
       )}
       {activeZone === 'center' && (
-        <div data-testid="drop-zone-center" className="absolute inset-0 m-[25%] bg-blue-500/20 pointer-events-none" />
+        <div data-testid="drop-zone-center" className="absolute inset-0 m-[25%] bg-blue-500/20" />
       )}
     </div>
   );
+}
+
+/** Type guard helper for edge-only zones (excludes center). */
+export function isSplitDirection(zone: DropZone): zone is SplitDirection {
+  return zone === 'up' || zone === 'down' || zone === 'left' || zone === 'right';
 }
