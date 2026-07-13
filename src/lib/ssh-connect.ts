@@ -1,4 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import {
+  CONNECT_PROGRESS_EVENT,
+  type ConnectErrorKind,
+  type ConnectProgressEvent,
+  type ConnectStage,
+  isConnectStage,
+} from './connection-diagnostics';
 import { isHostKeyVerificationEnabled, parseUnknownHostKeyError } from './host-key-verification';
 
 export interface SshConnectParams {
@@ -17,6 +25,8 @@ export type SftpConnectParams = SshConnectParams;
 export interface ConnectResponse {
   success: boolean;
   error?: string;
+  errorKind?: ConnectErrorKind | string;
+  failedStage?: ConnectStage | string;
   pendingHostKeyTrust?: boolean;
 }
 
@@ -24,6 +34,27 @@ export type HostKeyTrustRequest = {
   payload: NonNullable<ReturnType<typeof parseUnknownHostKeyError>>;
   retry: () => Promise<ConnectResponse>;
 };
+
+export type ConnectProgressHandler = (stage: ConnectStage) => void;
+
+/**
+ * Subscribe to backend connect progress events for a single connection id.
+ * Returns an unlisten function.
+ */
+export async function listenConnectProgress(
+  connectionId: string,
+  onStage: ConnectProgressHandler,
+): Promise<UnlistenFn> {
+  return listen<ConnectProgressEvent>(CONNECT_PROGRESS_EVENT, (event) => {
+    const payload = event.payload;
+    if (!payload || payload.connectionId !== connectionId) {
+      return;
+    }
+    if (isConnectStage(payload.stage)) {
+      onStage(payload.stage);
+    }
+  });
+}
 
 export async function sshConnectWithHostKeyTrust(
   params: SshConnectParams,
@@ -44,7 +75,11 @@ export async function sshConnectWithHostKeyTrust(
   const payload = result.error ? parseUnknownHostKeyError(result.error) : null;
   if (payload) {
     onTrustRequired({ payload, retry: attempt });
-    return { ...result, pendingHostKeyTrust: true };
+    return {
+      ...result,
+      pendingHostKeyTrust: true,
+      errorKind: result.errorKind ?? 'hostKeyUnknown',
+    };
   }
 
   return result;
@@ -69,7 +104,11 @@ export async function sftpConnectWithHostKeyTrust(
   const payload = result.error ? parseUnknownHostKeyError(result.error) : null;
   if (payload) {
     onTrustRequired({ payload, retry: attempt });
-    return { ...result, pendingHostKeyTrust: true };
+    return {
+      ...result,
+      pendingHostKeyTrust: true,
+      errorKind: result.errorKind ?? 'hostKeyUnknown',
+    };
   }
 
   return result;

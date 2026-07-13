@@ -1,3 +1,6 @@
+use crate::connection_diagnostics::{
+    ConnectDiagnosticError, ConnectProgressEvent, ConnectStage, CONNECT_PROGRESS_EVENT,
+};
 use crate::ftp_client::FtpClient;
 use crate::os_detect::OsInfoCache;
 use crate::port_forward::{LocalForwardInfo, PortForwardManager};
@@ -8,6 +11,8 @@ use crate::ssh::{SshClient, SshConfig};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
@@ -30,6 +35,17 @@ pub struct ConnectionManager {
     port_forwards: PortForwardManager,
 }
 
+fn emit_connect_progress(app: &Option<AppHandle>, connection_id: &str, stage: ConnectStage) {
+    let Some(app) = app else {
+        return;
+    };
+    let event = ConnectProgressEvent {
+        connection_id: connection_id.to_string(),
+        stage,
+    };
+    let _ = app.emit(CONNECT_PROGRESS_EVENT, event);
+}
+
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
@@ -45,18 +61,31 @@ impl ConnectionManager {
         }
     }
 
-    pub async fn create_connection(&self, connection_id: String, config: SshConfig) -> Result<()> {
+    pub async fn create_connection(
+        &self,
+        connection_id: String,
+        config: SshConfig,
+        app: Option<AppHandle>,
+        tcp_timeout: Option<Duration>,
+    ) -> Result<()> {
         let mut client = SshClient::new();
         let cancel_token = self.register_pending_connection(&connection_id).await;
+        let timeout = tcp_timeout.unwrap_or_else(crate::connection_diagnostics::default_tcp_timeout);
+        let progress_id = connection_id.clone();
+        let app_for_progress = app.clone();
 
         let connect_result = tokio::select! {
-            res = client.connect(&config) => res,
-            _ = cancel_token.cancelled() => Err(anyhow::anyhow!("Connection cancelled by user")),
+            res = client.connect_with_progress(&config, timeout, move |stage| {
+                emit_connect_progress(&app_for_progress, &progress_id, stage);
+            }) => res,
+            _ = cancel_token.cancelled() => Err(ConnectDiagnosticError::cancelled().into()),
         };
 
         self.clear_pending_connection(&connection_id).await;
 
         connect_result?;
+
+        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
 
         let mut connections = self.connections.write().await;
         connections.insert(connection_id, Arc::new(RwLock::new(client)));
@@ -111,6 +140,7 @@ impl ConnectionManager {
     pub async fn start_local_forward(
         &self,
         connection_id: String,
+        bookmark_id: Option<String>,
         name: Option<String>,
         local_bind_host: String,
         local_port: u16,
@@ -132,6 +162,7 @@ impl ConnectionManager {
             .start_local(
                 connection_id,
                 session,
+                bookmark_id,
                 name,
                 local_bind_host,
                 local_port,
@@ -147,6 +178,14 @@ impl ConnectionManager {
 
     pub async fn list_local_forwards(&self, connection_id: &str) -> Vec<LocalForwardInfo> {
         self.port_forwards.list(connection_id).await
+    }
+
+    pub async fn test_local_forward(
+        &self,
+        connection_id: &str,
+        forward_id: &str,
+    ) -> Result<LocalForwardInfo> {
+        self.port_forwards.test(connection_id, forward_id).await
     }
 
     /// Access the OS info cache (for distro-aware monitoring commands).
@@ -358,8 +397,24 @@ impl ConnectionManager {
         &self,
         connection_id: String,
         config: crate::sftp_client::SftpConfig,
+        app: Option<AppHandle>,
     ) -> Result<()> {
-        let client = StandaloneSftpClient::connect(&config).await?;
+        let cancel_token = self.register_pending_connection(&connection_id).await;
+        let progress_id = connection_id.clone();
+        let app_for_progress = app.clone();
+
+        let connect_result = tokio::select! {
+            res = StandaloneSftpClient::connect_with_progress(&config, move |stage| {
+                emit_connect_progress(&app_for_progress, &progress_id, stage);
+            }) => res,
+            _ = cancel_token.cancelled() => Err(ConnectDiagnosticError::cancelled().into()),
+        };
+
+        self.clear_pending_connection(&connection_id).await;
+
+        let client = connect_result?;
+        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
+
         let mut sftp_connections = self.sftp_connections.write().await;
         sftp_connections.insert(connection_id.clone(), client);
         let mut types = self.connection_types.write().await;

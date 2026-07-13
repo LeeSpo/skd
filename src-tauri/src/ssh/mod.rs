@@ -1,5 +1,9 @@
 mod key_loader;
 
+use crate::connection_diagnostics::{
+    classify_handshake_error, classify_tcp_io_error, default_tcp_timeout, ConnectDiagnosticError,
+    ConnectErrorKind, ConnectStage,
+};
 use crate::known_hosts::{
     format_mismatch_host_error, format_unknown_host_error, verify_host_key, VerifyResult,
 };
@@ -10,9 +14,11 @@ use russh_keys::*;
 pub use key_loader::{key_file_permission_warning, load_private_key_from_content, read_private_key_file};
 use russh_sftp::client::SftpSession;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{lookup_host, TcpStream};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -112,62 +118,222 @@ impl SshClient {
     }
 
     pub async fn connect(&mut self, config: &SshConfig) -> Result<()> {
-        let ssh_config = client::Config {
-            preferred: russh::Preferred {
-                key: std::borrow::Cow::Borrowed(PREFERRED_HOST_KEY_ALGOS),
-                ..russh::Preferred::DEFAULT
-            },
-            // Send a keepalive every 60 s. After 3 missed replies russh closes
-            // the connection, preventing the server from silently dropping idle
-            // sessions after hours of inactivity.
-            keepalive_interval: Some(Duration::from_secs(60)),
-            keepalive_max: 3,
-            ..client::Config::default()
-        };
+        self.connect_with_progress(config, default_tcp_timeout(), |_| {}).await
+    }
 
-        // Connection timeout: 3 seconds
-        let connection_timeout = Duration::from_secs(3);
+    /// Staged SSH connect with progress callbacks for diagnostics UI.
+    pub async fn connect_with_progress(
+        &mut self,
+        config: &SshConfig,
+        tcp_timeout: Duration,
+        on_stage: impl FnMut(ConnectStage),
+    ) -> Result<()> {
+        let session = establish_authenticated_session(config, tcp_timeout, on_stage).await?;
+        self.session = Some(Arc::new(session));
+        Ok(())
+    }
+}
 
-        let handler = SshHandler::new(
-            config.host.clone(),
-            config.port,
-            config.host_key_verification,
-        );
-        let mut ssh_session = tokio::time::timeout(
-            connection_timeout,
-            client::connect(Arc::new(ssh_config), (&config.host[..], config.port), handler)
-        ).await
-            .map_err(|_| anyhow::anyhow!("Connection timed out after 3 seconds. Please check the host address and network connectivity."))?
-            .map_err(|e| anyhow::anyhow!("Failed to connect to {}:{}: {}", config.host, config.port, e))?;
+/// Establish an authenticated SSH session with staged progress reporting.
+///
+/// Stages: DNS → TCP → host key / handshake → authenticate.
+pub async fn establish_authenticated_session(
+    config: &SshConfig,
+    tcp_timeout: Duration,
+    mut on_stage: impl FnMut(ConnectStage),
+) -> Result<client::Handle<SshHandler>> {
+    // ── 1. DNS ──────────────────────────────────────────────────────────────
+    on_stage(ConnectStage::ResolvingDns);
+    let addrs: Vec<SocketAddr> = match lookup_host((config.host.as_str(), config.port)).await {
+        Ok(iter) => iter.collect(),
+        Err(e) => {
+            return Err(ConnectDiagnosticError::new(
+                ConnectErrorKind::DnsFailure,
+                ConnectStage::ResolvingDns,
+                format!(
+                    "Failed to resolve hostname '{}': {}. Check the host name and DNS settings.",
+                    config.host, e
+                ),
+            )
+            .into());
+        }
+    };
 
-        let authenticated = match &config.auth_method {
-            AuthMethod::Password { password } => ssh_session
-                .authenticate_password(&config.username, password)
-                .await
-                .map_err(|e| anyhow::anyhow!("Password authentication failed: {}", e))?,
-            AuthMethod::PublicKey {
-                key_content,
-                passphrase,
-            } => {
-                let key = load_private_key_from_content(key_content, passphrase.as_deref())?;
+    if addrs.is_empty() {
+        return Err(ConnectDiagnosticError::new(
+            ConnectErrorKind::DnsFailure,
+            ConnectStage::ResolvingDns,
+            format!(
+                "No addresses found for hostname '{}'. Check the host name and DNS settings.",
+                config.host
+            ),
+        )
+        .into());
+    }
 
-                ssh_session
-                    .authenticate_publickey(&config.username, Arc::new(key))
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Public key authentication failed: {}. The key may not be authorized on the server.", e))?
+    // ── 2. TCP ──────────────────────────────────────────────────────────────
+    on_stage(ConnectStage::EstablishingTcp);
+    let mut last_tcp_error: Option<ConnectDiagnosticError> = None;
+    let mut stream: Option<TcpStream> = None;
+
+    for addr in &addrs {
+        match tokio::time::timeout(tcp_timeout, TcpStream::connect(addr)).await {
+            Ok(Ok(s)) => {
+                stream = Some(s);
+                break;
+            }
+            Ok(Err(e)) => {
+                last_tcp_error = Some(classify_tcp_io_error(&e, &config.host, config.port));
+            }
+            Err(_) => {
+                last_tcp_error = Some(ConnectDiagnosticError::new(
+                    ConnectErrorKind::TcpTimeout,
+                    ConnectStage::EstablishingTcp,
+                    format!(
+                        "Connection timed out after {} seconds while reaching {}:{} ({}). Check the host address and network connectivity.",
+                        tcp_timeout.as_secs(),
+                        config.host,
+                        config.port,
+                        addr
+                    ),
+                ));
+            }
+        }
+    }
+
+    let stream = match stream {
+        Some(s) => s,
+        None => {
+            return Err(last_tcp_error
+                .unwrap_or_else(|| {
+                    ConnectDiagnosticError::new(
+                        ConnectErrorKind::Unknown,
+                        ConnectStage::EstablishingTcp,
+                        format!(
+                            "Failed to connect to {}:{}",
+                            config.host, config.port
+                        ),
+                    )
+                })
+                .into());
+        }
+    };
+
+    // ── 3. Host key + SSH handshake ─────────────────────────────────────────
+    // Host-key verification runs inside connect_stream via SshHandler.
+    on_stage(ConnectStage::VerifyingHostKey);
+    on_stage(ConnectStage::SshHandshake);
+
+    let ssh_config = client::Config {
+        preferred: russh::Preferred {
+            key: std::borrow::Cow::Borrowed(PREFERRED_HOST_KEY_ALGOS),
+            ..russh::Preferred::DEFAULT
+        },
+        // Send a keepalive every 60 s. After 3 missed replies russh closes
+        // the connection, preventing the server from silently dropping idle
+        // sessions after hours of inactivity.
+        keepalive_interval: Some(Duration::from_secs(60)),
+        keepalive_max: 3,
+        ..client::Config::default()
+    };
+
+    let handler = SshHandler::new(
+        config.host.clone(),
+        config.port,
+        config.host_key_verification,
+    );
+
+    let mut ssh_session =
+        match client::connect_stream(Arc::new(ssh_config), stream, handler).await {
+            Ok(session) => session,
+            Err(e) => {
+                let err = anyhow::anyhow!(e);
+                return Err(classify_handshake_error(&err, &config.host, config.port).into());
             }
         };
 
-        if !authenticated {
-            return Err(anyhow::anyhow!(
-                "Authentication failed. Please check your credentials and try again."
-            ));
-        }
+    // ── 4. Authenticate ─────────────────────────────────────────────────────
+    on_stage(ConnectStage::Authenticating);
 
-        self.session = Some(Arc::new(ssh_session));
-        Ok(())
+    let authenticated = match &config.auth_method {
+        AuthMethod::Password { password } => match ssh_session
+            .authenticate_password(&config.username, password)
+            .await
+        {
+            Ok(ok) => ok,
+            Err(e) => {
+                return Err(ConnectDiagnosticError::new(
+                    ConnectErrorKind::PasswordIncorrect,
+                    ConnectStage::Authenticating,
+                    format!("Password authentication failed: {e}"),
+                )
+                .into());
+            }
+        },
+        AuthMethod::PublicKey {
+            key_content,
+            passphrase,
+        } => {
+            let key = match load_private_key_from_content(key_content, passphrase.as_deref()) {
+                Ok(k) => k,
+                Err(e) => {
+                    let message = e.to_string();
+                    let kind = if message.to_lowercase().contains("passphrase")
+                        || message.to_lowercase().contains("decrypt")
+                    {
+                        // Wrong passphrase is closer to auth failure than format.
+                        ConnectErrorKind::PrivateKeyFormatUnsupported
+                    } else {
+                        ConnectErrorKind::PrivateKeyFormatUnsupported
+                    };
+                    return Err(ConnectDiagnosticError::new(
+                        kind,
+                        ConnectStage::Authenticating,
+                        message,
+                    )
+                    .into());
+                }
+            };
+
+            match ssh_session
+                .authenticate_publickey(&config.username, Arc::new(key))
+                .await
+            {
+                Ok(ok) => ok,
+                Err(e) => {
+                    return Err(ConnectDiagnosticError::new(
+                        ConnectErrorKind::PublicKeyUnauthorized,
+                        ConnectStage::Authenticating,
+                        format!(
+                            "Public key authentication failed: {e}. The key may not be authorized on the server."
+                        ),
+                    )
+                    .into());
+                }
+            }
+        }
+    };
+
+    if !authenticated {
+        let (kind, message) = match &config.auth_method {
+            AuthMethod::Password { .. } => (
+                ConnectErrorKind::PasswordIncorrect,
+                "Password authentication failed. Please check your password and try again."
+                    .to_string(),
+            ),
+            AuthMethod::PublicKey { .. } => (
+                ConnectErrorKind::PublicKeyUnauthorized,
+                "Public key authentication failed. The key may not be authorized on the server."
+                    .to_string(),
+            ),
+        };
+        return Err(ConnectDiagnosticError::new(kind, ConnectStage::Authenticating, message).into());
     }
 
+    Ok(ssh_session)
+}
+
+impl SshClient {
     // Changed to &self instead of &mut self to allow concurrent access
     pub async fn execute_command(&self, command: &str) -> Result<String> {
         if let Some(session) = &self.session {
@@ -260,7 +426,9 @@ impl SshClient {
     pub async fn create_pty_session(&self, cols: u32, rows: u32) -> Result<PtySession> {
         if let Some(session) = &self.session {
             // Open a new SSH channel
-            let mut channel = session.channel_open_session().await?;
+            let mut channel = session.channel_open_session().await.map_err(|e| {
+                ConnectDiagnosticError::pty_failed(format!("Failed to open SSH channel for PTY: {e}"))
+            })?;
 
             // Request PTY with terminal type and dimensions
             // Similar to ttyd's approach: xterm-256color terminal
@@ -274,10 +442,15 @@ impl SshClient {
                     0,                // pixel_height (not used)
                     &[],              // terminal modes
                 )
-                .await?;
+                .await
+                .map_err(|e| {
+                    ConnectDiagnosticError::pty_failed(format!("Failed to request PTY: {e}"))
+                })?;
 
             // Start interactive shell
-            channel.request_shell(true).await?;
+            channel.request_shell(true).await.map_err(|e| {
+                ConnectDiagnosticError::pty_failed(format!("Failed to start shell on PTY: {e}"))
+            })?;
 
             // Create channels for bidirectional communication (like ttyd's pty_buf)
             // Increased capacity for better buffering during fast input

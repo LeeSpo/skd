@@ -1,3 +1,4 @@
+use crate::connection_diagnostics::{classify_connect_error, ConnectStage};
 use crate::connection_manager::ConnectionManager;
 use crate::WEBSOCKET_PORT;
 use anyhow::Result;
@@ -51,8 +52,14 @@ pub enum WsMessage {
         #[serde(default)]
         generation: Option<u64>,
     },
-    /// Error message
-    Error { message: String },
+    /// Error message (optionally classified for connection diagnostics)
+    Error {
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error_kind: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        failed_stage: Option<String>,
+    },
     /// Success confirmation
     Success { message: String },
     /// PTY session started — includes the generation counter so the frontend
@@ -60,6 +67,11 @@ pub enum WsMessage {
     PtyStarted {
         connection_id: String,
         generation: u64,
+    },
+    /// Session-stage progress (e.g. requesting PTY) for diagnostics UI.
+    Progress {
+        connection_id: String,
+        stage: String,
     },
 }
 
@@ -314,6 +326,8 @@ impl WebSocketServer {
                         Err(e) => {
                             let error = WsMessage::Error {
                                 message: format!("Invalid message format: {}", e),
+                                error_kind: None,
+                                failed_stage: None,
                             };
                             let _ = send_control(&tx, &error).await?;
                             continue;
@@ -335,6 +349,8 @@ impl WebSocketServer {
                         Err(e) => {
                             let error = WsMessage::Error {
                                 message: format!("Error handling message: {}", e),
+                                error_kind: None,
+                                failed_stage: None,
                             };
                             let _ = send_control(&tx, &error).await?;
                         }
@@ -387,10 +403,29 @@ impl WebSocketServer {
                     rows
                 );
 
-                let generation = self
+                let progress = WsMessage::Progress {
+                    connection_id: connection_id.clone(),
+                    stage: ConnectStage::RequestingPty.as_str().to_string(),
+                };
+                let _ = send_control(&tx, &progress).await;
+
+                let generation = match self
                     .connection_manager
                     .start_pty_connection(&connection_id, cols, rows)
-                    .await?;
+                    .await
+                {
+                    Ok(gen) => gen,
+                    Err(e) => {
+                        let diag = classify_connect_error(&e, ConnectStage::RequestingPty);
+                        let error = WsMessage::Error {
+                            message: diag.message,
+                            error_kind: Some(diag.kind.as_str().to_string()),
+                            failed_stage: Some(diag.stage.as_str().to_string()),
+                        };
+                        let _ = send_control(&tx, &error).await;
+                        return Ok(PtyLifecycleEvent::None);
+                    }
+                };
 
                 let cancel_token = self
                     .connection_manager
@@ -410,6 +445,12 @@ impl WebSocketServer {
                     generation,
                 };
                 send_control(&tx, &started).await?;
+
+                let connected = WsMessage::Progress {
+                    connection_id: connection_id.clone(),
+                    stage: ConnectStage::Connected.as_str().to_string(),
+                };
+                let _ = send_control(&tx, &connected).await;
 
                 // Spawn the PTY reader task.
                 // `flush_output` blocks when the WS channel is full — this
@@ -494,6 +535,8 @@ impl WebSocketServer {
                                 );
                                 let error_msg = WsMessage::Error {
                                     message: format!("Connection lost: {}", e),
+                                    error_kind: None,
+                                    failed_stage: None,
                                 };
                                 let _ = send_control(&tx_clone, &error_msg).await;
                                 break;

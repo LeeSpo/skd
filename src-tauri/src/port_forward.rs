@@ -13,6 +13,7 @@ use std::sync::Arc;
 use tokio::io::copy_bidirectional;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
+use tokio::time::{timeout, Duration};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
@@ -33,18 +34,22 @@ fn next_forward_id() -> String {
 pub struct LocalForwardInfo {
     pub id: String,
     pub connection_id: String,
+    pub bookmark_id: Option<String>,
     pub name: Option<String>,
     pub local_bind_host: String,
     pub local_port: u16,
     pub remote_host: String,
     pub remote_port: u16,
-    pub status: String,
-    pub error: Option<String>,
+    pub local_status: String,
+    pub target_status: String,
+    pub last_error: Option<String>,
+    pub last_checked_at: Option<u64>,
 }
 
 struct ActiveForward {
-    info: LocalForwardInfo,
+    info: Arc<RwLock<LocalForwardInfo>>,
     cancel: CancellationToken,
+    session: Arc<Handle<Client>>,
 }
 
 /// Manages local port forwards keyed by SSH `connection_id`.
@@ -63,6 +68,7 @@ impl PortForwardManager {
         &self,
         connection_id: String,
         session: Arc<Handle<Client>>,
+        bookmark_id: Option<String>,
         name: Option<String>,
         local_bind_host: String,
         local_port: u16,
@@ -71,15 +77,26 @@ impl PortForwardManager {
     ) -> Result<LocalForwardInfo> {
         validate_forward_params(&local_bind_host, remote_host.as_str(), remote_port)?;
 
+        if let Some(bookmark_id) = bookmark_id.as_deref() {
+            let map = self.forwards.read().await;
+            if let Some(existing) = map.get(&connection_id) {
+                for active in existing.values() {
+                    if active.info.read().await.bookmark_id.as_deref() == Some(bookmark_id) {
+                        return Err(anyhow!("This port forward bookmark is already active"));
+                    }
+                }
+            }
+        }
+
         let bind_addr: SocketAddr = format!("{local_bind_host}:{local_port}")
             .parse()
             .with_context(|| {
                 format!("Invalid local bind address: {local_bind_host}:{local_port}")
             })?;
 
-        let listener = TcpListener::bind(bind_addr).await.with_context(|| {
-            format!("Failed to bind local port {local_bind_host}:{local_port}")
-        })?;
+        let listener = TcpListener::bind(bind_addr)
+            .await
+            .with_context(|| format!("Failed to bind local port {local_bind_host}:{local_port}"))?;
 
         let actual_port = listener
             .local_addr()
@@ -91,47 +108,56 @@ impl PortForwardManager {
         let info = LocalForwardInfo {
             id: id.clone(),
             connection_id: connection_id.clone(),
+            bookmark_id,
             name,
             local_bind_host: local_bind_host.clone(),
             local_port: actual_port,
             remote_host: remote_host.clone(),
             remote_port,
-            status: "listening".to_string(),
-            error: None,
+            local_status: "listening".to_string(),
+            target_status: "checking".to_string(),
+            last_error: None,
+            last_checked_at: None,
         };
+        let shared_info = Arc::new(RwLock::new(info));
 
         let cancel_loop = cancel.clone();
         let remote_host_loop = remote_host.clone();
+        let info_loop = Arc::clone(&shared_info);
+        let session_loop = Arc::clone(&session);
         tokio::spawn(async move {
             run_accept_loop(
                 listener,
-                session,
+                session_loop,
                 remote_host_loop,
                 remote_port,
                 cancel_loop,
+                info_loop,
             )
             .await;
         });
 
         let mut map = self.forwards.write().await;
-        let conn_map = map.entry(connection_id).or_default();
+        let conn_map = map.entry(connection_id.clone()).or_default();
         conn_map.insert(
             id.clone(),
             ActiveForward {
-                info: info.clone(),
+                info: shared_info,
                 cancel,
+                session,
             },
         );
+        drop(map);
 
         debug!(
             "Started local forward {} → {}:{} on connection {}",
-            format!("{}:{}", info.local_bind_host, info.local_port),
-            info.remote_host,
-            info.remote_port,
-            info.connection_id
+            format!("{}:{}", local_bind_host, actual_port),
+            remote_host,
+            remote_port,
+            connection_id
         );
 
-        Ok(info)
+        self.test(&connection_id, &id).await
     }
 
     pub async fn stop(&self, connection_id: &str, forward_id: &str) -> Result<()> {
@@ -160,10 +186,59 @@ impl PortForwardManager {
     }
 
     pub async fn list(&self, connection_id: &str) -> Vec<LocalForwardInfo> {
-        let map = self.forwards.read().await;
-        map.get(connection_id)
-            .map(|m| m.values().map(|a| a.info.clone()).collect())
-            .unwrap_or_default()
+        let active = {
+            let map = self.forwards.read().await;
+            map.get(connection_id)
+                .map(|m| {
+                    m.values()
+                        .map(|a| (Arc::clone(&a.info), Arc::clone(&a.session)))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        };
+
+        let mut result = Vec::with_capacity(active.len());
+        for (info, session) in active {
+            let mut current = info.write().await;
+            if session.is_closed() {
+                current.target_status = "ssh_disconnected".to_string();
+                current.last_error = Some("SSH session is disconnected".to_string());
+                current.last_checked_at = Some(now_millis());
+            }
+            result.push(current.clone());
+        }
+        result
+    }
+
+    pub async fn test(&self, connection_id: &str, forward_id: &str) -> Result<LocalForwardInfo> {
+        let (info, session, remote_host, remote_port) = {
+            let map = self.forwards.read().await;
+            let active = map
+                .get(connection_id)
+                .and_then(|m| m.get(forward_id))
+                .ok_or_else(|| anyhow!("Port forward not found"))?;
+            let current = active.info.read().await;
+            (
+                Arc::clone(&active.info),
+                Arc::clone(&active.session),
+                current.remote_host.clone(),
+                current.remote_port,
+            )
+        };
+
+        {
+            let mut current = info.write().await;
+            current.target_status = "checking".to_string();
+            current.last_error = None;
+        }
+
+        let probe = probe_target(&session, &remote_host, remote_port).await;
+        let mut current = info.write().await;
+        apply_probe_result(&mut current, &probe);
+        let result = current.clone();
+        drop(current);
+        let _ = probe;
+        Ok(result)
     }
 }
 
@@ -196,6 +271,7 @@ async fn run_accept_loop(
     remote_host: String,
     remote_port: u16,
     cancel: CancellationToken,
+    info: Arc<RwLock<LocalForwardInfo>>,
 ) {
     loop {
         tokio::select! {
@@ -208,6 +284,7 @@ async fn run_accept_loop(
                         let session = Arc::clone(&session);
                         let remote_host = remote_host.clone();
                         let cancel = cancel.clone();
+                        let info = Arc::clone(&info);
                         tokio::spawn(async move {
                             let originator = peer.ip().to_string();
                             let originator_port = u32::from(peer.port());
@@ -221,6 +298,10 @@ async fn run_accept_loop(
                                 .await
                             {
                                 Ok(channel) => {
+                                    {
+                                        let mut current = info.write().await;
+                                        apply_probe_result(&mut current, &Ok(()));
+                                    }
                                     let mut stream = channel.into_stream();
                                     tokio::select! {
                                         _ = cancel.cancelled() => {}
@@ -232,6 +313,9 @@ async fn run_accept_loop(
                                     }
                                 }
                                 Err(e) => {
+                                    let error = anyhow!(e.to_string());
+                                    let mut current = info.write().await;
+                                    apply_probe_result(&mut current, &Err(error));
                                     warn!("direct-tcpip channel open failed: {e}");
                                 }
                             }
@@ -242,6 +326,9 @@ async fn run_accept_loop(
                             break;
                         }
                         warn!("Local forward accept failed: {e}");
+                        let mut current = info.write().await;
+                        current.local_status = "error".to_string();
+                        current.last_error = Some(e.to_string());
                         break;
                     }
                 }
@@ -250,9 +337,69 @@ async fn run_accept_loop(
     }
 }
 
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn apply_probe_result(info: &mut LocalForwardInfo, result: &Result<()>) {
+    info.last_checked_at = Some(now_millis());
+    match result {
+        Ok(()) => {
+            info.target_status = "reachable".to_string();
+            info.last_error = None;
+        }
+        Err(error) => {
+            let message = error.to_string();
+            info.target_status = if message == "SSH session is disconnected" {
+                "ssh_disconnected".to_string()
+            } else {
+                "unreachable".to_string()
+            };
+            info.last_error = Some(message);
+        }
+    }
+}
+
+async fn probe_target(session: &Handle<Client>, remote_host: &str, remote_port: u16) -> Result<()> {
+    if session.is_closed() {
+        return Err(anyhow!("SSH session is disconnected"));
+    }
+
+    let channel = timeout(
+        Duration::from_secs(5),
+        session.channel_open_direct_tcpip(remote_host, u32::from(remote_port), "127.0.0.1", 0),
+    )
+    .await
+    .map_err(|_| anyhow!("Remote target probe timed out after 5 seconds"))?
+    .map_err(|error| anyhow!("Remote target is unreachable: {error}"))?;
+
+    let _ = channel.close().await;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_info() -> LocalForwardInfo {
+        LocalForwardInfo {
+            id: "pf-test".to_string(),
+            connection_id: "conn-test".to_string(),
+            bookmark_id: None,
+            name: None,
+            local_bind_host: "127.0.0.1".to_string(),
+            local_port: 8080,
+            remote_host: "localhost".to_string(),
+            remote_port: 80,
+            local_status: "listening".to_string(),
+            target_status: "checking".to_string(),
+            last_error: None,
+            last_checked_at: None,
+        }
+    }
 
     #[test]
     fn validate_rejects_empty_remote_host() {
@@ -297,5 +444,31 @@ mod tests {
         let mgr = PortForwardManager::new();
         let err = mgr.stop("c1", "f1").await.unwrap_err();
         assert!(err.to_string().contains("No port forwards"));
+    }
+
+    #[test]
+    fn successful_probe_marks_target_reachable() {
+        let mut info = test_info();
+        apply_probe_result(&mut info, &Ok(()));
+        assert_eq!(info.target_status, "reachable");
+        assert!(info.last_error.is_none());
+        assert!(info.last_checked_at.is_some());
+    }
+
+    #[test]
+    fn failed_probe_preserves_listener_and_marks_target_unreachable() {
+        let mut info = test_info();
+        apply_probe_result(&mut info, &Err(anyhow!("connection refused")));
+        assert_eq!(info.local_status, "listening");
+        assert_eq!(info.target_status, "unreachable");
+        assert_eq!(info.last_error.as_deref(), Some("connection refused"));
+    }
+
+    #[test]
+    fn disconnected_ssh_has_distinct_target_status() {
+        let mut info = test_info();
+        apply_probe_result(&mut info, &Err(anyhow!("SSH session is disconnected")));
+        assert_eq!(info.local_status, "listening");
+        assert_eq!(info.target_status, "ssh_disconnected");
     }
 }

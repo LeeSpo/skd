@@ -199,6 +199,32 @@
       "connectionErrorDesc": "An unexpected error occurred while connecting."
     }
   },
+  "connectionDiagnostics": {
+    "stage": {
+      "resolvingDns": "Resolving hostname",
+      "establishingTcp": "Establishing TCP connection",
+      "sshHandshake": "Performing SSH handshake",
+      "verifyingHostKey": "Verifying host key",
+      "authenticating": "Authenticating user",
+      "requestingPty": "Requesting PTY",
+      "connected": "Connected"
+    },
+    "error": {
+      "dnsFailure": "DNS resolution failed",
+      "tcpTimeout": "TCP connection timed out",
+      "proxyFailure": "Proxy connection failed",
+      "sshAlgorithmIncompatible": "SSH algorithms incompatible",
+      "hostKeyMismatch": "Host key mismatch",
+      "hostKeyUnknown": "Unknown host key",
+      "passwordIncorrect": "Incorrect password",
+      "publicKeyUnauthorized": "Public key not authorized",
+      "privateKeyFormatUnsupported": "Private key format not supported",
+      "ptyCreateFailed": "Failed to create PTY",
+      "cancelled": "Connection cancelled",
+      "unknown": "Connection failed"
+    },
+    "progressTitle": "Connection progress"
+  },
   "settings": {
     "title": "Settings & Preferences",
     "description": "Customize your SSH client experience and preferences",
@@ -450,14 +476,17 @@
     "noActiveSsh": "Connect an SSH session to manage port forwards.",
     "section": {
       "add": "New local forward",
+      "edit": "Edit bookmark",
+      "saved": "Saved bookmarks",
       "active": "Active forwards"
     },
     "label": {
-      "name": "Name (optional)",
+      "name": "Name",
       "localBindHost": "Local bind address",
       "localPort": "Local port",
       "remoteHost": "Remote host",
-      "remotePort": "Remote port"
+      "remotePort": "Remote port",
+      "autoStart": "Start automatically when this SSH connection is ready"
     },
     "placeholder": {
       "name": "e.g. Postgres",
@@ -467,13 +496,29 @@
     },
     "action": {
       "start": "Start",
-      "stop": "Stop"
+      "stop": "Stop",
+      "active": "Active",
+      "edit": "Edit bookmark",
+      "delete": "Delete bookmark",
+      "test": "Test remote target",
+      "saveBookmark": "Save bookmark",
+      "updateBookmark": "Update bookmark"
     },
+    "bookmarkEmpty": "No saved port forward bookmarks for this SSH connection.",
     "empty": "No active port forwards for this session.",
     "status": {
-      "listening": "Listening"
+      "listening": "Listening",
+      "error": "Listener error",
+      "checking": "Checking",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "ssh_disconnected": "SSH disconnected",
+      "unknown": "Not tested",
+      "autoStart": "Auto-start",
+      "autoPort": "Auto"
     },
     "validation": {
+      "nameRequired": "A name is required to save a bookmark.",
       "localBindHostRequired": "Local bind address is required.",
       "localPortInvalid": "Local port must be between 0 and 65535.",
       "remoteHostRequired": "Remote host is required.",
@@ -481,11 +526,21 @@
     },
     "toast": {
       "started": "Port forward started",
+      "startedUnreachable": "Local listener started, but the remote target is unreachable",
       "startFailed": "Failed to start port forward",
       "stopped": "Port forward stopped",
       "stopFailed": "Failed to stop port forward",
       "listFailed": "Failed to load port forwards",
-      "needSsh": "Port forwarding requires a connected SSH session"
+      "needSsh": "Port forwarding requires a connected SSH session",
+      "bookmarkSaved": "Port forward bookmark saved",
+      "bookmarkUpdated": "Port forward bookmark updated",
+      "bookmarkDeleted": "Port forward bookmark deleted",
+      "testSucceeded": "Remote target is reachable",
+      "testFailed": "Remote target is unreachable",
+      "autoStartFailed_one": "{{count}} port forward bookmark failed to start",
+      "autoStartFailed_other": "{{count}} port forward bookmarks failed to start",
+      "autoStartUnreachable_one": "{{count}} auto-started port forward has an unreachable target",
+      "autoStartUnreachable_other": "{{count}} auto-started port forwards have unreachable targets"
     }
   },
   "fileBrowser": {

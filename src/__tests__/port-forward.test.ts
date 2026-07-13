@@ -6,6 +6,7 @@ import {
   listLocalForwards,
   startLocalForward,
   stopLocalForward,
+  testLocalForward,
   validateLocalForwardForm,
 } from '@/lib/port-forward';
 
@@ -110,7 +111,8 @@ describe('port-forward IPC argument names', () => {
       local_port: 8080,
       remote_host: 'localhost',
       remote_port: 5432,
-      status: 'listening',
+      local_status: 'listening',
+      target_status: 'reachable',
     });
     await startLocalForward({
       connection_id: 'conn-1',
@@ -121,6 +123,7 @@ describe('port-forward IPC argument names', () => {
     expect(invokeMock).toHaveBeenCalledWith('ssh_start_local_forward', {
       request: {
         connection_id: 'conn-1',
+        bookmark_id: undefined,
         name: undefined,
         local_bind_host: undefined,
         local_port: 8080,
@@ -133,5 +136,19 @@ describe('port-forward IPC argument names', () => {
   it('throws when stop reports failure', async () => {
     invokeMock.mockResolvedValueOnce({ success: false, error: 'not found' });
     await expect(stopLocalForward('conn-1', 'pf-missing')).rejects.toThrow('not found');
+  });
+
+  it('tests a forward with camelCase identifiers', async () => {
+    invokeMock.mockResolvedValueOnce({
+      id: 'pf-1',
+      connection_id: 'conn-1',
+      local_status: 'listening',
+      target_status: 'reachable',
+    });
+    await testLocalForward('conn-1', 'pf-1');
+    expect(invokeMock).toHaveBeenCalledWith('ssh_test_local_forward', {
+      connectionId: 'conn-1',
+      forwardId: 'pf-1',
+    });
   });
 });

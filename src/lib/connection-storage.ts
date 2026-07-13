@@ -17,6 +17,10 @@ import {
   type CredentialStoreOptions,
   copyConnectionSecrets,
 } from './credential-storage';
+import {
+  clearPortForwardBookmarks,
+  deletePortForwardBookmarksForConnection,
+} from './port-forward-bookmarks';
 
 export type { ConnectionSecretUpdate, CredentialAuthMethod, CredentialStoreOptions } from './credential-storage';
 
@@ -319,6 +323,7 @@ export class ConnectionStorageManager {
     if (filtered.length === connections.length) return false;
 
     this.persistConnections(filtered);
+    deletePortForwardBookmarksForConnection(id);
     return true;
   }
 
@@ -397,6 +402,10 @@ export class ConnectionStorageManager {
 
     localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(filteredFolders));
     this.persistConnections(filteredConnections);
+    const remainingIds = new Set(filteredConnections.map((connection) => connection.id));
+    connections
+      .filter((connection) => !remainingIds.has(connection.id))
+      .forEach((connection) => deletePortForwardBookmarksForConnection(connection.id));
 
     return true;
   }
@@ -571,6 +580,7 @@ export class ConnectionStorageManager {
   static clearAll(): void {
     localStorage.removeItem(CONNECTIONS_STORAGE_KEY);
     localStorage.removeItem(FOLDERS_STORAGE_KEY);
+    clearPortForwardBookmarks();
     this.initialize();
   }
 

@@ -32,10 +32,19 @@ import {
   type UnknownHostKeyPayload,
 } from '../lib/host-key-verification';
 import {
+  listenConnectProgress,
   sshConnectWithHostKeyTrust,
   type ConnectResponse,
   type HostKeyTrustRequest,
 } from '../lib/ssh-connect';
+import {
+  computeStageStatuses,
+  DIALOG_CONNECT_STAGES,
+  formatConnectError,
+  isConnectStage,
+  stageI18nKey,
+  type ConnectStage,
+} from '../lib/connection-diagnostics';
 import { HostKeyTrustDialog } from './host-key-trust-dialog';
 import { toast } from 'sonner';
 import {
@@ -44,9 +53,14 @@ import {
   FolderOpen,
   Network,
   Terminal as TerminalIcon,
+  Check,
+  Loader2,
+  X,
+  Circle,
 } from 'lucide-react';
 import { getDefaultPort, getAuthMethods, getHiddenFields } from '@/lib/protocol-config';
 import { connectionNameUpdateForHostChange } from '@/lib/connection-name-sync';
+import { cn } from '@/lib/utils';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -119,6 +133,8 @@ export function ConnectionDialog({
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [connectStage, setConnectStage] = useState<ConnectStage | null>(null);
+  const [failedStage, setFailedStage] = useState<ConnectStage | null>(null);
   const [saveAsConnection, setSaveAsConnection] = useState(true);
   const [rememberPassword, setRememberPassword] = useState(true);
   const { t } = useTranslation();
@@ -126,6 +142,7 @@ export function ConnectionDialog({
   const [availableFolders, setAvailableFolders] = useState<string[]>([]);
   const connectionIdRef = useRef<string | null>(null);
   const cancelRequestedRef = useRef(false);
+  const progressUnlistenRef = useRef<(() => void) | null>(null);
   const nameManuallyEditedRef = useRef(false);
   const hostKeyRetryRef = useRef<(() => Promise<ConnectResponse>) | null>(null);
   const pendingSshConnectRef = useRef<{
@@ -242,10 +259,7 @@ export function ConnectionDialog({
     }
 
     console.error('Connection failed after host key trust:', result.error);
-    toast.error(t('connectionDialog.toast.connectionFailed'), {
-      description: result.error || t('connectionDialog.toast.connectionFailedDesc'),
-      duration: 5000,
-    });
+    showConnectFailure(result);
     pendingSshConnectRef.current = null;
     resetConnectionState();
   };
@@ -315,11 +329,48 @@ export function ConnectionDialog({
     }
   };
 
+  function stopProgressListener() {
+    progressUnlistenRef.current?.();
+    progressUnlistenRef.current = null;
+  }
+
   function resetConnectionState() {
+    stopProgressListener();
     setIsConnecting(false);
     setIsCancelling(false);
+    setConnectStage(null);
+    setFailedStage(null);
     connectionIdRef.current = null;
     cancelRequestedRef.current = false;
+  }
+
+  async function startProgressListener(connectionId: string) {
+    stopProgressListener();
+    setConnectStage(null);
+    setFailedStage(null);
+    try {
+      progressUnlistenRef.current = await listenConnectProgress(connectionId, (stage) => {
+        setConnectStage(stage);
+      });
+    } catch {
+      // Progress events are optional outside the Tauri runtime.
+    }
+  }
+
+  function showConnectFailure(result: ConnectResponse) {
+    setFailedStage(isConnectStage(result.failedStage) ? result.failedStage : null);
+    if (result.errorKind === 'cancelled' || result.error?.toLowerCase().includes('cancelled')) {
+      toast.info(t('connectionDialog.toast.connectionCancelled'));
+      return;
+    }
+    const formatted = formatConnectError(t, result);
+    if (!formatted) {
+      return;
+    }
+    toast.error(formatted.title, {
+      description: formatted.description,
+      duration: 5000,
+    });
   }
 
   const handleConnect = async () => {
@@ -554,6 +605,7 @@ export function ConnectionDialog({
 
     let awaitingHostKeyTrust = false;
     try {
+      await startProgressListener(connectionId);
       const result = await sshConnectWithHostKeyTrust(
         {
           connection_id: connectionId,
@@ -569,6 +621,7 @@ export function ConnectionDialog({
       );
 
       if (result.success) {
+        setConnectStage('connected');
         await completeSuccessfulConnect(
           connectionId,
           resolvedKeyContent,
@@ -576,19 +629,20 @@ export function ConnectionDialog({
           credentialSecrets,
         );
         pendingSshConnectRef.current = null;
+        resetConnectionState();
       } else if (result.pendingHostKeyTrust || isUnknownHostKeyError(result.error ?? '')) {
         awaitingHostKeyTrust = true;
+        stopProgressListener();
       } else {
         console.error('Connection failed:', result.error);
-        if (cancelRequestedRef.current && result.error?.toLowerCase().includes('cancelled')) {
-          toast.info(t('connectionDialog.toast.connectionCancelled'));
-        } else {
-          toast.error(t('connectionDialog.toast.connectionFailed'), {
-            description: result.error || t('connectionDialog.toast.connectionFailedDesc'),
-            duration: 5000,
-          });
-        }
+        showConnectFailure(result);
         pendingSshConnectRef.current = null;
+        // Keep failed-stage checklist visible; stop spinner state.
+        stopProgressListener();
+        setIsConnecting(false);
+        setIsCancelling(false);
+        connectionIdRef.current = null;
+        cancelRequestedRef.current = false;
       }
     } catch (error) {
       console.error('Connection error:', error);
@@ -601,9 +655,10 @@ export function ConnectionDialog({
           duration: 5000,
         });
       }
+      resetConnectionState();
     } finally {
-      if (!awaitingHostKeyTrust) {
-        resetConnectionState();
+      if (awaitingHostKeyTrust) {
+        // Host-key trust dialog is open; keep isConnecting true until resolved.
       }
     }
   };
@@ -1196,6 +1251,43 @@ export function ConnectionDialog({
               </div>
             )}
 
+            {/* Connection stage checklist (live + last failure) */}
+            {(isConnecting || failedStage) && config.protocol === 'SSH' && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  {t('connectionDiagnostics.progressTitle')}
+                </div>
+                {(() => {
+                  const statuses = computeStageStatuses(
+                    DIALOG_CONNECT_STAGES,
+                    connectStage,
+                    failedStage,
+                  );
+                  return DIALOG_CONNECT_STAGES.map((stage, index) => {
+                    const status = statuses[index];
+                    return (
+                      <div
+                        key={stage}
+                        className={cn(
+                          'flex items-center gap-2 text-xs',
+                          status === 'active' && 'text-foreground font-medium',
+                          status === 'done' && 'text-muted-foreground',
+                          status === 'failed' && 'text-destructive font-medium',
+                          status === 'pending' && 'text-muted-foreground/60',
+                        )}
+                      >
+                        {status === 'done' && <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                        {status === 'active' && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                        {status === 'failed' && <X className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                        {status === 'pending' && <Circle className="h-3 w-3 shrink-0 opacity-40" />}
+                        <span>{t(stageI18nKey(stage) as 'connectionDiagnostics.stage.resolvingDns')}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex justify-end gap-2">
               <Button
@@ -1206,7 +1298,13 @@ export function ConnectionDialog({
                 {isConnecting ? (isCancelling ? t('connectionDialog.button.cancelling') : t('connectionDialog.button.stop')) : t('connectionDialog.button.cancel')}
               </Button>
               <Button onClick={handleConnect} disabled={isConnecting || isCancelling} className="min-w-[140px]">
-                {isConnecting ? t('connectionDialog.button.connecting') : editingConnection ? t('connectionDialog.button.updateAndConnect') : t('connectionDialog.button.connect')}
+                {isConnecting
+                  ? (connectStage
+                    ? t(stageI18nKey(connectStage) as 'connectionDiagnostics.stage.resolvingDns')
+                    : t('connectionDialog.button.connecting'))
+                  : editingConnection
+                    ? t('connectionDialog.button.updateAndConnect')
+                    : t('connectionDialog.button.connect')}
               </Button>
             </div>
           </div>

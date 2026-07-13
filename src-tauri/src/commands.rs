@@ -1,4 +1,5 @@
 use base64::Engine as _;
+use crate::connection_diagnostics::{classify_connect_error, ConnectStage};
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
 use crate::os_detect::{self, OsInfo};
@@ -7,7 +8,7 @@ use crate::sftp_client::{FileEntry, FileEntryType, SftpAuthMethod, SftpConfig};
 use crate::ssh::{AuthMethod, SshConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectRequest {
@@ -55,11 +56,48 @@ pub struct CommandResponse {
     pub error: Option<String>,
 }
 
+/// Response for SSH / SFTP connect with optional diagnostic classification.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectCommandResponse {
+    pub success: bool,
+    pub output: Option<String>,
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_stage: Option<String>,
+}
+
+impl ConnectCommandResponse {
+    fn ok(output: String) -> Self {
+        Self {
+            success: true,
+            output: Some(output),
+            error: None,
+            error_kind: None,
+            failed_stage: None,
+        }
+    }
+
+    fn from_error(err: anyhow::Error, fallback_stage: ConnectStage) -> Self {
+        let diag = classify_connect_error(&err, fallback_stage);
+        Self {
+            success: false,
+            output: None,
+            error: Some(diag.message),
+            error_kind: Some(diag.kind.as_str().to_string()),
+            failed_stage: Some(diag.stage.as_str().to_string()),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn ssh_connect(
     request: ConnectRequest,
     state: State<'_, Arc<ConnectionManager>>,
-) -> Result<CommandResponse, String> {
+    app: AppHandle,
+) -> Result<ConnectCommandResponse, String> {
     let auth_method = match request.auth_method.as_str() {
         "password" => AuthMethod::Password {
             password: request.password.ok_or("Password required")?,
@@ -80,19 +118,22 @@ pub async fn ssh_connect(
     };
 
     match state
-        .create_connection(request.connection_id.clone(), config)
+        .create_connection(
+            request.connection_id.clone(),
+            config,
+            Some(app),
+            None,
+        )
         .await
     {
-        Ok(_) => Ok(CommandResponse {
-            success: true,
-            output: Some(format!("Connected: {}", request.connection_id)),
-            error: None,
-        }),
-        Err(e) => Ok(CommandResponse {
-            success: false,
-            output: None,
-            error: Some(e.to_string()),
-        }),
+        Ok(_) => Ok(ConnectCommandResponse::ok(format!(
+            "Connected: {}",
+            request.connection_id
+        ))),
+        Err(e) => Ok(ConnectCommandResponse::from_error(
+            e,
+            ConnectStage::EstablishingTcp,
+        )),
     }
 }
 
@@ -138,6 +179,7 @@ pub async fn ssh_disconnect(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocalForwardRequest {
     pub connection_id: String,
+    pub bookmark_id: Option<String>,
     pub name: Option<String>,
     pub local_bind_host: Option<String>,
     pub local_port: u16,
@@ -164,6 +206,7 @@ pub async fn ssh_start_local_forward(
     state
         .start_local_forward(
             request.connection_id,
+            request.bookmark_id.filter(|id| !id.trim().is_empty()),
             request.name.filter(|n| !n.trim().is_empty()),
             local_bind_host,
             request.local_port,
@@ -205,6 +248,19 @@ pub async fn ssh_list_local_forwards(
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<Vec<LocalForwardInfo>, String> {
     Ok(state.list_local_forwards(&connection_id).await)
+}
+
+/// Test the remote target for an active local port forward.
+#[tauri::command]
+pub async fn ssh_test_local_forward(
+    connection_id: String,
+    forward_id: String,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<LocalForwardInfo, String> {
+    state
+        .test_local_forward(&connection_id, &forward_id)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -2295,7 +2351,8 @@ pub struct SftpConnectRequest {
 pub async fn sftp_connect(
     request: SftpConnectRequest,
     state: State<'_, Arc<ConnectionManager>>,
-) -> Result<CommandResponse, String> {
+    app: AppHandle,
+) -> Result<ConnectCommandResponse, String> {
     let auth = match request.auth_method.as_str() {
         "password" => SftpAuthMethod::Password {
             password: request.password.unwrap_or_default(),
@@ -2316,15 +2373,17 @@ pub async fn sftp_connect(
     };
 
     match state
-        .create_sftp_connection(request.connection_id.clone(), config)
+        .create_sftp_connection(request.connection_id.clone(), config, Some(app))
         .await
     {
-        Ok(_) => Ok(CommandResponse {
-            success: true,
-            output: Some(format!("SFTP connected: {}", request.connection_id)),
-            error: None,
-        }),
-        Err(e) => Err(format!("SFTP connection failed: {}", e)),
+        Ok(_) => Ok(ConnectCommandResponse::ok(format!(
+            "SFTP connected: {}",
+            request.connection_id
+        ))),
+        Err(e) => Ok(ConnectCommandResponse::from_error(
+            e,
+            ConnectStage::EstablishingTcp,
+        )),
     }
 }
 

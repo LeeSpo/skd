@@ -39,7 +39,10 @@ import {
   type ConnectResponse,
   type HostKeyTrustRequest,
 } from './lib/ssh-connect';
+import { formatConnectError } from './lib/connection-diagnostics';
 import type { UnknownHostKeyPayload } from './lib/host-key-verification';
+import { startLocalForward } from './lib/port-forward';
+import { getAutoStartPortForwardBookmarks } from './lib/port-forward-bookmarks';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
@@ -146,6 +149,55 @@ function AppContent() {
   const allTabs = useMemo(() => {
     return Object.values(state.groups).flatMap(g => g.tabs);
   }, [state.groups]);
+  const autoStartedForwardConnectionsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const connectedPrimaryIds = new Set(
+      allTabs
+        .filter((tab) => tab.protocol === 'SSH' && tab.connectionStatus === 'connected' && !tab.originalConnectionId)
+        .map((tab) => tab.id),
+    );
+
+    for (const connectionId of autoStartedForwardConnectionsRef.current) {
+      if (!connectedPrimaryIds.has(connectionId)) {
+        autoStartedForwardConnectionsRef.current.delete(connectionId);
+      }
+    }
+
+    for (const connectionId of connectedPrimaryIds) {
+      if (autoStartedForwardConnectionsRef.current.has(connectionId)) continue;
+      autoStartedForwardConnectionsRef.current.add(connectionId);
+      const bookmarks = getAutoStartPortForwardBookmarks(connectionId);
+      if (bookmarks.length === 0) continue;
+
+      void Promise.allSettled(bookmarks.map((bookmark) => startLocalForward({
+        connection_id: connectionId,
+        bookmark_id: bookmark.id,
+        name: bookmark.name,
+        local_bind_host: bookmark.localBindHost,
+        local_port: bookmark.localPort,
+        remote_host: bookmark.remoteHost,
+        remote_port: bookmark.remotePort,
+      }))).then((results) => {
+        const failures = results.flatMap((result, index) => {
+          if (result.status !== 'rejected') return [];
+          const reason = result.reason as unknown;
+          return [`${bookmarks[index].name}: ${reason instanceof Error ? reason.message : String(reason)}`];
+        });
+        const unreachable = results.filter(
+          (result) => result.status === 'fulfilled' && result.value.target_status !== 'reachable',
+        ).length;
+        if (failures.length > 0) {
+          toast.error(t('portForward.toast.autoStartFailed', { count: failures.length }), {
+            description: failures.join('\n'),
+          });
+        }
+        if (unreachable > 0) {
+          toast.warning(t('portForward.toast.autoStartUnreachable', { count: unreachable }));
+        }
+      });
+    }
+  }, [allTabs, t]);
 
   const handleTabClose = useCallback(async (tabId: string) => {
     const tab = allTabs.find((item) => item.id === tabId);
@@ -395,9 +447,14 @@ function AppContent() {
             dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
           } else {
             console.error('SSH connection failed:', result.error);
-            toast.error(t('app.connectionFailed'), {
-              description: result.error || 'Unable to connect to the server. Please check your credentials and try again.',
-            });
+            {
+              const formatted = formatConnectError(t, result);
+              toast.error(formatted?.title ?? t('app.connectionFailed'), {
+                description: formatted?.description
+                  ?? result.error
+                  ?? t('connectionDialog.toast.connectionFailedDesc'),
+              });
+            }
             setEditingConnection({
               id: connection.id,
               name: connectionData.name,
@@ -759,10 +816,13 @@ function AppContent() {
           toast.success(t('app.reconnected'), {
             description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
           });
-        } else {
+        } else if (!result.pendingHostKeyTrust) {
           dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'disconnected' });
-          toast.error(t('app.reconnectionFailed'), {
-            description: result.error || t('app.reconnectionFailedDesc'),
+          const formatted = formatConnectError(t, result);
+          toast.error(formatted?.title ?? t('app.reconnectionFailed'), {
+            description: formatted?.description
+              ?? result.error
+              ?? t('app.reconnectionFailedDesc'),
           });
         }
       }
@@ -1228,9 +1288,14 @@ function AppContent() {
         } else {
           console.error('Quick connect failed:', result.error);
           removePendingTab();
-          toast.error(t('app.connectionFailed'), {
-            description: result.error || t('app.quickConnectFailedDesc'),
-          });
+          {
+            const formatted = formatConnectError(t, result);
+            toast.error(formatted?.title ?? t('app.connectionFailed'), {
+              description: formatted?.description
+                ?? result.error
+                ?? t('app.quickConnectFailedDesc'),
+            });
+          }
           setEditingConnection({
             id: connectionData.id,
             name: connectionData.name,
@@ -1529,6 +1594,7 @@ function AppContent() {
             open={portForwardDialogOpen}
             onOpenChange={setPortForwardDialogOpen}
             connectionId={canManagePortForward ? activeConnection?.connectionId ?? null : null}
+            connectionProfileId={activeTab ? activeTab.originalConnectionId ?? activeTab.id : null}
             connectionName={activeConnection?.name}
             connectionHost={activeConnection?.host}
             canManage={!!canManagePortForward}
@@ -1548,9 +1614,10 @@ function AppContent() {
               hostKeyRetryRef.current = null;
               hostKeyCancelRef.current = null;
             }
-            if (!result.success) {
-              toast.error(t('app.connectionFailed'), {
-                description: result.error,
+            if (!result.success && !result.pendingHostKeyTrust) {
+              const formatted = formatConnectError(t, result);
+              toast.error(formatted?.title ?? t('app.connectionFailed'), {
+                description: formatted?.description ?? result.error,
               });
             }
           })();

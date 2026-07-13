@@ -7,7 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::ssh::{load_private_key_from_content, SshHandler};
+use crate::connection_diagnostics::{sftp_tcp_timeout, ConnectStage};
+use crate::ssh::{
+    establish_authenticated_session, AuthMethod, SshConfig, SshHandler,
+};
 
 /// Configuration for a standalone SFTP connection (SSH transport, no PTY).
 #[derive(Debug, Clone, Deserialize)]
@@ -74,72 +77,35 @@ impl StandaloneSftpClient {
 
     /// Establish an SSH connection, authenticate, and open the SFTP subsystem.
     pub async fn connect(config: &SftpConfig) -> Result<Self> {
-        let ssh_config = client::Config {
-            preferred: russh::Preferred {
-                key: std::borrow::Cow::Borrowed(crate::ssh::PREFERRED_HOST_KEY_ALGOS),
-                ..russh::Preferred::DEFAULT
+        Self::connect_with_progress(config, |_| {}).await
+    }
+
+    /// Staged SFTP connect (SSH transport stages + SFTP subsystem).
+    pub async fn connect_with_progress(
+        config: &SftpConfig,
+        mut on_stage: impl FnMut(ConnectStage),
+    ) -> Result<Self> {
+        let ssh_config = SshConfig {
+            host: config.host.clone(),
+            port: config.port,
+            username: config.username.clone(),
+            auth_method: match &config.auth_method {
+                SftpAuthMethod::Password { password } => AuthMethod::Password {
+                    password: password.clone(),
+                },
+                SftpAuthMethod::PublicKey {
+                    key_content,
+                    passphrase,
+                } => AuthMethod::PublicKey {
+                    key_content: key_content.clone(),
+                    passphrase: passphrase.clone(),
+                },
             },
-            ..client::Config::default()
-        };
-        let connection_timeout = Duration::from_secs(10);
-
-        let handler = SshHandler::new(
-            config.host.clone(),
-            config.port,
-            config.host_key_verification,
-        );
-        let mut ssh_session = tokio::time::timeout(
-            connection_timeout,
-            client::connect(
-                Arc::new(ssh_config),
-                (&config.host[..], config.port),
-                handler,
-            ),
-        )
-        .await
-        .map_err(|_| {
-            anyhow::anyhow!(
-                "SFTP connection timed out after 10 seconds. Please check the host and network."
-            )
-        })?
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to connect to {}:{}: {}",
-                config.host,
-                config.port,
-                e
-            )
-        })?;
-
-        // Authenticate
-        let authenticated = match &config.auth_method {
-            SftpAuthMethod::Password { password } => ssh_session
-                .authenticate_password(&config.username, password)
-                .await
-                .map_err(|e| anyhow::anyhow!("SFTP password authentication failed: {}", e))?,
-            SftpAuthMethod::PublicKey {
-                key_content,
-                passphrase,
-            } => {
-                let key = load_private_key_from_content(key_content, passphrase.as_deref())?;
-
-                ssh_session
-                    .authenticate_publickey(&config.username, Arc::new(key))
-                    .await
-                    .map_err(|e| {
-                        anyhow::anyhow!(
-                            "SFTP public key authentication failed: {}. The key may not be authorized on the server.",
-                            e
-                        )
-                    })?
-            }
+            host_key_verification: config.host_key_verification,
         };
 
-        if !authenticated {
-            return Err(anyhow::anyhow!(
-                "SFTP authentication failed. Please check your credentials."
-            ));
-        }
+        let ssh_session =
+            establish_authenticated_session(&ssh_config, sftp_tcp_timeout(), &mut on_stage).await?;
 
         let session = Arc::new(ssh_session);
 

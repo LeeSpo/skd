@@ -3,17 +3,21 @@ import { invoke } from '@tauri-apps/api/core';
 export interface LocalForwardInfo {
   id: string;
   connection_id: string;
+  bookmark_id?: string | null;
   name?: string | null;
   local_bind_host: string;
   local_port: number;
   remote_host: string;
   remote_port: number;
-  status: string;
-  error?: string | null;
+  local_status: 'listening' | 'error';
+  target_status: 'checking' | 'reachable' | 'unreachable' | 'ssh_disconnected' | 'unknown';
+  last_error?: string | null;
+  last_checked_at?: number | null;
 }
 
 export interface StartLocalForwardParams {
   connection_id: string;
+  bookmark_id?: string;
   name?: string;
   local_bind_host?: string;
   local_port: number;
@@ -73,6 +77,7 @@ export async function startLocalForward(
   return invoke<LocalForwardInfo>('ssh_start_local_forward', {
     request: {
       connection_id: params.connection_id,
+      bookmark_id: params.bookmark_id,
       name: params.name,
       local_bind_host: params.local_bind_host,
       local_port: params.local_port,
@@ -105,5 +110,15 @@ export async function listLocalForwards(
   // Tauri renames command args to camelCase for the JS bridge.
   return invoke<LocalForwardInfo[]>('ssh_list_local_forwards', {
     connectionId,
+  });
+}
+
+export async function testLocalForward(
+  connectionId: string,
+  forwardId: string,
+): Promise<LocalForwardInfo> {
+  return invoke<LocalForwardInfo>('ssh_test_local_forward', {
+    connectionId,
+    forwardId,
   });
 }

@@ -1,4 +1,5 @@
 mod commands;
+mod connection_diagnostics;
 mod connection_manager;
 mod credential_store;
 mod known_hosts;
@@ -271,6 +272,7 @@ pub fn run() {
             commands::ssh_start_local_forward,
             commands::ssh_stop_local_forward,
             commands::ssh_list_local_forwards,
+            commands::ssh_test_local_forward,
             commands::local_shell_connect,
             commands::local_shell_disconnect,
             commands::ssh_execute_command,

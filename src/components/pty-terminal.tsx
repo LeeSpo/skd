@@ -534,26 +534,60 @@ export function PtyTerminal({
               
             case 'Error': {
               console.error('[PTY Terminal] Error:', msg.message);
-              term.write(`\r\n\x1b[31m[Error: ${msg.message}]\x1b[0m\r\n`);
-              const errorMsgLower = msg.message.toLowerCase();
+              const isPtyCreateFailed = msg.error_kind === 'ptyCreateFailed'
+                || msg.errorKind === 'ptyCreateFailed'
+                || msg.failed_stage === 'requestingPty'
+                || msg.failedStage === 'requestingPty';
+              const displayTitle = isPtyCreateFailed
+                ? t('connectionDiagnostics.error.ptyCreateFailed')
+                : null;
+              const displayMsg = displayTitle
+                ? `${displayTitle}: ${msg.message}`
+                : msg.message;
+              term.write(`\r\n\x1b[31m[Error: ${displayMsg}]\x1b[0m\r\n`);
+              if (isPtyCreateFailed) {
+                toast.error(t('connectionDiagnostics.error.ptyCreateFailed'), {
+                  description: msg.message,
+                });
+              }
+              const errorMsgLower = String(msg.message ?? '').toLowerCase();
               // Permanent failures (SSH session gone on the backend) — stop the
               // retry loop immediately instead of burning through all 5 attempts.
-              if (errorMsgLower.includes('not found') || errorMsgLower.includes('failed to open')) {
+              if (
+                isPtyCreateFailed
+                || errorMsgLower.includes('not found')
+                || errorMsgLower.includes('failed to open')
+              ) {
                 reconnectAttemptsRef.current = MAX_RECONNECT_ATTEMPTS;
               }
-              if (errorMsgLower.includes('session not found') || 
-                  errorMsgLower.includes('ssh') || 
-                  errorMsgLower.includes('connection') ||
-                  errorMsgLower.includes('disconnected') ||
-                  errorMsgLower.includes('closed') ||
-                  errorMsgLower.includes('lost') ||
-                  errorMsgLower.includes('pty')) {
+              if (
+                isPtyCreateFailed
+                || errorMsgLower.includes('session not found')
+                || errorMsgLower.includes('ssh')
+                || errorMsgLower.includes('connection')
+                || errorMsgLower.includes('disconnected')
+                || errorMsgLower.includes('closed')
+                || errorMsgLower.includes('lost')
+                || errorMsgLower.includes('pty')
+              ) {
                 if (connectionStatusRef.current !== 'disconnected') {
                   connectionStatusRef.current = 'disconnected';
                   onConnectionStatusChange?.(connectionId, 'disconnected');
                 }
                 if (ws.readyState === WebSocket.OPEN) {
                   ws.close();
+                }
+              }
+              break;
+            }
+
+            case 'Progress': {
+              if (msg.connection_id === connectionId || msg.connectionId === connectionId) {
+                const stage = msg.stage as string | undefined;
+                if (stage === 'requestingPty') {
+                  terminalDebug(`[PTY Terminal] [${connectionId}] Requesting PTY…`);
+                } else if (stage === 'connected') {
+                  terminalDebug(`[PTY Terminal] [${connectionId}] Session connected`);
                 }
               }
               break;
