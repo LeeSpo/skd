@@ -1,4 +1,4 @@
-use crate::connection_diagnostics::{classify_connect_error, ConnectStage};
+use crate::connection_diagnostics::{classify_connect_error, ConnectErrorKind, ConnectStage};
 use crate::connection_manager::ConnectionManager;
 use crate::WEBSOCKET_PORT;
 use anyhow::Result;
@@ -56,9 +56,9 @@ pub enum WsMessage {
     Error {
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        error_kind: Option<String>,
+        error_kind: Option<ConnectErrorKind>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        failed_stage: Option<String>,
+        failed_stage: Option<ConnectStage>,
     },
     /// Success confirmation
     Success { message: String },
@@ -419,8 +419,8 @@ impl WebSocketServer {
                         let diag = classify_connect_error(&e, ConnectStage::RequestingPty);
                         let error = WsMessage::Error {
                             message: diag.message,
-                            error_kind: Some(diag.kind.as_str().to_string()),
-                            failed_stage: Some(diag.stage.as_str().to_string()),
+                            error_kind: Some(diag.kind),
+                            failed_stage: Some(diag.stage),
                         };
                         let _ = send_control(&tx, &error).await;
                         return Ok(PtyLifecycleEvent::None);

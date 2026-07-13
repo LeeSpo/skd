@@ -38,11 +38,14 @@ import {
   sftpConnectWithHostKeyTrust,
   type ConnectResponse,
   type HostKeyTrustRequest,
+  type SshConnectParams,
 } from './lib/ssh-connect';
 import { formatConnectError } from './lib/connection-diagnostics';
+import { useConnectionAttempts } from './lib/connection-attempt-context';
 import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 import { startLocalForward } from './lib/port-forward';
 import { getAutoStartPortForwardBookmarks } from './lib/port-forward-bookmarks';
+import { ConnectionAttemptProvider } from './lib/connection-attempt-context';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
@@ -95,6 +98,13 @@ function AppContent() {
 
   // Terminal group state from context
   const { state, dispatch, activeGroup, activeTab, activeConnection } = useTerminalGroups();
+  const {
+    beginAttempt,
+    reportStage,
+    awaitHostKey,
+    failAttempt,
+    clearAttempt,
+  } = useConnectionAttempts();
 
   // Modal states
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -124,6 +134,49 @@ function AppContent() {
     hostKeyCancelRef.current = onCancelled ?? null;
     setHostKeyTrustOpen(true);
   }, []);
+
+  const connectSshWithDiagnostics = useCallback(async (
+    params: SshConnectParams,
+    onTrustRequired: (request: HostKeyTrustRequest, onCancelled?: () => void) => void,
+  ): Promise<ConnectResponse> => {
+    beginAttempt(params.connection_id);
+    try {
+      return await sshConnectWithHostKeyTrust(
+        params,
+        (request) => {
+          awaitHostKey(params.connection_id);
+          onTrustRequired(request, () => {
+            clearAttempt(params.connection_id);
+            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: params.connection_id, status: 'disconnected' });
+          });
+        },
+        (stage) => reportStage(params.connection_id, stage),
+        (response) => {
+          if (response.success) {
+            dispatch({ type: 'RECONNECT_TAB', tabId: params.connection_id });
+            return;
+          }
+          if (response.errorKind === 'hostKeyUnknown') {
+            awaitHostKey(params.connection_id);
+          } else if (
+            response.errorKind === 'cancelled'
+            || response.error?.toLowerCase().includes('cancelled')
+          ) {
+            clearAttempt(params.connection_id);
+          } else {
+            failAttempt(params.connection_id, response);
+          }
+        },
+      );
+    } catch (error) {
+      failAttempt(params.connection_id, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorKind: 'unknown',
+      });
+      throw error;
+    }
+  }, [awaitHostKey, beginAttempt, clearAttempt, dispatch, failAttempt, reportStage]);
 
   const buildAuthRequest = useCallback(async (data: ConnectionData) => ({
     auth_method: data.authMethod || 'password',
@@ -200,6 +253,7 @@ function AppContent() {
   }, [allTabs, t]);
 
   const handleTabClose = useCallback(async (tabId: string) => {
+    clearAttempt(tabId);
     const tab = allTabs.find((item) => item.id === tabId);
     if (tab?.protocol === 'Local') {
       try {
@@ -208,7 +262,7 @@ function AppContent() {
         // PTY cleanup may have already run via WebSocket Close
       }
     }
-  }, [allTabs]);
+  }, [allTabs, clearAttempt]);
 
   const handleNewLocalTab = useCallback(() => {
     const tabId = `local-${Date.now()}`;
@@ -416,10 +470,21 @@ function AppContent() {
           });
         }
       } else {
-        // SSH connect flow (existing behavior)
+        const newTab: TerminalTab = {
+          id: sessionId,
+          name: connectionData.name,
+          protocol: connectionData.protocol,
+          host: connectionData.host,
+          username: connectionData.username,
+          originalConnectionId: existsAnywhere ? connection.id : undefined,
+          connectionStatus: 'pending',
+          reconnectCount: 0,
+        };
+        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+
         try {
           const auth = await buildAuthRequest(connectionData);
-          const result = await sshConnectWithHostKeyTrust(
+          const result = await connectSshWithDiagnostics(
             {
               connection_id: sessionId,
               host: connectionData.host,
@@ -432,55 +497,21 @@ function AppContent() {
 
           if (result.success) {
             ConnectionStorageManager.updateLastConnected(connection.id);
-
-            const newTab: TerminalTab = {
-              id: sessionId,
-              name: connectionData.name,
-              protocol: connectionData.protocol,
-              host: connectionData.host,
-              username: connectionData.username,
-              originalConnectionId: existsAnywhere ? connection.id : undefined,
-              connectionStatus: 'connecting',
-              reconnectCount: 0,
-            };
-
-            dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connecting' });
           } else {
             console.error('SSH connection failed:', result.error);
+            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
             {
               const formatted = formatConnectError(t, result);
-              toast.error(formatted?.title ?? t('app.connectionFailed'), {
-                description: formatted?.description
-                  ?? result.error
-                  ?? t('connectionDialog.toast.connectionFailedDesc'),
-              });
+              toast.error(formatted?.title ?? t('app.connectionFailed'));
             }
-            setEditingConnection({
-              id: connection.id,
-              name: connectionData.name,
-              protocol: connectionData.protocol as ConnectionConfig['protocol'],
-              host: connectionData.host,
-              port: connectionData.port,
-              username: connectionData.username,
-              authMethod: connectionData.authMethod || 'password',
-            });
-            setConnectionDialogOpen(true);
           }
         } catch (error) {
           console.error('Error connecting to SSH:', error);
+          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
           toast.error(t('app.connectionError'), {
             description: error instanceof Error ? error.message : t('app.connectionErrorDesc'),
           });
-          setEditingConnection({
-            id: connection.id,
-            name: connectionData.name,
-            protocol: connectionData.protocol as ConnectionConfig['protocol'],
-            host: connectionData.host,
-            port: connectionData.port,
-            username: connectionData.username,
-            authMethod: connectionData.authMethod || 'password',
-          });
-          setConnectionDialogOpen(true);
         }
       }
     }
@@ -636,8 +667,20 @@ function AppContent() {
         }
       } else {
         // SSH duplicate flow
+        const duplicatedTab: TerminalTab = {
+          id: duplicateId,
+          name: tabToDuplicate.name,
+          protocol: tabToDuplicate.protocol,
+          host: tabToDuplicate.host,
+          username: tabToDuplicate.username,
+          originalConnectionId,
+          connectionStatus: 'pending',
+          reconnectCount: 0,
+        };
+        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: duplicatedTab });
+
         const auth = await buildAuthRequest(connectionData);
-        const result = await sshConnectWithHostKeyTrust(
+        const result = await connectSshWithDiagnostics(
           {
             connection_id: duplicateId,
             host: connectionData.host,
@@ -649,26 +692,13 @@ function AppContent() {
         );
 
         if (result.success) {
-          const duplicatedTab: TerminalTab = {
-            id: duplicateId,
-            name: tabToDuplicate.name,
-            protocol: tabToDuplicate.protocol,
-            host: tabToDuplicate.host,
-            username: tabToDuplicate.username,
-            originalConnectionId,
-            connectionStatus: 'connecting',
-            reconnectCount: 0,
-          };
-
-          dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: duplicatedTab });
-
           toast.success(t('app.tabDuplicated'), {
             description: t('app.tabDuplicatedDesc', { name: tabToDuplicate.name }),
           });
         } else {
-          toast.error(t('app.duplicationFailed'), {
-            description: result.error || 'Unable to establish connection for the duplicated tab.',
-          });
+          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: duplicateId, status: 'disconnected' });
+          const formatted = formatConnectError(t, result);
+          toast.error(formatted?.title ?? t('app.duplicationFailed'));
         }
       }
     } catch (error) {
@@ -677,7 +707,7 @@ function AppContent() {
         description: error instanceof Error ? error.message : t('app.duplicationErrorDesc'),
       });
     }
-  }, [allTabs, state.activeGroupId, dispatch, t]);
+  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, state.activeGroupId, t]);
 
   const handleReconnect = useCallback(async (tabId: string) => {
     const tabToReconnect = allTabs.find(tab => tab.id === tabId);
@@ -734,8 +764,8 @@ function AppContent() {
       return;
     }
 
-    // Update tab status to connecting
-    dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'connecting' });
+    // Keep PTY unmounted until the SSH transport has authenticated.
+    dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: isFileBrowser ? 'connecting' : 'pending' });
 
     try {
       if (isFileBrowser) {
@@ -795,7 +825,7 @@ function AppContent() {
         }
 
         const auth = await buildAuthRequest(connectionData);
-        const result = await sshConnectWithHostKeyTrust(
+        const result = await connectSshWithDiagnostics(
           {
             connection_id: tabId,
             host: connectionData.host,
@@ -810,20 +840,13 @@ function AppContent() {
           if (!tabToReconnect.originalConnectionId) {
             ConnectionStorageManager.updateLastConnected(originalConnectionId);
           }
-          // Remount PtyTerminal so it opens a fresh WebSocket/PTY on the
-          // newly re-established SSH connection.
-          dispatch({ type: 'RECONNECT_TAB', tabId });
           toast.success(t('app.reconnected'), {
             description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
           });
         } else if (!result.pendingHostKeyTrust) {
           dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'disconnected' });
           const formatted = formatConnectError(t, result);
-          toast.error(formatted?.title ?? t('app.reconnectionFailed'), {
-            description: formatted?.description
-              ?? result.error
-              ?? t('app.reconnectionFailedDesc'),
-          });
+          toast.error(formatted?.title ?? t('app.reconnectionFailed'));
         }
       }
     } catch (error) {
@@ -833,7 +856,7 @@ function AppContent() {
         description: error instanceof Error ? error.message : t('app.reconnectionErrorDesc'),
       });
     }
-  }, [allTabs, dispatch, t]);
+  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, t]);
 
   // Handler: open a remote file in the Log Monitor panel
   const handleOpenInLogMonitor = useCallback((filePath: string) => {
@@ -1056,11 +1079,33 @@ function AppContent() {
         dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
       }
     }
-  }, [allTabs, state.groups, state.activeGroupId, dispatch, t]);
+  }, [allTabs, state.groups, state.activeGroupId, dispatch, onHostKeyTrustRequired, t]);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsModalOpen(true);
   }, []);
+
+  const handleEditConnectionForTab = useCallback((tabId: string) => {
+    const tab = allTabs.find((item) => item.id === tabId);
+    const profileId = tab?.originalConnectionId ?? tabId;
+    const connection = ConnectionStorageManager.getConnection(profileId);
+    if (!connection) {
+      toast.error(t('app.cannotReconnect'), {
+        description: t('app.cannotReconnectDesc'),
+      });
+      return;
+    }
+    setEditingConnection({
+      id: connection.id,
+      name: connection.name,
+      protocol: connection.protocol as ConnectionConfig['protocol'],
+      host: connection.host,
+      port: connection.port,
+      username: connection.username,
+      authMethod: connection.authMethod || 'password',
+    });
+    setConnectionDialogOpen(true);
+  }, [allTabs, t]);
 
   const canManagePortForward =
     activeConnection?.protocol === 'SSH' && activeConnection.status === 'connected';
@@ -1251,10 +1296,13 @@ function AppContent() {
       const removePendingTab = () => {
         dispatch({ type: 'REMOVE_TAB', groupId: pendingGroupId, tabId: connectionData.id });
       };
+      const markPendingTabFailed = () => {
+        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: connectionData.id, status: 'disconnected' });
+      };
 
       try {
         const auth = await buildAuthRequest(connectionData);
-        const result = await sshConnectWithHostKeyTrust(
+        const result = await connectSshWithDiagnostics(
           {
             connection_id: connectionData.id,
             host: connectionData.host,
@@ -1271,7 +1319,7 @@ function AppContent() {
                   if (retryResult.success) {
                     completeSshQuickConnect();
                   } else if (!retryResult.pendingHostKeyTrust) {
-                    removePendingTab();
+                    markPendingTabFailed();
                   }
                   return retryResult;
                 },
@@ -1287,14 +1335,10 @@ function AppContent() {
           return;
         } else {
           console.error('Quick connect failed:', result.error);
-          removePendingTab();
+          markPendingTabFailed();
           {
             const formatted = formatConnectError(t, result);
-            toast.error(formatted?.title ?? t('app.connectionFailed'), {
-              description: formatted?.description
-                ?? result.error
-                ?? t('app.quickConnectFailedDesc'),
-            });
+            toast.error(formatted?.title ?? t('app.connectionFailed'));
           }
           setEditingConnection({
             id: connectionData.id,
@@ -1309,13 +1353,11 @@ function AppContent() {
         }
       } catch (error) {
         console.error('Quick connect error:', error);
-        removePendingTab();
-        toast.error(t('app.connectionError'), {
-          description: error instanceof Error ? error.message : t('app.connectionErrorDesc'),
-        });
+        markPendingTabFailed();
+        toast.error(t('app.connectionError'));
       }
     }
-  }, [allTabs, buildAuthRequest, dispatch, handleConnectionDialogConnect, handleTabSelect, onHostKeyTrustRequired, state.activeGroupId, t]);
+  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, handleConnectionDialogConnect, handleTabSelect, onHostKeyTrustRequired, state.activeGroupId, t]);
 
   // Derive active connection info for StatusBar (compatible format)
   const statusBarConnection = activeConnection ? {
@@ -1344,6 +1386,7 @@ function AppContent() {
     onNewTab: handleNewTab,
     onNewLocalTab: handleNewLocalTab,
     onReconnectTab: handleReconnect,
+    onEditConnection: handleEditConnectionForTab,
     onTabClose: handleTabClose,
     onOpenInEditorForTab: handleOpenInEditorForTab,
   }), [
@@ -1351,6 +1394,7 @@ function AppContent() {
     handleNewTab,
     handleNewLocalTab,
     handleReconnect,
+    handleEditConnectionForTab,
     handleTabClose,
     handleOpenInEditorForTab,
   ]);
@@ -1616,9 +1660,7 @@ function AppContent() {
             }
             if (!result.success && !result.pendingHostKeyTrust) {
               const formatted = formatConnectError(t, result);
-              toast.error(formatted?.title ?? t('app.connectionFailed'), {
-                description: formatted?.description ?? result.error,
-              });
+              toast.error(formatted?.title ?? t('app.connectionFailed'));
             }
           })();
         }}
@@ -1638,11 +1680,13 @@ export default function App() {
   return (
     <ErrorBoundary label="skd">
       <LayoutProvider>
-        <TerminalGroupProvider>
-          <TerminalInputProvider>
-            <AppContent />
-          </TerminalInputProvider>
-        </TerminalGroupProvider>
+        <ConnectionAttemptProvider>
+          <TerminalGroupProvider>
+            <TerminalInputProvider>
+              <AppContent />
+            </TerminalInputProvider>
+          </TerminalGroupProvider>
+        </ConnectionAttemptProvider>
       </LayoutProvider>
     </ErrorBoundary>
   );

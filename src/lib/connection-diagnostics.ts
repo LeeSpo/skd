@@ -14,26 +14,35 @@ export type ConnectStage =
 export type ConnectErrorKind =
   | 'dnsFailure'
   | 'tcpTimeout'
+  | 'connectionRefused'
+  | 'networkUnreachable'
   | 'proxyFailure'
+  | 'sshHandshakeFailed'
   | 'sshAlgorithmIncompatible'
   | 'hostKeyMismatch'
   | 'hostKeyUnknown'
+  | 'authenticationFailed'
   | 'passwordIncorrect'
   | 'publicKeyUnauthorized'
   | 'privateKeyFormatUnsupported'
+  | 'privateKeyPassphraseIncorrect'
   | 'ptyCreateFailed'
   | 'cancelled'
   | 'unknown';
 
-/** Stages shown in the connection dialog (SSH session establish). */
-export const DIALOG_CONNECT_STAGES: ConnectStage[] = [
+/** Complete interactive SSH connection lifecycle. */
+export const SSH_CONNECT_STAGES: ConnectStage[] = [
   'resolvingDns',
   'establishingTcp',
   'sshHandshake',
   'verifyingHostKey',
   'authenticating',
+  'requestingPty',
   'connected',
 ];
+
+/** Backward-compatible name used by the connection dialog. */
+export const DIALOG_CONNECT_STAGES = SSH_CONNECT_STAGES;
 
 export interface ConnectProgressEvent {
   connectionId: string;
@@ -43,8 +52,10 @@ export interface ConnectProgressEvent {
 export interface ConnectDiagnosticResponse {
   success: boolean;
   error?: string;
-  errorKind?: ConnectErrorKind | string;
-  failedStage?: ConnectStage | string;
+  /** Backend may send known ConnectErrorKind values or future kinds. */
+  errorKind?: string;
+  /** Backend may send known ConnectStage values or future stages. */
+  failedStage?: string;
   pendingHostKeyTrust?: boolean;
 }
 
@@ -54,7 +65,7 @@ export function stageI18nKey(stage: ConnectStage): string {
   return `connectionDiagnostics.stage.${stage}`;
 }
 
-export function errorKindI18nKey(kind: ConnectErrorKind | string): string {
+export function errorKindI18nKey(kind: string): string {
   return `connectionDiagnostics.error.${kind}`;
 }
 
@@ -62,7 +73,7 @@ export function errorKindI18nKey(kind: ConnectErrorKind | string): string {
 export function computeStageStatuses(
   stages: ConnectStage[],
   currentStage: ConnectStage | null,
-  failedStage: ConnectStage | string | null | undefined,
+  failedStage: string | null | undefined,
 ): StageUiStatus[] {
   if (!currentStage && !failedStage) {
     return stages.map(() => 'pending');
@@ -126,13 +137,18 @@ export function isConnectErrorKind(value: unknown): value is ConnectErrorKind {
     [
       'dnsFailure',
       'tcpTimeout',
+      'connectionRefused',
+      'networkUnreachable',
       'proxyFailure',
+      'sshHandshakeFailed',
       'sshAlgorithmIncompatible',
       'hostKeyMismatch',
       'hostKeyUnknown',
+      'authenticationFailed',
       'passwordIncorrect',
       'publicKeyUnauthorized',
       'privateKeyFormatUnsupported',
+      'privateKeyPassphraseIncorrect',
       'ptyCreateFailed',
       'cancelled',
       'unknown',

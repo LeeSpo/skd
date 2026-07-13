@@ -83,7 +83,7 @@ impl StandaloneSftpClient {
     /// Staged SFTP connect (SSH transport stages + SFTP subsystem).
     pub async fn connect_with_progress(
         config: &SftpConfig,
-        mut on_stage: impl FnMut(ConnectStage),
+        on_stage: impl Fn(ConnectStage) + Send + Sync + 'static,
     ) -> Result<Self> {
         let ssh_config = SshConfig {
             host: config.host.clone(),
@@ -104,8 +104,12 @@ impl StandaloneSftpClient {
             host_key_verification: config.host_key_verification,
         };
 
-        let ssh_session =
-            establish_authenticated_session(&ssh_config, sftp_tcp_timeout(), &mut on_stage).await?;
+        let ssh_session = establish_authenticated_session(
+            &ssh_config,
+            sftp_tcp_timeout(),
+            Arc::new(on_stage),
+        )
+        .await?;
 
         let session = Arc::new(ssh_session);
 

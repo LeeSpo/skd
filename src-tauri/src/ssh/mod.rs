@@ -66,17 +66,27 @@ pub struct SshHandler {
     pub host: String,
     pub port: u16,
     pub verify_host_key: bool,
+    stage_reporter: Option<StageReporter>,
 }
 
 impl SshHandler {
-    pub fn new(host: String, port: u16, verify_host_key: bool) -> Self {
+    pub fn new(
+        host: String,
+        port: u16,
+        verify_host_key: bool,
+        stage_reporter: Option<StageReporter>,
+    ) -> Self {
         Self {
             host,
             port,
             verify_host_key,
+            stage_reporter,
         }
     }
 }
+
+/// Thread-safe stage reporter shared with russh's host-key callback.
+pub type StageReporter = Arc<dyn Fn(ConnectStage) + Send + Sync>;
 
 #[async_trait::async_trait]
 impl client::Handler for SshHandler {
@@ -86,6 +96,9 @@ impl client::Handler for SshHandler {
         &mut self,
         server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
+        if let Some(report) = &self.stage_reporter {
+            report(ConnectStage::VerifyingHostKey);
+        }
         if !self.verify_host_key {
             return Ok(true);
         }
@@ -126,9 +139,9 @@ impl SshClient {
         &mut self,
         config: &SshConfig,
         tcp_timeout: Duration,
-        on_stage: impl FnMut(ConnectStage),
+        on_stage: impl Fn(ConnectStage) + Send + Sync + 'static,
     ) -> Result<()> {
-        let session = establish_authenticated_session(config, tcp_timeout, on_stage).await?;
+        let session = establish_authenticated_session(config, tcp_timeout, Arc::new(on_stage)).await?;
         self.session = Some(Arc::new(session));
         Ok(())
     }
@@ -140,7 +153,7 @@ impl SshClient {
 pub async fn establish_authenticated_session(
     config: &SshConfig,
     tcp_timeout: Duration,
-    mut on_stage: impl FnMut(ConnectStage),
+    on_stage: StageReporter,
 ) -> Result<client::Handle<SshHandler>> {
     // ── 1. DNS ──────────────────────────────────────────────────────────────
     on_stage(ConnectStage::ResolvingDns);
@@ -219,9 +232,9 @@ pub async fn establish_authenticated_session(
         }
     };
 
-    // ── 3. Host key + SSH handshake ─────────────────────────────────────────
-    // Host-key verification runs inside connect_stream via SshHandler.
-    on_stage(ConnectStage::VerifyingHostKey);
+    // ── 3. SSH handshake + host-key verification ────────────────────────────
+    // Host-key verification is reported from SshHandler::check_server_key so
+    // the UI sees the real protocol order instead of two immediate events.
     on_stage(ConnectStage::SshHandshake);
 
     let ssh_config = client::Config {
@@ -241,6 +254,7 @@ pub async fn establish_authenticated_session(
         config.host.clone(),
         config.port,
         config.host_key_verification,
+        Some(on_stage.clone()),
     );
 
     let mut ssh_session =
@@ -281,8 +295,7 @@ pub async fn establish_authenticated_session(
                     let kind = if message.to_lowercase().contains("passphrase")
                         || message.to_lowercase().contains("decrypt")
                     {
-                        // Wrong passphrase is closer to auth failure than format.
-                        ConnectErrorKind::PrivateKeyFormatUnsupported
+                        ConnectErrorKind::PrivateKeyPassphraseIncorrect
                     } else {
                         ConnectErrorKind::PrivateKeyFormatUnsupported
                     };

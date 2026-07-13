@@ -21,6 +21,8 @@ import { toast } from 'sonner';
 import { signalReady } from '../lib/restoration-manager';
 import { useTerminalCallbacks } from '../lib/terminal-callbacks-context';
 import { useTerminalInput } from '../lib/terminal-input-context';
+import { useConnectionAttempts } from '../lib/connection-attempt-context';
+import { isConnectStage } from '../lib/connection-diagnostics';
 import '@xterm/xterm/css/xterm.css';
 
 interface PtyTerminalProps {
@@ -76,6 +78,7 @@ export function PtyTerminal({
 }: PtyTerminalProps) {
   const { t } = useTranslation();
   const { registerSender, unregisterSender } = useTerminalInput();
+  const { reportStage, failAttempt } = useConnectionAttempts();
   const terminalRef = React.useRef<HTMLDivElement | null>(null);
   const xtermRef = React.useRef<XTerm | null>(null);
   const fitRef = React.useRef<FitAddon | null>(null);
@@ -512,10 +515,6 @@ export function PtyTerminal({
                 }
                 hasEverConnected = true;
                 isReconnectAfterDrop = false;
-                if (connectionStatusRef.current !== 'connected') {
-                  connectionStatusRef.current = 'connected';
-                  onConnectionStatusChange?.(connectionId, 'connected');
-                }
               }
               break;
             
@@ -523,6 +522,11 @@ export function PtyTerminal({
               if (msg.connection_id === connectionId && typeof msg.generation === 'number') {
                 ptyGenerationRef.current = msg.generation;
                 terminalDebug(`[PTY Terminal] [${connectionId}] PTY generation: ${msg.generation}`);
+                reportStage(connectionId, 'connected');
+                if (connectionStatusRef.current !== 'connected') {
+                  connectionStatusRef.current = 'connected';
+                  onConnectionStatusChange?.(connectionId, 'connected');
+                }
                 signalReady(connectionId);
               }
               break;
@@ -548,6 +552,12 @@ export function PtyTerminal({
                 : msg.message;
               term.write(`\r\n\x1b[31m[Error: ${displayMsg}]\x1b[0m\r\n`);
               if (isPtyCreateFailed) {
+                failAttempt(connectionId, {
+                  success: false,
+                  error: String(msg.message ?? ''),
+                  errorKind: String(msg.error_kind ?? msg.errorKind ?? 'ptyCreateFailed'),
+                  failedStage: String(msg.failed_stage ?? msg.failedStage ?? 'requestingPty'),
+                });
                 toast.error(t('connectionDiagnostics.error.ptyCreateFailed'), {
                   description: msg.message,
                 });
@@ -586,6 +596,9 @@ export function PtyTerminal({
             case 'Progress': {
               if (msg.connection_id === connectionId || msg.connectionId === connectionId) {
                 const stage = msg.stage as string | undefined;
+                if (isConnectStage(stage)) {
+                  reportStage(connectionId, stage);
+                }
                 if (stage === 'requestingPty') {
                   terminalDebug(`[PTY Terminal] [${connectionId}] Requesting PTY…`);
                 } else if (stage === 'connected') {
@@ -823,7 +836,7 @@ export function PtyTerminal({
       term.reset(); // clear scrollback + viewport so GC can reclaim xterm buffers sooner
       term.dispose();
     };
-  }, [connectionId, connectionName, host, username, terminalKey, reconnectKey, sendInputToPty, registerSender, unregisterSender]);
+  }, [connectionId, connectionName, host, username, terminalKey, reconnectKey, sendInputToPty, registerSender, unregisterSender, reportStage, failAttempt]);
   // NOTE: themeKey and appearanceKey are intentionally NOT in the deps above.
   // Including them would tear down the WebSocket + PTY session on every theme
   // change (e.g. macOS auto Dark/Light switch), killing any running remote

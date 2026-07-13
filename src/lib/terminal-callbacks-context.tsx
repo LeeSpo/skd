@@ -10,6 +10,8 @@ export interface TerminalCallbacks {
   onNewLocalTab?: () => void | Promise<void>;
   /** Full reconnect: re-establishes the backend connection then remounts the terminal. */
   onReconnectTab?: (tabId: string) => void | Promise<void>;
+  /** Open the saved connection profile used by a failed terminal tab. */
+  onEditConnection?: (tabId: string) => void;
   /** Called before a tab is removed so backend sessions can be cleaned up. */
   onTabClose?: (tabId: string) => void | Promise<void>;
   /** Open a remote file in a new editor window for a specific tab connection. */

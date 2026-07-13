@@ -37,7 +37,8 @@ describe('connection-diagnostics', () => {
     expect(statuses[2]).toBe('done'); // handshake
     expect(statuses[3]).toBe('done'); // host key
     expect(statuses[4]).toBe('active'); // authenticating
-    expect(statuses[5]).toBe('pending'); // connected
+    expect(statuses[5]).toBe('pending'); // PTY
+    expect(statuses[6]).toBe('pending'); // connected
   });
 
   it('marks connected stage as done when current is connected', () => {
@@ -89,6 +90,14 @@ describe('connection-diagnostics', () => {
         errorKind: 'hostKeyUnknown',
       }),
     ).toBeNull();
+  });
+
+  it('recognizes actionable connection error kinds', () => {
+    expect(isConnectErrorKind('connectionRefused')).toBe(true);
+    expect(isConnectErrorKind('networkUnreachable')).toBe(true);
+    expect(isConnectErrorKind('sshHandshakeFailed')).toBe(true);
+    expect(isConnectErrorKind('authenticationFailed')).toBe(true);
+    expect(isConnectErrorKind('privateKeyPassphraseIncorrect')).toBe(true);
   });
 
   it('formatConnectError falls back for unknown kinds', () => {

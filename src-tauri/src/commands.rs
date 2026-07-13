@@ -1,5 +1,5 @@
 use base64::Engine as _;
-use crate::connection_diagnostics::{classify_connect_error, ConnectStage};
+use crate::connection_diagnostics::{classify_connect_error, ConnectErrorKind, ConnectStage};
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
 use crate::os_detect::{self, OsInfo};
@@ -64,9 +64,9 @@ pub struct ConnectCommandResponse {
     pub output: Option<String>,
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_kind: Option<String>,
+    pub error_kind: Option<ConnectErrorKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub failed_stage: Option<String>,
+    pub failed_stage: Option<ConnectStage>,
 }
 
 impl ConnectCommandResponse {
@@ -86,8 +86,8 @@ impl ConnectCommandResponse {
             success: false,
             output: None,
             error: Some(diag.message),
-            error_kind: Some(diag.kind.as_str().to_string()),
-            failed_stage: Some(diag.stage.as_str().to_string()),
+            error_kind: Some(diag.kind),
+            failed_stage: Some(diag.stage),
         }
     }
 }

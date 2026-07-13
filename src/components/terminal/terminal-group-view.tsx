@@ -13,6 +13,8 @@ import { DropZoneOverlay } from './drop-zone-overlay';
 import { GroupTabBar } from './group-tab-bar';
 import { PanelSurfaceFallback } from '../ui/panel-chrome';
 import { WelcomeScreen } from '../welcome-screen';
+import { useConnectionAttempts } from '../../lib/connection-attempt-context';
+import { ConnectionFailureView, ConnectionProgressSegments } from '../connection-progress';
 
 interface TerminalGroupViewProps {
   groupId: string;
@@ -63,7 +65,14 @@ function useContentDropHover() {
 export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
   const { t } = useTranslation();
   const { state, dispatch } = useTerminalGroups();
-  const { onDuplicateTab, onNewTab, onReconnectTab, onOpenInEditorForTab } = useTerminalCallbacks();
+  const {
+    onDuplicateTab,
+    onNewTab,
+    onReconnectTab,
+    onEditConnection,
+    onOpenInEditorForTab,
+  } = useTerminalCallbacks();
+  const { attempts } = useConnectionAttempts();
   const group = state.groups[groupId];
   const isActive = state.activeGroupId === groupId;
   const themeKey = useThemeKey();
@@ -161,58 +170,84 @@ export function TerminalGroupView({ groupId }: TerminalGroupViewProps) {
         {showWelcome ? (
           <WelcomeScreen onNewConnection={() => {}} onOpenSettings={() => {}} />
         ) : (
-          group.tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className="absolute inset-0"
-              style={{ display: tab.id === group.activeTabId ? 'block' : 'none' }}
-            >
-              {tab.connectionStatus === 'pending' ? (
-                <div className="h-full w-full flex items-center justify-center bg-muted/30">
-                  <div className="text-center text-muted-foreground">
-                    <div className="animate-pulse">{t('terminalGroup.waitingForConnection')}</div>
-                  </div>
-                </div>
-              ) : (
-                <Suspense fallback={<PanelSurfaceFallback />}>
-                  {tab.tabType === 'file-browser' ? (
-                    <FileBrowserView
-                      connectionId={tab.id}
-                      connectionName={tab.name}
-                      host={tab.host}
-                      protocol={tab.protocol}
-                      isConnected={tab.connectionStatus === 'connected'}
-                      onReconnect={() => handleReconnect(tab.id)}
-                      onOpenInEditor={
-                        tab.protocol === 'SFTP' && onOpenInEditorForTab
-                          ? (filePath, fileName, options) =>
-                              onOpenInEditorForTab(tab.id, filePath, fileName, options)
-                          : undefined
-                      }
-                    />
-                  ) : tab.tabType === 'editor' && tab.editorFilePath && tab.editorConnectionId ? (
-                    <FileEditorView
-                      connectionId={tab.editorConnectionId}
-                      filePath={tab.editorFilePath}
-                      fileName={tab.name}
-                      isConnected={tab.connectionStatus === 'connected'}
-                    />
-                  ) : (
-                    <PtyTerminal
-                      key={`${tab.id}-${tab.reconnectCount}`}
-                      connectionId={tab.id}
-                      connectionName={tab.name}
-                      host={tab.host}
-                      username={tab.username}
-                      themeKey={themeKey}
-                      isActive={isActive && tab.id === group.activeTabId}
-                      onConnectionStatusChange={handleConnectionStatusChange}
-                    />
-                  )}
-                </Suspense>
-              )}
-            </div>
-          ))
+          group.tabs.map((tab) => {
+            const attempt = tab.protocol === 'SSH' ? attempts[tab.id] : undefined;
+            const showProgress = attempt
+              && attempt.status !== 'connected'
+              && attempt.status !== 'failed';
+            return (
+              <div
+                key={tab.id}
+                className="absolute inset-0"
+                style={{ display: tab.id === group.activeTabId ? 'block' : 'none' }}
+              >
+                {attempt?.status === 'failed' ? (
+                  <ConnectionFailureView
+                    attempt={attempt}
+                    onRetry={() => handleReconnect(tab.id)}
+                    onEdit={() => onEditConnection?.(tab.id)}
+                  />
+                ) : (
+                  <>
+                    {tab.connectionStatus !== 'pending' && (
+                      <Suspense fallback={<PanelSurfaceFallback />}>
+                        {tab.tabType === 'file-browser' ? (
+                          <FileBrowserView
+                            connectionId={tab.id}
+                            connectionName={tab.name}
+                            host={tab.host}
+                            protocol={tab.protocol}
+                            isConnected={tab.connectionStatus === 'connected'}
+                            onReconnect={() => handleReconnect(tab.id)}
+                            onOpenInEditor={
+                              tab.protocol === 'SFTP' && onOpenInEditorForTab
+                                ? (filePath, fileName, options) =>
+                                    onOpenInEditorForTab(tab.id, filePath, fileName, options)
+                                : undefined
+                            }
+                          />
+                        ) : tab.tabType === 'editor' && tab.editorFilePath && tab.editorConnectionId ? (
+                          <FileEditorView
+                            connectionId={tab.editorConnectionId}
+                            filePath={tab.editorFilePath}
+                            fileName={tab.name}
+                            isConnected={tab.connectionStatus === 'connected'}
+                          />
+                        ) : (
+                          <PtyTerminal
+                            key={`${tab.id}-${tab.reconnectCount}`}
+                            connectionId={tab.id}
+                            connectionName={tab.name}
+                            host={tab.host}
+                            username={tab.username}
+                            themeKey={themeKey}
+                            isActive={isActive && tab.id === group.activeTabId}
+                            onConnectionStatusChange={handleConnectionStatusChange}
+                          />
+                        )}
+                      </Suspense>
+                    )}
+                    {(showProgress || tab.connectionStatus === 'pending') && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-muted/80 p-6 backdrop-blur-sm">
+                        <div className="w-full max-w-xl space-y-3 rounded-lg border bg-background p-5 shadow-sm">
+                          <div className="text-sm font-medium">
+                            {t('connectionDiagnostics.connectingTo', { name: tab.name })}
+                          </div>
+                          {attempt ? (
+                            <ConnectionProgressSegments attempt={attempt} />
+                          ) : (
+                            <div className="animate-pulse text-sm text-muted-foreground">
+                              {t('terminalGroup.waitingForConnection')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })
         )}
         <DropZoneOverlay
           groupId={groupId}

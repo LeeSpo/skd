@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   CONNECT_PROGRESS_EVENT,
-  type ConnectErrorKind,
   type ConnectProgressEvent,
   type ConnectStage,
   isConnectStage,
@@ -25,8 +24,10 @@ export type SftpConnectParams = SshConnectParams;
 export interface ConnectResponse {
   success: boolean;
   error?: string;
-  errorKind?: ConnectErrorKind | string;
-  failedStage?: ConnectStage | string;
+  /** Backend may send known ConnectErrorKind values or future kinds. */
+  errorKind?: string;
+  /** Backend may send known ConnectStage values or future stages. */
+  failedStage?: string;
   pendingHostKeyTrust?: boolean;
 }
 
@@ -59,13 +60,26 @@ export async function listenConnectProgress(
 export async function sshConnectWithHostKeyTrust(
   params: SshConnectParams,
   onTrustRequired: (request: HostKeyTrustRequest) => void,
+  onStage?: ConnectProgressHandler,
+  onAttemptResult?: (response: ConnectResponse) => void,
 ): Promise<ConnectResponse> {
-  const attempt = async (): Promise<ConnectResponse> => invoke<ConnectResponse>('ssh_connect', {
-    request: {
-      ...params,
-      host_key_verification: isHostKeyVerificationEnabled(),
-    },
-  });
+  const attempt = async (): Promise<ConnectResponse> => {
+    const unlisten = onStage
+      ? await listenConnectProgress(params.connection_id, onStage)
+      : null;
+    try {
+      const response = await invoke<ConnectResponse>('ssh_connect', {
+        request: {
+          ...params,
+          host_key_verification: isHostKeyVerificationEnabled(),
+        },
+      });
+      onAttemptResult?.(response);
+      return response;
+    } finally {
+      unlisten?.();
+    }
+  };
 
   const result = await attempt();
   if (result.success) {

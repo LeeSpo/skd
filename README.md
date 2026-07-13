@@ -63,6 +63,19 @@ Local build without updater artifacts:
 pnpm tauri:build:local
 ```
 
+## Release
+
+Bump the version (updates `package.json`, `Cargo.toml`, `tauri.conf.json`, and `CHANGELOG.md`), push, then tag:
+
+```bash
+pnpm run version:patch   # or version:minor / version:major
+git push origin main
+git tag v0.2.0
+git push origin v0.2.0   # triggers Build And Release (macOS arm64 + x64 DMGs)
+```
+
+You can also re-run an existing tag via **Actions → Build And Release → Run workflow** and supply the tag (for example `v0.2.0`).
+
 ## Acknowledgements
 
 This project started as a fork of [R-Shell](https://github.com/GOODBOY008/r-shell) by GOODBOY008, licensed under the MIT License.

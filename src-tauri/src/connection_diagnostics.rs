@@ -50,14 +50,19 @@ impl fmt::Display for ConnectStage {
 pub enum ConnectErrorKind {
     DnsFailure,
     TcpTimeout,
+    ConnectionRefused,
+    NetworkUnreachable,
     ProxyFailure,
+    SshHandshakeFailed,
     SshAlgorithmIncompatible,
     HostKeyMismatch,
     /// Unknown host key — interactive trust flow on the frontend.
     HostKeyUnknown,
+    AuthenticationFailed,
     PasswordIncorrect,
     PublicKeyUnauthorized,
     PrivateKeyFormatUnsupported,
+    PrivateKeyPassphraseIncorrect,
     PtyCreateFailed,
     Cancelled,
     Unknown,
@@ -68,13 +73,18 @@ impl ConnectErrorKind {
         match self {
             Self::DnsFailure => "dnsFailure",
             Self::TcpTimeout => "tcpTimeout",
+            Self::ConnectionRefused => "connectionRefused",
+            Self::NetworkUnreachable => "networkUnreachable",
             Self::ProxyFailure => "proxyFailure",
+            Self::SshHandshakeFailed => "sshHandshakeFailed",
             Self::SshAlgorithmIncompatible => "sshAlgorithmIncompatible",
             Self::HostKeyMismatch => "hostKeyMismatch",
             Self::HostKeyUnknown => "hostKeyUnknown",
+            Self::AuthenticationFailed => "authenticationFailed",
             Self::PasswordIncorrect => "passwordIncorrect",
             Self::PublicKeyUnauthorized => "publicKeyUnauthorized",
             Self::PrivateKeyFormatUnsupported => "privateKeyFormatUnsupported",
+            Self::PrivateKeyPassphraseIncorrect => "privateKeyPassphraseIncorrect",
             Self::PtyCreateFailed => "ptyCreateFailed",
             Self::Cancelled => "cancelled",
             Self::Unknown => "unknown",
@@ -177,7 +187,17 @@ pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage)
     }
 
     if lower.contains("failed to decrypt ssh key")
-        || lower.contains("failed to load ssh private key")
+        || lower.contains("incorrect passphrase")
+        || (lower.contains("private key") && lower.contains("passphrase"))
+    {
+        return ConnectDiagnosticError::new(
+            ConnectErrorKind::PrivateKeyPassphraseIncorrect,
+            ConnectStage::Authenticating,
+            message,
+        );
+    }
+
+    if lower.contains("failed to load ssh private key")
         || lower.contains("valid ssh private key")
         || lower.contains("private key format")
     {
@@ -210,10 +230,8 @@ pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage)
     }
 
     if lower.contains("authentication failed") {
-        // Generic auth failure without method detail — treat as password-style
-        // when no method hint is available; frontend still shows credentials message.
         return ConnectDiagnosticError::new(
-            ConnectErrorKind::PasswordIncorrect,
+            ConnectErrorKind::AuthenticationFailed,
             ConnectStage::Authenticating,
             message,
         );
@@ -236,6 +254,25 @@ pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage)
     if lower.contains("timed out") || lower.contains("timeout") {
         return ConnectDiagnosticError::new(
             ConnectErrorKind::TcpTimeout,
+            ConnectStage::EstablishingTcp,
+            message,
+        );
+    }
+
+    if lower.contains("connection refused") {
+        return ConnectDiagnosticError::new(
+            ConnectErrorKind::ConnectionRefused,
+            ConnectStage::EstablishingTcp,
+            message,
+        );
+    }
+
+    if lower.contains("network is unreachable")
+        || lower.contains("host is unreachable")
+        || lower.contains("no route to host")
+    {
+        return ConnectDiagnosticError::new(
+            ConnectErrorKind::NetworkUnreachable,
             ConnectStage::EstablishingTcp,
             message,
         );
@@ -267,7 +304,12 @@ pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage)
         return ConnectDiagnosticError::pty_failed(message);
     }
 
-    ConnectDiagnosticError::new(ConnectErrorKind::Unknown, fallback_stage, message)
+    let fallback_kind = if fallback_stage == ConnectStage::SshHandshake {
+        ConnectErrorKind::SshHandshakeFailed
+    } else {
+        ConnectErrorKind::Unknown
+    };
+    ConnectDiagnosticError::new(fallback_kind, fallback_stage, message)
 }
 
 /// Classify a raw I/O error that occurred while establishing TCP.
@@ -284,16 +326,12 @@ pub fn classify_tcp_io_error(err: &io::Error, host: &str, port: u16) -> ConnectD
             ),
         ),
         io::ErrorKind::ConnectionRefused => ConnectDiagnosticError::new(
-            ConnectErrorKind::Unknown,
+            ConnectErrorKind::ConnectionRefused,
             ConnectStage::EstablishingTcp,
             format!("Connection refused by {host}:{port}. The SSH service may be down or the port is wrong."),
         ),
-        io::ErrorKind::ConnectionReset
-        | io::ErrorKind::ConnectionAborted
-        | io::ErrorKind::BrokenPipe
-        | io::ErrorKind::NetworkUnreachable
-        | io::ErrorKind::HostUnreachable => ConnectDiagnosticError::new(
-            ConnectErrorKind::Unknown,
+        io::ErrorKind::NetworkUnreachable | io::ErrorKind::HostUnreachable => ConnectDiagnosticError::new(
+            ConnectErrorKind::NetworkUnreachable,
             ConnectStage::EstablishingTcp,
             message,
         ),
@@ -355,7 +393,7 @@ pub fn classify_handshake_error(err: &anyhow::Error, host: &str, port: u16) -> C
     }
 
     ConnectDiagnosticError::new(
-        ConnectErrorKind::Unknown,
+        ConnectErrorKind::SshHandshakeFailed,
         ConnectStage::SshHandshake,
         format!("Failed to complete SSH handshake with {host}:{port}: {message}"),
     )
@@ -405,6 +443,25 @@ mod tests {
     }
 
     #[test]
+    fn classifies_actionable_tcp_errors() {
+        let refused = io::Error::from(io::ErrorKind::ConnectionRefused);
+        let diag = classify_tcp_io_error(&refused, "example.com", 22);
+        assert_eq!(diag.kind, ConnectErrorKind::ConnectionRefused);
+
+        let unreachable = io::Error::from(io::ErrorKind::NetworkUnreachable);
+        let diag = classify_tcp_io_error(&unreachable, "example.com", 22);
+        assert_eq!(diag.kind, ConnectErrorKind::NetworkUnreachable);
+    }
+
+    #[test]
+    fn classifies_generic_handshake_failure() {
+        let err = anyhow::anyhow!("peer closed connection during exchange");
+        let diag = classify_handshake_error(&err, "example.com", 22);
+        assert_eq!(diag.kind, ConnectErrorKind::SshHandshakeFailed);
+        assert_eq!(diag.stage, ConnectStage::SshHandshake);
+    }
+
+    #[test]
     fn classifies_password_failure() {
         let err = anyhow::anyhow!("Password authentication failed: refused");
         let diag = classify_connect_error(&err, ConnectStage::Authenticating);
@@ -428,6 +485,20 @@ mod tests {
         );
         let diag = classify_connect_error(&err, ConnectStage::Authenticating);
         assert_eq!(diag.kind, ConnectErrorKind::PrivateKeyFormatUnsupported);
+    }
+
+    #[test]
+    fn classifies_private_key_passphrase() {
+        let err = anyhow::anyhow!("Failed to decrypt SSH key: incorrect passphrase");
+        let diag = classify_connect_error(&err, ConnectStage::Authenticating);
+        assert_eq!(diag.kind, ConnectErrorKind::PrivateKeyPassphraseIncorrect);
+    }
+
+    #[test]
+    fn classifies_generic_authentication_failure() {
+        let err = anyhow::anyhow!("Authentication failed without a supported method");
+        let diag = classify_connect_error(&err, ConnectStage::Authenticating);
+        assert_eq!(diag.kind, ConnectErrorKind::AuthenticationFailed);
     }
 
     #[test]

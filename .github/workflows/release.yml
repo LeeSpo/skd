@@ -5,18 +5,58 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to rebuild and publish (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Use the same key for an automatic tag build and a manual rebuild of that tag.
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolve tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+
+    steps:
+      - name: Resolve and validate tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${INPUT_TAG}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+            echo "::error::Invalid tag '$TAG'. Expected form vX.Y.Z (optional prerelease suffix)."
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag=$TAG version=$VERSION"
+
   build:
     name: Build ${{ matrix.name }}
+    needs: resolve
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -25,23 +65,58 @@ jobs:
             runner: macos-15
             target: aarch64-apple-darwin
             artifact_glob: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            arch_label: aarch64
           - name: macos-x64
             runner: macos-15-intel
             target: x86_64-apple-darwin
             artifact_glob: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+            arch_label: x64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: "22"
           cache: pnpm
+
+      - name: Validate version matches tag
+        env:
+          EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAURI_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+
+          echo "Expected (from tag): $EXPECTED_VERSION"
+          echo "package.json:        $PKG_VERSION"
+          echo "tauri.conf.json:     $TAURI_VERSION"
+          echo "Cargo.toml:          $CARGO_VERSION"
+
+          fail=0
+          if [ "$PKG_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match tag version ($EXPECTED_VERSION)"
+            fail=1
+          fi
+          if [ "$TAURI_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::tauri.conf.json version ($TAURI_VERSION) does not match tag version ($EXPECTED_VERSION)"
+            fail=1
+          fi
+          if [ "$CARGO_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::Cargo.toml version ($CARGO_VERSION) does not match tag version ($EXPECTED_VERSION)"
+            fail=1
+          fi
+          exit "$fail"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -52,6 +127,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          shared-key: release-${{ matrix.target }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -65,17 +141,40 @@ jobs:
           --bundles dmg
           --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
+      - name: Normalize DMG filename
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          ARCH: ${{ matrix.arch_label }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-out
+          shopt -s nullglob
+          dmgs=( ${{ matrix.artifact_glob }} )
+          if [ "${#dmgs[@]}" -eq 0 ]; then
+            echo "::error::No DMG found matching ${{ matrix.artifact_glob }}"
+            exit 1
+          fi
+          src="${dmgs[0]}"
+          dest="release-out/skd_${VERSION}_${ARCH}.dmg"
+          cp "$src" "$dest"
+          echo "Packaged $src -> $dest"
+          ls -lh release-out/
+
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v6
         with:
           name: bundle-${{ matrix.name }}
-          path: ${{ matrix.artifact_glob }}
+          path: release-out/*.dmg
           if-no-files-found: error
+          retention-days: 14
 
   release:
     name: Publish GitHub Release
+    needs: [resolve, build]
     runs-on: ubuntu-latest
-    needs: build
+    timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
       - name: Download all artifacts
@@ -85,11 +184,27 @@ jobs:
           pattern: bundle-*
           merge-multiple: true
 
+      - name: Generate checksums
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          ls -lah
+          shopt -s nullglob
+          files=( *.dmg )
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No DMG assets downloaded"
+            exit 1
+          fi
+          sha256sum "${files[@]}" | tee SHA256SUMS
+          cat SHA256SUMS
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: skd ${{ needs.resolve.outputs.tag }}
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.resolve.outputs.tag, '-') }}
+          make_latest: ${{ !contains(needs.resolve.outputs.tag, '-') }}
           files: |
             release-assets/**

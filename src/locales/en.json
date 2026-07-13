@@ -212,18 +212,29 @@
     "error": {
       "dnsFailure": "DNS resolution failed",
       "tcpTimeout": "TCP connection timed out",
+      "connectionRefused": "Connection refused",
+      "networkUnreachable": "Network unreachable",
       "proxyFailure": "Proxy connection failed",
+      "sshHandshakeFailed": "SSH handshake failed",
       "sshAlgorithmIncompatible": "SSH algorithms incompatible",
       "hostKeyMismatch": "Host key mismatch",
       "hostKeyUnknown": "Unknown host key",
+      "authenticationFailed": "Authentication failed",
       "passwordIncorrect": "Incorrect password",
       "publicKeyUnauthorized": "Public key not authorized",
       "privateKeyFormatUnsupported": "Private key format not supported",
+      "privateKeyPassphraseIncorrect": "Incorrect private key passphrase",
       "ptyCreateFailed": "Failed to create PTY",
       "cancelled": "Connection cancelled",
       "unknown": "Connection failed"
     },
-    "progressTitle": "Connection progress"
+    "progressTitle": "Connection progress",
+    "preparing": "Preparing connection",
+    "connectingTo": "Connecting to {{name}}",
+    "failureDescription": "The connection stopped before the terminal became ready.",
+    "technicalDetails": "Technical details",
+    "retry": "Retry",
+    "editConnection": "Edit connection"
   },
   "settings": {
     "title": "Settings & Preferences",

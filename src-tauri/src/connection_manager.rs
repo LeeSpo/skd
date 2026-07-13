@@ -85,8 +85,6 @@ impl ConnectionManager {
 
         connect_result?;
 
-        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
-
         let mut connections = self.connections.write().await;
         connections.insert(connection_id, Arc::new(RwLock::new(client)));
 
