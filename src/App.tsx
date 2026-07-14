@@ -46,6 +46,7 @@ import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 import { startLocalForward } from './lib/port-forward';
 import { getAutoStartPortForwardBookmarks } from './lib/port-forward-bookmarks';
 import { ConnectionAttemptProvider } from './lib/connection-attempt-context';
+import { useTerminalCwd } from './lib/terminal-cwd-store';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
@@ -98,6 +99,7 @@ function AppContent() {
 
   // Terminal group state from context
   const { state, dispatch, activeGroup, activeTab, activeConnection } = useTerminalGroups();
+  const activeTerminalCwd = useTerminalCwd(activeConnection?.connectionId);
   const {
     beginAttempt,
     reportStage,
@@ -1516,6 +1518,7 @@ function AppContent() {
                               >
                                 <Suspense fallback={<PanelSurfaceFallback />}>
                                   <IntegratedFileBrowser
+                                    terminalCwd={activeTerminalCwd}
                                     {...(isLocalTab
                                       ? { mode: 'local' as const }
                                       : {

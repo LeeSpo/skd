@@ -23,6 +23,13 @@ import { useTerminalCallbacks } from '../lib/terminal-callbacks-context';
 import { useTerminalInput } from '../lib/terminal-input-context';
 import { useConnectionAttempts } from '../lib/connection-attempt-context';
 import { isConnectStage } from '../lib/connection-diagnostics';
+import {
+  clearTerminalCwd,
+  parseOsc1337Cwd,
+  parseOsc633Cwd,
+  parseOsc7Cwd,
+  publishTerminalCwd,
+} from '../lib/terminal-cwd-store';
 import '@xterm/xterm/css/xterm.css';
 
 interface PtyTerminalProps {
@@ -212,6 +219,29 @@ export function PtyTerminal({
     term.unicode.activeVersion = '11';
     
     term.open(terminalRef.current);
+
+    // Shell integrations report their working directory through OSC 7. Keep
+    // this synchronous and allocation-light because it runs inside xterm's
+    // output parser. OSC 1337 CurrentDir is supported as a compatibility path
+    // for iTerm-style prompt integrations.
+    clearTerminalCwd(connectionId);
+    const osc7Disposable = term.parser?.registerOscHandler(7, (payload) => {
+      const path = parseOsc7Cwd(payload);
+      if (path) publishTerminalCwd(connectionId, path);
+      return true;
+    }) ?? { dispose: () => {} };
+    const osc1337Disposable = term.parser?.registerOscHandler(1337, (payload) => {
+      const path = parseOsc1337Cwd(payload);
+      if (!path) return false;
+      publishTerminalCwd(connectionId, path);
+      return true;
+    }) ?? { dispose: () => {} };
+    const osc633Disposable = term.parser?.registerOscHandler(633, (payload) => {
+      const path = parseOsc633Cwd(payload);
+      if (!path) return false;
+      publishTerminalCwd(connectionId, path);
+      return true;
+    }) ?? { dispose: () => {} };
     
     // WebGL is opt-in: it cannot fall back to system CJK fonts (shows □ for Japanese etc.).
     // Canvas renderer uses browser per-glyph font fallback — required for multilingual text.
@@ -819,6 +849,10 @@ export function PtyTerminal({
       inputDisposable.dispose();
       resizeDisposable.dispose();
       lineFeedDisposable.dispose();
+      osc7Disposable.dispose();
+      osc1337Disposable.dispose();
+      osc633Disposable.dispose();
+      clearTerminalCwd(connectionId);
       window.removeEventListener('resize', handleWindowResize);
       resizeObserver.disconnect();
       if (fitTimer) clearTimeout(fitTimer);

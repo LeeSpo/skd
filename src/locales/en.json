@@ -646,7 +646,9 @@
       "uploadFolder": "Upload folder",
       "download": "Download",
       "delete": "Delete",
-      "syncDirectories": "Sync directories (Ctrl+Shift+S)"
+      "syncDirectories": "Sync directories (Ctrl+Shift+S)",
+      "followTerminal": "Follow terminal directory",
+      "stopFollowingTerminal": "Stop following terminal directory"
     },
     "selected": "{{count}} selected",
     "downloadSelected": "Download {{count}} Selected",

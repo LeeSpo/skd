@@ -64,6 +64,7 @@ vi.mock('../components/ui/scroll-area', () => ({
 const mockedInvoke = vi.mocked(invoke);
 
 beforeEach(() => {
+  localStorage.clear();
   mockedInvoke.mockImplementation(async (command: string) => {
     if (command === 'get_home_directory') {
       return '/Users/test';
@@ -108,5 +109,20 @@ describe('IntegratedFileBrowser local mode', () => {
     expect(document.querySelector('thead')).toBeNull();
     expect(document.querySelector('table')).toBeNull();
     expect(document.querySelector('.panel-toolbar')).not.toBeNull();
+  });
+
+  it('loads the directory reported by the active terminal when following is enabled', async () => {
+    render(<IntegratedFileBrowser mode="local" terminalCwd="/tmp/project" />);
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', {
+        path: '/tmp/project',
+      });
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'fileBrowser.toolbar.followTerminal' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 });

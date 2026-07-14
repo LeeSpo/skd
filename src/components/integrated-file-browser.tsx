@@ -65,7 +65,8 @@ import {
   Layers,
   GripVertical,
   ScrollText,
-  Pencil
+  Pencil,
+  LocateFixed,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from './ui/context-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
@@ -78,7 +79,10 @@ import {
   type FileBrowserFileItem as FileItem,
 } from '@/lib/file-browser-adapter';
 
-type IntegratedFileBrowserProps =
+type IntegratedFileBrowserProps = {
+  /** Latest working directory reported by the active terminal via OSC 7. */
+  terminalCwd?: string;
+} & (
   | {
       mode: 'local';
     }
@@ -96,7 +100,18 @@ type IntegratedFileBrowserProps =
         fileName: string,
         options?: { readOnly?: boolean },
       ) => void;
-    };
+    }
+);
+
+const FOLLOW_TERMINAL_CWD_KEY = 'skd-follow-terminal-cwd';
+
+function loadFollowTerminalPreference(): boolean {
+  try {
+    return localStorage.getItem(FOLLOW_TERMINAL_CWD_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
 
 // Cache to store state per session
 const sessionStateCache = new Map<string, {
@@ -194,6 +209,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   const { t } = useTranslation();
   const [currentPath, setCurrentPath] = useState(adapter.defaultHomePath);
+  const [followTerminalCwd, setFollowTerminalCwd] = useState(loadFollowTerminalPreference);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [transfers, dispatchTransfer] = useReducer(transferQueueReducer, []);
@@ -578,9 +594,12 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     [sessionKey],
   );
 
-  async function loadFiles(pathOverride?: string) {
+  async function loadFiles(
+    pathOverride?: string,
+    options: { preserveCurrentOnError?: boolean } = {},
+  ): Promise<boolean> {
     if (!isAvailable) {
-      return;
+      return false;
     }
 
     const targetPath = pathOverride ?? currentPath;
@@ -590,35 +609,60 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     try {
       const parsedFiles = await adapter.listDirectory(targetPath, isCancelled);
 
-      if (gen !== loadGenRef.current) return;
+      if (gen !== loadGenRef.current) return false;
       setFiles(parsedFiles);
       if (currentPath !== targetPath) {
+        committedPathRef.current = targetPath;
         setCurrentPath(targetPath);
         setNavHistory([targetPath]);
         setNavIndex(0);
         setSelectedFiles(new Set());
       }
       lastLoadedSessionKeyRef.current = sessionKey;
+      return true;
     } catch (error) {
-      if (error instanceof CancelledError || gen !== loadGenRef.current) return;
+      if (error instanceof CancelledError || gen !== loadGenRef.current) return false;
 
       const fallbackPath = adapter.fallbackPathOnError(targetPath);
-      if (fallbackPath) {
+      if (fallbackPath && !options.preserveCurrentOnError) {
         committedPathRef.current = fallbackPath;
-        void loadFiles(fallbackPath);
-        return;
+        return loadFiles(fallbackPath);
       }
 
       console.error('Failed to load files:', error);
       toast.error(t('fileBrowser.toast.loadFailed'), {
         description: error instanceof Error ? error.message : t('fileBrowser.toast.loadFailedDesc'),
       });
-      setFiles([]);
+      if (!options.preserveCurrentOnError) setFiles([]);
+      return false;
     } finally {
       if (gen === loadGenRef.current) {
         setIsLoading(false);
       }
     }
+  }
+
+  useEffect(() => {
+    if (!followTerminalCwd || !props.terminalCwd || !isAvailable) return;
+
+    const targetPath = adapter.normalizeNavPath(props.terminalCwd);
+    if (!targetPath.startsWith('/') || targetPath === currentPath) return;
+
+    void loadFiles(targetPath, { preserveCurrentOnError: true });
+  // loadFiles intentionally stays out of deps because it is an inline function.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adapter, currentPath, followTerminalCwd, isAvailable, props.terminalCwd, sessionKey]);
+
+  const toggleFollowTerminalCwd = () => {
+    setFollowTerminalCwd((enabled) => {
+      const next = !enabled;
+      try {
+        localStorage.setItem(FOLLOW_TERMINAL_CWD_KEY, String(next));
+      } catch {
+        // Persistence is optional; keep the in-memory preference when storage is unavailable.
+      }
+      return next;
+    });
   };
 
   // ── Navigation helpers ──
@@ -1335,6 +1379,19 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           {/* Refresh */}
           <Button variant="ghost" size="toolbar" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+
+          <Button
+            variant={followTerminalCwd ? 'secondary' : 'ghost'}
+            size="toolbar"
+            title={t(followTerminalCwd
+              ? 'fileBrowser.toolbar.stopFollowingTerminal'
+              : 'fileBrowser.toolbar.followTerminal')}
+            aria-label={t('fileBrowser.toolbar.followTerminal')}
+            aria-pressed={followTerminalCwd}
+            onClick={toggleFollowTerminalCwd}
+          >
+            <LocateFixed className="h-3.5 w-3.5" />
           </Button>
 
           <ToolbarDivider />
