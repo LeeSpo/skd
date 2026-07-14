@@ -1,7 +1,7 @@
 /**
  * Editor configuration: types, defaults, load/save helpers.
  *
- * Persisted in localStorage under `rshell-editor-config`.
+ * Persisted in localStorage under `skd-editor-config`.
  * Consumed by `CodeEditor` and surfaced in Settings → Editor tab.
  */
 
@@ -69,7 +69,7 @@ export function saveEditorConfig(config: EditorConfig): void {
 // ---------- Event ----------
 
 /** Dispatched on `window` whenever editor config is saved, so live editors can react. */
-export const EDITOR_CONFIG_CHANGED_EVENT = "rshell-editor-config-changed";
+export const EDITOR_CONFIG_CHANGED_EVENT = "skd-editor-config-changed";
 
 export function dispatchEditorConfigChanged(): void {
   window.dispatchEvent(new Event(EDITOR_CONFIG_CHANGED_EVENT));

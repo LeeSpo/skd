@@ -472,29 +472,9 @@
     }
   },
   "toolbar": {
-    "newConnection": "New Connection",
-    "openConnection": "Open Connection",
     "quickConnect": "Quick Connect",
     "recentConnections": "Recent Connections",
-    "noRecentConnections": "No recent connections",
-    "noRecentConnectionsDesc": "Connect to a server to see it here",
-    "options": "Options",
-    "toggleConnectionManager": "Toggle Connection Manager",
-    "toggleBottomPanel": "Toggle Bottom Panel",
-    "toggleFileBrowser": "Toggle File Browser",
-    "toggleMonitorPanel": "Toggle Monitor Panel",
-    "toggleZenMode": "Toggle Zen Mode (Ctrl+K Z)",
-    "layoutPresets": "Layout Presets",
-    "defaultLayout": "Default Layout",
-    "minimalTerminalOnly": "Minimal - Terminal Only",
-    "focusMode": "Focus Mode",
-    "fullStackAllPanels": "Full Stack - All Panels",
-    "zenMode": "Zen Mode",
-    "justNow": "Just now",
-    "minutesAgo": "{{count}}m ago",
-    "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago",
-    "portForwarding": "Port Forwarding"
+    "noRecentConnections": "No recent connections"
   },
   "portForward": {
     "title": "SSH Port Forwarding",
@@ -998,27 +978,12 @@
     "transferDirection": "Transfer Direction"
   },
   "connectionDetails": {
-    "title": "Connection Details",
-    "noSession": "No session selected",
     "name": "Name",
     "type": "Type",
     "status": "Status",
-    "host": "Host",
-    "username": "Username",
-    "port": "Port",
-    "subItems": "Sub items",
-    "protocol": "Protocol",
-    "description": "Description",
     "connected": "Connected",
-    "connecting": "Connecting",
     "disconnected": "Disconnected",
-    "pending": "Pending",
     "lastConnected": "Last Connected"
-  },
-  "sidebar": {
-    "toggleSidebar": "Toggle Sidebar",
-    "sidebar": "Sidebar",
-    "mobileSidebarDesc": "Displays the mobile sidebar."
   },
   "directoryTree": {
     "directories": "Directories",
@@ -1026,9 +991,6 @@
     "collapse": "Collapse {{name}}",
     "expand": "Expand {{name}}",
     "navigateTo": "Navigate to {{path}}"
-  },
-  "terminal": {
-    "search": "Search..."
   },
   "terminalGroup": {
     "waitingForConnection": "Waiting for connection..."
@@ -1143,29 +1105,6 @@
     "live": "Live",
     "scrollLocked": "Auto-scroll locked to bottom",
     "scrollUnlocked": "Click to auto-scroll to bottom"
-  },
-  "logViewer": {
-    "failedToLoadLogFiles": "Failed to Load Log Files",
-    "unableToFetchList": "Unable to fetch log file list from server.",
-    "failedToLoadLogContent": "Failed to Load Log Content",
-    "unableToFetchContent": "Unable to fetch log content from server.",
-    "unexpectedError": "An unexpected error occurred.",
-    "failedToFetchLog": "Failed to fetch log",
-    "error": "Error",
-    "title": "Log Viewer",
-    "autoRefresh": "Auto-refresh",
-    "selectLogFile": "Select Log File",
-    "chooseLogFile": "Choose a log file...",
-    "lines": "lines",
-    "load": "Load",
-    "lockScroll": "Click to lock scroll (auto-scroll to bottom)",
-    "unlockScroll": "Click to unlock scroll (stay at current position)",
-    "searchLogs": "Search logs...",
-    "download": "Download",
-    "selectLogFileToView": "Select a log file to view",
-    "loadingLogs": "Loading logs...",
-    "noMatchingLines": "No matching log lines",
-    "noLogContent": "No log content"
   },
   "fileEditorView": {
     "failedToLoad": "Failed to load file",

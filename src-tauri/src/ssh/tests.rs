@@ -22,6 +22,16 @@ mod tests {
         }
     }
 
+    async fn connect_client(client: &mut SshClient, config: &SshConfig) -> anyhow::Result<()> {
+        client
+            .connect_with_progress(
+                config,
+                crate::connection_diagnostics::default_tcp_timeout(),
+                |_| {},
+            )
+            .await
+    }
+
     // Unit test - doesn't require external SSH server
     #[test]
     fn test_ssh_config_creation() {
@@ -42,7 +52,7 @@ mod tests {
         let mut client_write = client.write().await;
         let config = create_test_config();
 
-        let result = client_write.connect(&config).await;
+        let result = connect_client(&mut client_write, &config).await;
 
         assert!(
             result.is_ok(),
@@ -63,8 +73,7 @@ mod tests {
         let config = create_test_config();
 
         // Connect
-        client_write
-            .connect(&config)
+        connect_client(&mut client_write, &config)
             .await
             .expect("Failed to connect");
 
@@ -99,7 +108,7 @@ mod tests {
             host_key_verification: false,
         };
 
-        let result = client_write.connect(&config).await;
+        let result = connect_client(&mut client_write, &config).await;
 
         assert!(
             result.is_err(),
@@ -115,8 +124,7 @@ mod tests {
         let config = create_test_config();
 
         // Connect
-        client_write
-            .connect(&config)
+        connect_client(&mut client_write, &config)
             .await
             .expect("Failed to connect");
 
@@ -144,8 +152,7 @@ mod tests {
         let config = create_test_config();
 
         // Connect
-        client_write
-            .connect(&config)
+        connect_client(&mut client_write, &config)
             .await
             .expect("Failed to connect");
 
@@ -252,7 +259,14 @@ mod key_loading_tests {
         };
 
         let mut client = SshClient::new();
-        let err = client.connect(&config).await.unwrap_err();
+        let err = client
+            .connect_with_progress(
+                &config,
+                crate::connection_diagnostics::default_tcp_timeout(),
+                |_| {},
+            )
+            .await
+            .unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("Failed to load SSH private key")

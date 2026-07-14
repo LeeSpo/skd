@@ -109,7 +109,7 @@ export interface FilePanelRef {
 }
 
 // ---------- MIME type for cross-panel drag ----------
-const DRAG_MIME = "application/x-rshell-files";
+const DRAG_MIME = "application/x-skd-files";
 
 // ---------- Component ----------
 
@@ -492,7 +492,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
           // This is the DROP side — we actually want the parent to know
           // about these files being transferred TO this panel.
           // Let's dispatch a custom event that the parent can handle.
-          const event = new CustomEvent("rshell-drop-transfer", {
+          const event = new CustomEvent("skd-drop-transfer", {
             detail: {
               targetMode: mode,
               targetPath: currentPath,

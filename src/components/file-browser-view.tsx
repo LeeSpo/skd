@@ -441,8 +441,8 @@ export function FileBrowserView({
       }
     };
 
-    document.addEventListener("rshell-drop-transfer", handler);
-    return () => document.removeEventListener("rshell-drop-transfer", handler);
+    document.addEventListener("skd-drop-transfer", handler);
+    return () => document.removeEventListener("skd-drop-transfer", handler);
   }, []);
 
   // ------ Directory transfer callbacks ------

@@ -140,9 +140,9 @@ function performBump() {
 - _Add bug fixes here_
 `;
 
-      // Insert after the Unreleased section
+      // Insert immediately after the Unreleased heading.
       changelog = changelog.replace(
-        /(## \[Unreleased\][^\n]*\n\n[^\n]*\n\n)/,
+        /(## \[Unreleased\]\n)/,
         `$1${newSection}\n`
       );
 

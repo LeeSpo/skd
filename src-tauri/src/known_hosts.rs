@@ -125,10 +125,6 @@ pub fn trust_host_key_entry(
     write_entries(&entries)
 }
 
-pub fn trust_host_key(host: &str, port: u16, public_key: &PublicKey) -> Result<()> {
-    trust_host_key_entry(host, port, public_key.name(), &public_key.public_key_base64())
-}
-
 pub fn format_unknown_host_error(host: &str, port: u16, public_key: &PublicKey) -> String {
     format!(
         "{UNKNOWN_HOST_KEY_PREFIX}{}",
@@ -187,7 +183,13 @@ mod tests {
         with_temp_store(|| {
             let keypair = KeyPair::generate_ed25519().unwrap();
             let public = keypair.clone_public_key().unwrap();
-            trust_host_key("example.com", 22, &public).unwrap();
+            trust_host_key_entry(
+                "example.com",
+                22,
+                public.name(),
+                &public.public_key_base64(),
+            )
+            .unwrap();
             let result = verify_host_key("example.com", 22, &public).unwrap();
             assert_eq!(result, VerifyResult::Known);
         });

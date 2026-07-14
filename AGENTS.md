@@ -9,7 +9,7 @@ This project is a fork of [R-Shell](https://github.com/GOODBOY008/r-shell) (MIT 
 - **App name**: `skd`
 - **Bundle identifier**: `com.spo.skd`
 - **Package name**: `skd` (npm / Cargo)
-- **Version**: 0.1.0
+- **Version source of truth**: `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`
 - **Package Manager**: pnpm (v9.15.4)
 - **Node Target**: ES2020
 - **Rust Edition**: 2021
@@ -26,7 +26,7 @@ This project is a fork of [R-Shell](https://github.com/GOODBOY008/r-shell) (MIT 
 | Feature components | `src/components/*.tsx` | Connection dialog, terminal, SFTP file browser, local shell |
 | Terminal subsystem | `src/components/terminal/` | Grid renderer, tab bar, context menu, search, drop zones |
 | Terminal addons | `src/components/terminal/addons/` | xterm.js addon wrappers |
-| UI primitives | `src/components/ui/` | 48+ shadcn/ui components (Radix-based) |
+| UI primitives | `src/components/ui/` | shadcn/ui components (Radix-based) used by the application |
 | Shared logic | `src/lib/` | State management, storage, keyboard shortcuts, layout |
 | Styles | `src/index.css`, `src/styles/globals.css` | Tailwind CSS with CSS variable theming |
 
@@ -84,8 +84,6 @@ pnpm test
 # Rust unit tests
 cd src-tauri && cargo test
 
-# E2E tests
-pnpm test:e2e
 ```
 
 ### Linting
@@ -113,9 +111,9 @@ pnpm lint:fix
 ### Version Bumping
 
 ```bash
-pnpm run version:patch   # 0.7.1 → 0.7.2
-pnpm run version:minor   # 0.7.1 → 0.8.0
-pnpm run version:major   # 0.7.1 → 1.0.0
+pnpm run version:patch   # X.Y.Z → X.Y.(Z+1)
+pnpm run version:minor   # X.Y.Z → X.(Y+1).0
+pnpm run version:major   # X.Y.Z → (X+1).0.0
 ```
 
 Updates `package.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `CHANGELOG.md` and creates a git commit.
@@ -126,11 +124,11 @@ Updates `package.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `CHANGELO
 
 | What | Where |
 |------|-------|
-| App entry & layout | `src/App.tsx` (1074 lines) |
-| Tauri commands | `src-tauri/src/commands.rs` (1705 lines) |
-| SSH implementation | `src-tauri/src/ssh/mod.rs` (456 lines) |
-| Connection manager | `src-tauri/src/connection_manager.rs` (243 lines) |
-| WebSocket server | `src-tauri/src/websocket_server.rs` (388 lines) |
+| App entry & layout | `src/App.tsx` |
+| Tauri commands | `src-tauri/src/commands.rs` |
+| SSH implementation | `src-tauri/src/ssh/mod.rs` |
+| Connection manager | `src-tauri/src/connection_manager.rs` |
+| WebSocket server | `src-tauri/src/websocket_server.rs` |
 | Terminal group state | `src/lib/terminal-group-reducer.ts`, `terminal-group-types.ts` |
 | Terminal group serialization | `src/lib/terminal-group-serializer.ts` |
 | Connection storage | `src/lib/connection-storage.ts` |

@@ -121,7 +121,7 @@ export function FileEditorView({
     try {
       // Use the user's home directory as a base for the temp download
       const homeDir = await invoke<string>("get_home_directory");
-      const localPath = `${homeDir}/.rshell-preview-${fileName}`;
+      const localPath = `${homeDir}/.skd-preview-${fileName}`;
       const result = await invoke<{ success: boolean; error?: string }>(
         "download_remote_file",
         { connectionId, remotePath: filePath, localPath },

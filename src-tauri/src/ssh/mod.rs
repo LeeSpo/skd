@@ -1,8 +1,8 @@
 mod key_loader;
 
 use crate::connection_diagnostics::{
-    classify_handshake_error, classify_tcp_io_error, default_tcp_timeout, ConnectDiagnosticError,
-    ConnectErrorKind, ConnectStage,
+    classify_handshake_error, classify_tcp_io_error, ConnectDiagnosticError, ConnectErrorKind,
+    ConnectStage,
 };
 use crate::known_hosts::{
     format_mismatch_host_error, format_unknown_host_error, verify_host_key, VerifyResult,
@@ -128,10 +128,6 @@ pub type Client = SshHandler;
 impl SshClient {
     pub fn new() -> Self {
         Self { session: None }
-    }
-
-    pub async fn connect(&mut self, config: &SshConfig) -> Result<()> {
-        self.connect_with_progress(config, default_tcp_timeout(), |_| {}).await
     }
 
     /// Staged SSH connect with progress callbacks for diagnostics UI.
@@ -422,10 +418,6 @@ impl SshClient {
             }
         }
         Ok(())
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.session.is_some()
     }
 
     /// Clone of the authenticated session handle for concurrent channels

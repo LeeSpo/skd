@@ -1,213 +1,75 @@
-# Contributing to R-Shell
+# Contributing to skd
 
-First off, thank you for considering contributing to R-Shell! 🎉
+Thank you for contributing to skd. The desktop application targets macOS and combines a React/TypeScript frontend with a Tauri/Rust backend.
 
-## 🎯 Project Context
+## Development setup
 
-This is a **learning and practice project for vibing coding** methodology. The frontend is AI-generated from Figma designs, and development is powered by GitHub Copilot. We welcome contributions that align with this experimental approach!
+Prerequisites:
 
-## 📋 Table of Contents
+- macOS
+- Node.js 22 or newer
+- pnpm 9
+- The latest stable Rust toolchain
+- The platform dependencies required by Tauri 2
 
-- [Code of Conduct](#code-of-conduct)
-- [How Can I Contribute?](#how-can-i-contribute)
-- [Development Setup](#development-setup)
-- [Pull Request Process](#pull-request-process)
-- [Style Guidelines](#style-guidelines)
-- [Community](#community)
-
-## Code of Conduct
-
-This project adheres to a code of conduct that all contributors are expected to follow. Please be respectful and constructive in all interactions.
-
-## How Can I Contribute?
-
-### 🐛 Reporting Bugs
-
-Before creating bug reports, please check existing issues to avoid duplicates. When creating a bug report, include:
-
-- **Clear title and description**
-- **Steps to reproduce** the issue
-- **Expected vs actual behavior**
-- **Screenshots** if applicable
-- **Environment details** (OS, Rust version, Node version)
-
-### 💡 Suggesting Enhancements
-
-Enhancement suggestions are tracked as GitHub issues. When suggesting an enhancement:
-
-- **Use a clear and descriptive title**
-- **Provide a detailed description** of the suggested enhancement
-- **Explain why this enhancement would be useful**
-- **Include mockups or examples** if applicable
-
-### 🔧 Pull Requests
-
-1. Fork the repo and create your branch from `main`
-2. If you've added code that should be tested, add tests
-3. Ensure the test suite passes
-4. Make sure your code follows the existing style
-5. Write a clear commit message
-
-## Development Setup
-
-### Prerequisites
-
-- Node.js (v18+)
-- pnpm
-- Rust (latest stable)
-- Tauri CLI dependencies
-
-### Installation
+Clone your fork, then install dependencies and start the desktop application:
 
 ```bash
-# Clone your fork
-git clone https://github.com/your-username/r-shell.git
-cd r-shell
-
-# Install dependencies
+git clone <your-fork-url>
+cd skd-shell
 pnpm install
-
-# Run in development mode
 pnpm tauri dev
 ```
 
-### Testing
+`pnpm dev` starts only the browser frontend and does not provide native menus, Keychain access, or other Tauri integrations.
+
+## Validation
+
+Before opening a pull request, run:
 
 ```bash
-# Run frontend tests
+pnpm lint
+pnpm exec tsc --noEmit
 pnpm test
+pnpm build
 
-# Run Rust tests
 cd src-tauri
+cargo fmt --check
 cargo test
-
-# Run E2E tests (configure credentials first)
-pnpm playwright test
 ```
 
-## Pull Request Process
+There is currently no configured end-to-end test suite. Tests that require external SSH, SFTP, or FTP servers must remain ignored by default and document their environment requirements.
 
-1. **Update documentation** - Update the README.md with details of changes if applicable
-2. **Follow commit conventions** - Use conventional commits format:
-   - `feat:` - New features
-   - `fix:` - Bug fixes
-   - `docs:` - Documentation changes
-   - `style:` - Code style changes (formatting, etc)
-   - `refactor:` - Code refactoring
-   - `test:` - Adding or updating tests
-   - `chore:` - Maintenance tasks
+## Pull requests
 
-3. **Update tests** - Add or update tests as needed
-4. **Keep commits focused** - One logical change per commit
-5. **Write clear PR descriptions** - Explain what and why
+1. Create a focused branch from `main`.
+2. Add or update tests for changed behavior.
+3. Keep user-facing strings in `src/locales/en.json` and access them through `react-i18next`.
+4. Preserve macOS-only assumptions and Tauri command compatibility unless the change explicitly updates them.
+5. Use a clear conventional commit prefix such as `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, or `chore:`.
+6. Explain the motivation, user-visible impact, and validation performed in the pull request.
 
-### Example Commit Messages
+## Code style
 
-```
-feat: add SSH key authentication support
-fix: resolve memory leak in terminal component
-docs: update installation instructions for Windows
-refactor: simplify connection profile management
-```
+### TypeScript and React
 
-## Style Guidelines
-
-### TypeScript/React
-
-- Use TypeScript for all new code
-- Follow existing code formatting (Prettier)
-- Use functional components and hooks
-- Keep components focused and single-purpose
-- Add JSDoc comments for complex functions
+- Use functional components and hooks.
+- Use the `@/` alias for imports from `src/`.
+- Use existing shadcn/Radix primitives and Tailwind conventions.
+- Do not hardcode user-facing text.
+- Keep terminal input handlers free of per-keystroke logging and allocations.
 
 ### Rust
 
-- Follow Rust standard style guidelines (rustfmt)
-- Use `cargo clippy` to catch common mistakes
-- Add documentation comments for public APIs
-- Handle errors properly (don't unwrap in production code)
+- Follow `rustfmt` output and address relevant Clippy findings.
+- Use `anyhow::Result` internally and string errors at the Tauri IPC boundary.
+- Avoid `unwrap` and `expect` in production paths.
+- Preserve cancellation and cleanup behavior for connections and PTY sessions.
 
-### General
+## Reporting issues
 
-- Write self-documenting code with clear variable names
-- Keep functions small and focused
-- Add comments for complex logic
-- Update documentation when changing behavior
-
-## Project Structure
-
-```
-r-shell/
-├── src/                  # React frontend
-│   ├── components/       # React components
-│   ├── lib/             # Utility functions
-│   └── __tests__/       # Frontend tests
-├── src-tauri/           # Rust backend
-│   ├── src/             # Rust source code
-│   └── Cargo.toml       # Rust dependencies
-├── tests/               # E2E tests
-└── docs/                # Documentation
-```
-
-## Areas for Contribution
-
-We especially welcome contributions in these areas:
-
-### High Priority
-- 🐛 Bug fixes
-- 📝 Documentation improvements
-- ✨ UI/UX enhancements
-- 🧪 Test coverage improvements
-
-### Feature Requests
-- 🔐 Additional authentication methods (SSH keys, 2FA)
-- 📊 Enhanced system monitoring features
-- 🎨 Theme customization
-- 🔌 Plugin system
-- 📦 Package management integration
-- 🔍 Search functionality in terminal history
-
-### Technical Debt
-- ♻️ Code refactoring
-- 🎯 Performance optimizations
-- 🔒 Security improvements
-- ⚡ Build optimization
-
-## Testing Guidelines
-
-### Frontend Testing
-- Test user interactions
-- Test component rendering
-- Mock Tauri commands
-- Test edge cases
-
-### Backend Testing
-- Test SSH connection handling
-- Test file operations
-- Test command execution
-- Test error scenarios
-
-### E2E Testing
-- Test complete user workflows
-- Test cross-platform compatibility
-- Configure test credentials in test files
-
-## Community
-
-### Getting Help
-
-- 📖 Read the [README](README.md) and documentation
-- 🔍 Search existing [issues](https://github.com/GOODBOY008/r-shell/issues)
-- 💬 Ask questions in [Discussions](https://github.com/GOODBOY008/r-shell/discussions)
-
-### Recognition
-
-Contributors will be recognized in our README and release notes!
+Include reproduction steps, expected and actual behavior, the macOS and hardware architecture versions, and relevant frontend or Rust logs. Do not include credentials, private keys, or server-sensitive data.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project.
-
----
-
-Thank you for contributing to R-Shell! 🚀
+Contributions are licensed under the project MIT License. Upstream R-Shell attribution is retained in [NOTICE](NOTICE).

@@ -68,18 +68,6 @@ pub struct StandaloneSftpClient {
 }
 
 impl StandaloneSftpClient {
-    pub fn new() -> Self {
-        Self {
-            session: None,
-            sftp: None,
-        }
-    }
-
-    /// Establish an SSH connection, authenticate, and open the SFTP subsystem.
-    pub async fn connect(config: &SftpConfig) -> Result<Self> {
-        Self::connect_with_progress(config, |_| {}).await
-    }
-
     /// Staged SFTP connect (SSH transport stages + SFTP subsystem).
     pub async fn connect_with_progress(
         config: &SftpConfig,
@@ -122,10 +110,6 @@ impl StandaloneSftpClient {
             session: Some(session),
             sftp: Some(sftp),
         })
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.session.is_some() && self.sftp.is_some()
     }
 
     pub async fn disconnect(&mut self) -> Result<()> {
@@ -456,12 +440,6 @@ mod tests {
     // ---- StandaloneSftpClient unit tests ----
 
     #[test]
-    fn test_new_client_is_disconnected() {
-        let client = StandaloneSftpClient::new();
-        assert!(!client.is_connected());
-    }
-
-    #[test]
     fn test_file_entry_type_serialization() {
         // Verify that FileEntryType variants serialize correctly
         let entry = RemoteFileEntry {
@@ -536,10 +514,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_disconnect_on_new_client_is_ok() {
-        let mut client = StandaloneSftpClient::new();
+        let mut client = StandaloneSftpClient {
+            session: None,
+            sftp: None,
+        };
         // Disconnecting a never-connected client should succeed
         let result = client.disconnect().await;
         assert!(result.is_ok());
-        assert!(!client.is_connected());
+        assert!(client.session.is_none());
+        assert!(client.sftp.is_none());
     }
 }

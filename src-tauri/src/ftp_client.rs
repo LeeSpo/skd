@@ -42,10 +42,6 @@ pub struct FtpClient {
 }
 
 impl FtpClient {
-    pub fn new() -> Self {
-        Self { stream: None }
-    }
-
     /// Connect to an FTP server, authenticate, and switch to binary transfer mode.
     pub async fn connect(config: &FtpConfig) -> Result<Self> {
         let addr = format!("{}:{}", config.host, config.port);
@@ -141,10 +137,6 @@ impl FtpClient {
         Ok(Self {
             stream: Some(stream_kind),
         })
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.stream.is_some()
     }
 
     pub async fn disconnect(&mut self) -> Result<()> {
@@ -383,13 +375,13 @@ mod tests {
             .await
             .expect("FTP connect should succeed");
 
-        assert!(client.is_connected(), "client should be connected");
+        assert!(client.stream.is_some(), "client should be connected");
 
         client
             .disconnect()
             .await
             .expect("disconnect should succeed");
-        assert!(!client.is_connected(), "client should be disconnected");
+        assert!(client.stream.is_none(), "client should be disconnected");
     }
 
     // ---- 2. Connect with wrong credentials --------------------------------
@@ -448,7 +440,7 @@ mod tests {
 
         let mut client = FtpClient::connect(&cfg).await.expect("connect");
 
-        let test_dir = "/rshell_e2e_test";
+        let test_dir = "/skd_e2e_test";
         let test_file_remote = format!("{}/hello.txt", test_dir);
         let renamed_file_remote = format!("{}/hello_renamed.txt", test_dir);
 
@@ -465,7 +457,7 @@ mod tests {
         eprintln!("Created directory: {}", test_dir);
 
         // 4b. Upload a file
-        let tmp_upload = std::env::temp_dir().join("rshell_e2e_upload.txt");
+        let tmp_upload = std::env::temp_dir().join("skd_e2e_upload.txt");
         let upload_content = b"Hello from skd E2E test!\nLine 2\n";
         tokio::fs::write(&tmp_upload, upload_content)
             .await
@@ -489,7 +481,7 @@ mod tests {
         );
 
         // 4d. Download the file and verify contents
-        let tmp_download = std::env::temp_dir().join("rshell_e2e_download.txt");
+        let tmp_download = std::env::temp_dir().join("skd_e2e_download.txt");
         let downloaded_bytes = client
             .download_file(&test_file_remote, tmp_download.to_str().unwrap())
             .await
@@ -540,7 +532,7 @@ mod tests {
         // Verify cleanup
         let root_entries = client.list_dir("/").await.expect("list root");
         assert!(
-            !root_entries.iter().any(|e| e.name == "rshell_e2e_test"),
+            !root_entries.iter().any(|e| e.name == "skd_e2e_test"),
             "test directory should be removed"
         );
         eprintln!("Cleanup verified: test directory removed from root listing");
@@ -632,18 +624,12 @@ mod tests {
         assert_eq!(config.port, 990);
     }
 
-    #[test]
-    fn test_new_client_is_disconnected() {
-        let client = FtpClient::new();
-        assert!(!client.is_connected());
-    }
-
     #[tokio::test]
     async fn test_disconnect_on_new_client_is_ok() {
-        let mut client = FtpClient::new();
+        let mut client = FtpClient { stream: None };
         let result = client.disconnect().await;
         assert!(result.is_ok());
-        assert!(!client.is_connected());
+        assert!(client.stream.is_none());
     }
 
     #[test]
