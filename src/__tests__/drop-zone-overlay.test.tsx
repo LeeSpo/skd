@@ -93,4 +93,31 @@ describe('DropZoneOverlay component', () => {
     expect(getByTestId('drop-zone-center')).toBeTruthy();
     expect(queryByTestId('drop-zone-right')).toBeNull();
   });
+
+  it('previews half-pane result geometry for edge zones (not the 25% trigger strip)', () => {
+    const { getByTestId, rerender } = render(
+      <DropZoneOverlay groupId="g1" visible={true} activeZone="up" />,
+    );
+    expect(getByTestId('drop-zone-up').className).toContain('h-1/2');
+    expect(getByTestId('drop-zone-up').className).not.toContain('h-1/4');
+
+    rerender(<DropZoneOverlay groupId="g1" visible={true} activeZone="down" />);
+    expect(getByTestId('drop-zone-down').className).toContain('h-1/2');
+
+    rerender(<DropZoneOverlay groupId="g1" visible={true} activeZone="left" />);
+    expect(getByTestId('drop-zone-left').className).toContain('w-1/2');
+    expect(getByTestId('drop-zone-left').className).not.toContain('w-1/4');
+
+    rerender(<DropZoneOverlay groupId="g1" visible={true} activeZone="right" />);
+    expect(getByTestId('drop-zone-right').className).toContain('w-1/2');
+  });
+
+  it('previews full content area for center merge', () => {
+    const { getByTestId } = render(
+      <DropZoneOverlay groupId="g1" visible={true} activeZone="center" />,
+    );
+    const el = getByTestId('drop-zone-center');
+    expect(el.className).toContain('inset-0');
+    expect(el.className).not.toContain('m-[25%]');
+  });
 });
