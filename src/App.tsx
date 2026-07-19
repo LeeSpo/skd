@@ -25,7 +25,7 @@ import {
 import type { KeyboardShortcut, SplitViewShortcutBindings } from './lib/keyboard-shortcuts';
 import { TerminalGroupProvider, useTerminalGroups } from './lib/terminal-group-context';
 import { TerminalCallbacksProvider } from './lib/terminal-callbacks-context';
-import { GridRenderer } from './components/terminal/grid-renderer';
+import { StableTerminalGrid } from './components/terminal/grid-renderer';
 import { ErrorBoundary } from './components/error-boundary';
 import type { TerminalTab } from './lib/terminal-group-types';
 import { Toaster } from './components/ui/sonner';
@@ -1477,7 +1477,7 @@ function AppContent() {
                   <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
                     <TerminalCallbacksProvider value={terminalCallbacks}>
                       <ErrorBoundary label="Terminal">
-                        <GridRenderer node={state.gridLayout} path={[]} />
+                        <StableTerminalGrid />
                       </ErrorBoundary>
                     </TerminalCallbacksProvider>
                   </ResizablePanel>

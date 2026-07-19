@@ -1,22 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { GridRenderer } from '../components/terminal/grid-renderer';
-import type { GridNode } from '../lib/terminal-group-types';
+import { GridRenderer, StableTerminalGrid } from '../components/terminal/grid-renderer';
+import type { GridNode, TerminalGroupState } from '../lib/terminal-group-types';
 
 // Mock the context
 const mockDispatch = vi.fn();
+let mockState: TerminalGroupState = {
+  groups: {
+    g1: { id: 'g1', tabs: [], activeTabId: null },
+    g2: { id: 'g2', tabs: [], activeTabId: null },
+    g3: { id: 'g3', tabs: [], activeTabId: null },
+  },
+  activeGroupId: 'g1',
+  gridLayout: { type: 'leaf', groupId: 'g1' },
+  nextGroupId: 4,
+  tabToGroupMap: {},
+};
 vi.mock('../lib/terminal-group-context', () => ({
   useTerminalGroups: () => ({
-    state: {
-      groups: {
-        g1: { id: 'g1', tabs: [], activeTabId: null },
-        g2: { id: 'g2', tabs: [], activeTabId: null },
-        g3: { id: 'g3', tabs: [], activeTabId: null },
-      },
-      activeGroupId: 'g1',
-      gridLayout: { type: 'leaf' as const, groupId: 'g1' },
-      nextGroupId: 4,
-    },
+    state: mockState,
     dispatch: mockDispatch,
     activeGroup: null,
     activeTab: null,
@@ -27,6 +29,17 @@ vi.mock('../lib/terminal-group-context', () => ({
 describe('GridRenderer', () => {
   beforeEach(() => {
     mockDispatch.mockClear();
+    mockState = {
+      groups: {
+        g1: { id: 'g1', tabs: [], activeTabId: null },
+        g2: { id: 'g2', tabs: [], activeTabId: null },
+        g3: { id: 'g3', tabs: [], activeTabId: null },
+      },
+      activeGroupId: 'g1',
+      gridLayout: { type: 'leaf', groupId: 'g1' },
+      nextGroupId: 4,
+      tabToGroupMap: {},
+    };
   });
 
   it('renders a leaf node as TerminalGroupView', () => {
@@ -97,5 +110,49 @@ describe('GridRenderer', () => {
       path: [1],
       sizes: [100 / 3, 100 / 3, 100 / 3],
     });
+  });
+
+  it('keeps the existing terminal group mounted when its pane is split', () => {
+    const resizeObserver = {
+      observe: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    class ResizeObserverMock {
+      observe = resizeObserver.observe;
+      disconnect = resizeObserver.disconnect;
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    mockState = {
+      ...mockState,
+      groups: { g1: mockState.groups.g1 },
+      gridLayout: { type: 'leaf', groupId: 'g1' },
+    };
+    const view = render(<StableTerminalGrid />);
+    const originalGroupElement = view.container.querySelector('[data-group-id="g1"]');
+    expect(originalGroupElement).not.toBeNull();
+
+    mockState = {
+      ...mockState,
+      groups: {
+        g1: mockState.groups.g1,
+        g2: { id: 'g2', tabs: [], activeTabId: null },
+      },
+      activeGroupId: 'g2',
+      gridLayout: {
+        type: 'branch',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', groupId: 'g1' },
+          { type: 'leaf', groupId: 'g2' },
+        ],
+        sizes: [50, 50],
+      },
+    };
+    view.rerender(<StableTerminalGrid />);
+
+    expect(view.container.querySelector('[data-group-id="g1"]')).toBe(originalGroupElement);
+    expect(view.container.querySelector('[data-group-id="g2"]')).not.toBeNull();
+    vi.unstubAllGlobals();
   });
 });
