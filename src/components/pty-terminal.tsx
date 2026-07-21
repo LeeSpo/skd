@@ -30,6 +30,9 @@ import {
   parseOsc7Cwd,
   publishTerminalCwd,
 } from '../lib/terminal-cwd-store';
+import { formatPathsForShell } from '../lib/shell-escape';
+import { useWebviewFileDrop } from '../lib/use-webview-file-drop';
+import { cn } from '../lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
 interface PtyTerminalProps {
@@ -939,6 +942,29 @@ export function PtyTerminal({
     await pasteClipboardIntoPty();
   }, [pasteClipboardIntoPty]);
 
+  // Finder / OS file drop → insert shell-escaped absolute paths at the cursor
+  // (same UX as iTerm2 / Terminal.app). Hit-test is shared via useWebviewFileDrop;
+  // priority 0 so remote file-panel (priority 1) still wins when overlapping.
+  const handleOsPathsDropped = React.useCallback((paths: string[]) => {
+    const term = xtermRef.current;
+    const ws = wsRef.current;
+    if (!term || !ws || ws.readyState !== WebSocket.OPEN || paths.length === 0) {
+      return;
+    }
+    const text = formatPathsForShell(paths);
+    if (!text) return;
+    term.focus();
+    // term.paste() goes through onData → sendInputToPty with bracketed paste.
+    term.paste(text);
+  }, []);
+
+  const { isDragOver: isOsFileDragOver } = useWebviewFileDrop({
+    enabled: true,
+    targetRef: containerRef,
+    onDrop: handleOsPathsDropped,
+    priority: 0,
+  });
+
   const handleClear = React.useCallback(() => {
     xtermRef.current?.clear();
     hasScrollableContentRef.current = false;
@@ -1048,7 +1074,10 @@ export function PtyTerminal({
     >
     <div 
       ref={containerRef}
-      className={`relative h-full w-full pty-terminal-container pty-term-${scopeId} overflow-hidden`}
+      className={cn(
+        `relative h-full w-full pty-terminal-container pty-term-${scopeId} overflow-hidden`,
+        isOsFileDragOver && 'ring-1 ring-inset ring-primary/40',
+      )}
       onClick={(e) => {
         // Don't refocus terminal if clicking on search bar or other interactive elements
         const target = e.target as HTMLElement;
