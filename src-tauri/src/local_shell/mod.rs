@@ -1,4 +1,5 @@
 use crate::pty_session::PtySession;
+use crate::shell_integration;
 use anyhow::Result;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
@@ -15,6 +16,10 @@ pub fn default_shell() -> String {
 /// Spawn a local interactive shell in a PTY and return a session handle
 /// compatible with the existing WebSocket PTY pipeline.
 pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
+    create_local_pty_session_with_shell(default_shell(), cols, rows)
+}
+
+fn create_local_pty_session_with_shell(shell: String, cols: u32, rows: u32) -> Result<PtySession> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: rows as u16,
@@ -23,12 +28,29 @@ pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
         pixel_height: 0,
     })?;
 
-    let shell = default_shell();
     let mut cmd = CommandBuilder::new(&shell);
+    let shell_integration = match shell_integration::prepare_local_shell(&shell) {
+        Ok(integration) => integration,
+        Err(error) => {
+            tracing::warn!(
+                "Local shell integration unavailable for {}: {}. Starting a normal login shell.",
+                shell,
+                error
+            );
+            None
+        }
+    };
 
-    // Login shell so GUI-launched apps still load the user's profile (macOS apps
-    // often lack a full shell environment compared to Terminal.app).
-    cmd.arg("-l");
+    if let Some(integration) = shell_integration.as_ref() {
+        cmd.args(&integration.args);
+        for (name, value) in &integration.env {
+            cmd.env(name, value);
+        }
+    } else {
+        // Unsupported shells retain the original login-shell behavior and may
+        // still report cwd through their own OSC integration.
+        cmd.arg("-l");
+    }
 
     if let Some(home) = dirs::home_dir() {
         cmd.cwd(home.clone());
@@ -39,7 +61,10 @@ pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
     }
     // GUI apps on macOS may inherit a minimal PATH — ensure standard locations.
     if std::env::var("PATH").is_err() {
-        cmd.env("PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin");
+        cmd.env(
+            "PATH",
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        );
     }
 
     // CRITICAL: GUI apps launched from Finder / Dock / Spotlight inherit a
@@ -82,7 +107,9 @@ pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
     let master = Arc::new(std::sync::Mutex::new(pair.master));
     let child = Arc::new(std::sync::Mutex::new(child));
     let writer = {
-        let master = master.lock().map_err(|e| anyhow::anyhow!("PTY lock poisoned: {}", e))?;
+        let master = master
+            .lock()
+            .map_err(|e| anyhow::anyhow!("PTY lock poisoned: {}", e))?;
         master.take_writer()?
     };
     let writer = Arc::new(std::sync::Mutex::new(writer));
@@ -212,12 +239,35 @@ pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
         output_rx: Arc::new(tokio::sync::Mutex::new(output_rx)),
         resize_tx,
         cancel,
+        _shell_integration_dir: shell_integration.map(|integration| integration.temp_dir),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn collect_until(session: &PtySession, expected: &str, timeout: Duration) -> String {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut output = String::new();
+        while tokio::time::Instant::now() < deadline {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            let data = {
+                let mut rx = session.output_rx.lock().await;
+                tokio::time::timeout(remaining, rx.recv()).await
+            };
+            match data {
+                Ok(Some(bytes)) => {
+                    output.push_str(&String::from_utf8_lossy(&bytes));
+                    if output.contains(expected) {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        output
+    }
 
     #[test]
     fn default_shell_returns_non_empty() {
@@ -258,5 +308,60 @@ mod tests {
 
         session.cancel.cancel();
         panic!("expected shell to echo LOCAL_PTY_TEST, got: {output}");
+    }
+
+    async fn assert_shell_reports_changed_cwd(shell: &str) {
+        if !std::path::Path::new(shell).exists() {
+            return;
+        }
+        let target = tempfile::Builder::new()
+            .prefix("skd cwd 100%;项目.")
+            .tempdir()
+            .expect("failed to create cwd test directory");
+        let target_path = target.path().to_string_lossy().to_string();
+        let escaped_target = target_path.replace('\\', "\\\\").replace(';', "\\x3b");
+        let expected = format!("\x1b]633;P;Cwd={escaped_target}\x07");
+        let session = create_local_pty_session_with_shell(shell.to_string(), 80, 24)
+            .expect("failed to create integrated local PTY");
+
+        let initial = collect_until(&session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
+        assert!(
+            initial.contains("\x1b]633;P;Cwd="),
+            "expected initial cwd report from {shell}, got: {initial:?}"
+        );
+
+        let quoted = target_path.replace('\'', "'\\''");
+        session
+            .input_tx
+            .send(format!("cd -- '{quoted}'\n").into_bytes())
+            .await
+            .expect("failed to send cd command");
+        let output = collect_until(&session, &expected, Duration::from_secs(5)).await;
+        assert!(
+            output.contains(&expected),
+            "expected cwd report {expected:?} from {shell}, got: {output:?}"
+        );
+
+        session
+            .input_tx
+            .send(b"cd -- '/definitely/missing/skd-cwd-test'\n".to_vec())
+            .await
+            .expect("failed to send failing cd command");
+        let failed_cd_output = collect_until(&session, &expected, Duration::from_secs(5)).await;
+        session.cancel.cancel();
+        assert!(
+            failed_cd_output.contains(&expected),
+            "failed cd should keep the previous cwd in {shell}, got: {failed_cd_output:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bash_shell_integration_reports_changed_cwd() {
+        assert_shell_reports_changed_cwd("/bin/bash").await;
+    }
+
+    #[tokio::test]
+    async fn zsh_shell_integration_reports_changed_cwd() {
+        assert_shell_reports_changed_cwd("/bin/zsh").await;
     }
 }

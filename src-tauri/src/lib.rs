@@ -8,6 +8,7 @@ mod local_shell;
 mod os_detect;
 mod port_forward;
 mod pty_session;
+mod shell_integration;
 mod sftp_client;
 mod ssh;
 mod websocket_server;

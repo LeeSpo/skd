@@ -9,4 +9,7 @@ pub struct PtySession {
     pub resize_tx: mpsc::Sender<(u32, u32)>,
     /// Cancelled when this session is torn down.
     pub cancel: CancellationToken,
+    /// Keeps local shell-integration startup files alive for the PTY lifetime.
+    /// Remote startup files are cleaned up on the remote host instead.
+    pub(crate) _shell_integration_dir: Option<tempfile::TempDir>,
 }

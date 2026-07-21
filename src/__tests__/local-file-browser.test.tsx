@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { IntegratedFileBrowser } from '../components/integrated-file-browser';
 
@@ -80,6 +80,9 @@ beforeEach(() => {
         },
       ];
     }
+    if (command === 'list_files') {
+      return '-rw-r--r-- 1 alice staff 128 2026-01-01 10:00 remote.txt';
+    }
     throw new Error(`Unexpected invoke: ${command}`);
   });
 });
@@ -124,5 +127,76 @@ describe('IntegratedFileBrowser local mode', () => {
       screen.getByRole('button', { name: 'fileBrowser.toolbar.followTerminal' })
         .getAttribute('aria-pressed'),
     ).toBe('true');
+  });
+
+  it('loads the reported directory for a connected SSH terminal', async () => {
+    render(
+      <IntegratedFileBrowser
+        mode="remote"
+        connectionId="ssh-1"
+        host="example.test"
+        isConnected
+        terminalCwd="/srv/project"
+        onClose={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_files', {
+        connectionId: 'ssh-1',
+        path: '/srv/project',
+      });
+    });
+    expect(screen.getByText('remote.txt')).toBeTruthy();
+  });
+
+  it('does not follow until the persisted follow toggle is enabled', async () => {
+    localStorage.setItem('skd-follow-terminal-cwd', 'false');
+    render(<IntegratedFileBrowser mode="local" terminalCwd="/tmp/disabled-target" />);
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('get_home_directory');
+    });
+    expect(mockedInvoke).not.toHaveBeenCalledWith('list_local_files', {
+      path: '/tmp/disabled-target',
+    });
+
+    const followButton = screen.getByRole('button', {
+      name: 'fileBrowser.toolbar.followTerminal',
+    });
+    expect(followButton.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(followButton);
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', {
+        path: '/tmp/disabled-target',
+      });
+    });
+  });
+
+  it('keeps the current listing when a reported directory cannot be loaded', async () => {
+    mockedInvoke.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === 'get_home_directory') return '/Users/test';
+      if (command === 'list_local_files') {
+        const path = (args as { path: string }).path;
+        if (path === '/missing') throw new Error('Directory not found');
+        return [{
+          name: 'readme.md',
+          file_type: 'File',
+          size: 128,
+          modified: '2026-01-01T10:00:00',
+          permissions: '-rw-r--r--',
+        }];
+      }
+      throw new Error(`Unexpected invoke: ${command}`);
+    });
+    const view = render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+
+    view.rerender(<IntegratedFileBrowser mode="local" terminalCwd="/missing" />);
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/missing' });
+    });
+    expect(screen.getByText('readme.md')).toBeTruthy();
   });
 });

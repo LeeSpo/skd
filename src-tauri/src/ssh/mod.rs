@@ -8,6 +8,10 @@ use crate::known_hosts::{
     format_mismatch_host_error, format_unknown_host_error, verify_host_key, VerifyResult,
 };
 use crate::pty_session::PtySession;
+use crate::shell_integration::{
+    build_remote_launch, parse_remote_shell_probe, parse_remote_temp_dir,
+    remote_cleanup_command, remote_prepare_command, RemoteShellLaunch, REMOTE_SHELL_PROBE_COMMAND,
+};
 use anyhow::Result;
 use russh::*;
 use russh_keys::*;
@@ -342,61 +346,68 @@ pub async fn establish_authenticated_session(
     Ok(ssh_session)
 }
 
+async fn execute_command_on_session(
+    session: &Arc<client::Handle<Client>>,
+    command: &str,
+) -> Result<String> {
+    let mut channel = session.channel_open_session().await?;
+    channel.exec(true, command).await?;
+
+    let mut output = String::new();
+    let mut code = None;
+    let mut eof_received = false;
+    let mut server_closed = false;
+
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { ref data }) => {
+                output.push_str(&String::from_utf8_lossy(data));
+            }
+            Some(ChannelMsg::ExitStatus { exit_status }) => {
+                code = Some(exit_status);
+                if eof_received {
+                    break;
+                }
+            }
+            Some(ChannelMsg::Eof) => {
+                eof_received = true;
+                if code.is_some() {
+                    break;
+                }
+            }
+            Some(ChannelMsg::Close) | None => {
+                server_closed = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    if !server_closed {
+        let _ = channel.close().await;
+    }
+
+    match code {
+        Some(0) => Ok(output),
+        None if !output.is_empty() => Ok(output),
+        _ => Err(anyhow::anyhow!("Command failed with code: {:?}", code)),
+    }
+}
+
+async fn request_pty(channel: &Channel<client::Msg>, cols: u32, rows: u32) -> Result<()> {
+    channel
+        .request_pty(true, "xterm-256color", cols, rows, 0, 0, &[])
+        .await
+        .map_err(|error| {
+            ConnectDiagnosticError::pty_failed(format!("Failed to request PTY: {error}")).into()
+        })
+}
+
 impl SshClient {
     // Changed to &self instead of &mut self to allow concurrent access
     pub async fn execute_command(&self, command: &str) -> Result<String> {
         if let Some(session) = &self.session {
-            let mut channel = session.channel_open_session().await?;
-            channel.exec(true, command).await?;
-
-            let mut output = String::new();
-            let mut code = None;
-            let mut eof_received = false;
-            let mut server_closed = false;
-
-            loop {
-                let msg = channel.wait().await;
-                match msg {
-                    Some(ChannelMsg::Data { ref data }) => {
-                        output.push_str(&String::from_utf8_lossy(data));
-                    }
-                    Some(ChannelMsg::ExitStatus { exit_status }) => {
-                        code = Some(exit_status);
-                        if eof_received {
-                            break;
-                        }
-                    }
-                    Some(ChannelMsg::Eof) => {
-                        eof_received = true;
-                        if code.is_some() {
-                            break;
-                        }
-                    }
-                    Some(ChannelMsg::Close) => {
-                        server_closed = true;
-                        break;
-                    }
-                    None => {
-                        server_closed = true;
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Send SSH_MSG_CHANNEL_CLOSE if the server hasn't already closed the channel.
-            // Without this, russh's session keeps the channel in its internal map until
-            // the session is torn down, causing per-poll memory growth.
-            if !server_closed {
-                let _ = channel.close().await;
-            }
-
-            // Consider success if we got output and no explicit error code, or code 0
-            match code {
-                Some(0) => Ok(output),
-                None if !output.is_empty() => Ok(output), // No exit code but got output = success
-                _ => Err(anyhow::anyhow!("Command failed with code: {:?}", code)),
-            }
+            execute_command_on_session(session, command).await
         } else {
             Err(anyhow::anyhow!("Not connected"))
         }
@@ -430,32 +441,48 @@ impl SshClient {
     /// This enables interactive commands like vim, less, more, top, etc.
     pub async fn create_pty_session(&self, cols: u32, rows: u32) -> Result<PtySession> {
         if let Some(session) = &self.session {
+            // Integration setup is best-effort. Unsupported or restricted
+            // hosts retain the original request_shell behavior.
+            let remote_launch = self.prepare_remote_shell_integration().await;
+
             // Open a new SSH channel
             let mut channel = session.channel_open_session().await.map_err(|e| {
                 ConnectDiagnosticError::pty_failed(format!("Failed to open SSH channel for PTY: {e}"))
             })?;
 
-            // Request PTY with terminal type and dimensions
-            // Similar to ttyd's approach: xterm-256color terminal
-            channel
-                .request_pty(
-                    true,             // want_reply
-                    "xterm-256color", // terminal type (like ttyd)
-                    cols,             // columns
-                    rows,             // rows
-                    0,                // pixel_width (not used)
-                    0,                // pixel_height (not used)
-                    &[],              // terminal modes
-                )
-                .await
-                .map_err(|e| {
-                    ConnectDiagnosticError::pty_failed(format!("Failed to request PTY: {e}"))
-                })?;
+            request_pty(&channel, cols, rows).await?;
 
-            // Start interactive shell
-            channel.request_shell(true).await.map_err(|e| {
-                ConnectDiagnosticError::pty_failed(format!("Failed to start shell on PTY: {e}"))
-            })?;
+            // Start through the temporary startup config. Servers that reject
+            // exec requests get a fresh channel with the standard shell flow.
+            let mut active_remote_temp_dir = None;
+            if let Some(launch) = remote_launch {
+                match channel.exec(true, launch.command.as_str()).await {
+                    Ok(()) => active_remote_temp_dir = Some(launch.temp_dir),
+                    Err(error) => {
+                        tracing::warn!(
+                            "Remote shell integration launch failed: {}. Falling back to request_shell.",
+                            error
+                        );
+                        let _ = channel.close().await;
+                        self.cleanup_remote_shell_integration(&launch.temp_dir).await;
+                        channel = session.channel_open_session().await.map_err(|e| {
+                            ConnectDiagnosticError::pty_failed(format!(
+                                "Failed to reopen SSH channel for PTY: {e}"
+                            ))
+                        })?;
+                        request_pty(&channel, cols, rows).await?;
+                        channel.request_shell(true).await.map_err(|e| {
+                            ConnectDiagnosticError::pty_failed(format!(
+                                "Failed to start shell on PTY: {e}"
+                            ))
+                        })?;
+                    }
+                }
+            } else {
+                channel.request_shell(true).await.map_err(|e| {
+                    ConnectDiagnosticError::pty_failed(format!("Failed to start shell on PTY: {e}"))
+                })?;
+            }
 
             // Create channels for bidirectional communication (like ttyd's pty_buf)
             // Increased capacity for better buffering during fast input
@@ -492,6 +519,7 @@ impl SshClient {
             // The channel must stay in this task because `wait()` requires `&mut self`,
             // but we also need `window_change()` which only requires `&self`.
             // We use `tokio::select!` to multiplex between output reading and resize.
+            let session_for_cleanup = session.clone();
             tokio::spawn(async move {
                 loop {
                     tokio::select! {
@@ -535,6 +563,18 @@ impl SshClient {
                         }
                     }
                 }
+
+                if let Some(temp_dir) = active_remote_temp_dir {
+                    if let Some(command) = remote_cleanup_command(&temp_dir) {
+                        if let Err(error) = execute_command_on_session(&session_for_cleanup, &command).await {
+                            tracing::warn!(
+                                "Failed to clean remote shell integration directory {}: {}",
+                                temp_dir,
+                                error
+                            );
+                        }
+                    }
+                }
             });
 
             Ok(PtySession {
@@ -542,9 +582,58 @@ impl SshClient {
                 output_rx: Arc::new(tokio::sync::Mutex::new(output_rx)),
                 resize_tx,
                 cancel: CancellationToken::new(),
+                _shell_integration_dir: None,
             })
         } else {
             Err(anyhow::anyhow!("Not connected"))
+        }
+    }
+
+    async fn prepare_remote_shell_integration(&self) -> Option<RemoteShellLaunch> {
+        let probe = match self.execute_command(REMOTE_SHELL_PROBE_COMMAND).await {
+            Ok(output) => output,
+            Err(error) => {
+                tracing::debug!("Remote shell integration probe failed: {}", error);
+                return None;
+            }
+        };
+        let info = match parse_remote_shell_probe(&probe) {
+            Some(info) => info,
+            None => {
+                tracing::debug!("Remote shell is unsupported or returned unsafe startup paths");
+                return None;
+            }
+        };
+        let prepare_output = match self.execute_command(&remote_prepare_command(info.kind)).await {
+            Ok(output) => output,
+            Err(error) => {
+                tracing::warn!("Failed to create remote shell integration files: {}", error);
+                return None;
+            }
+        };
+        let Some(temp_dir) = parse_remote_temp_dir(&prepare_output).map(str::to_string) else {
+            tracing::warn!("Remote shell integration returned no safe temporary path");
+            return None;
+        };
+        match build_remote_launch(&info, &temp_dir) {
+            Some(launch) => Some(launch),
+            None => {
+                tracing::warn!("Remote shell integration returned an unsafe temporary path");
+                self.cleanup_remote_shell_integration(&temp_dir).await;
+                None
+            }
+        }
+    }
+
+    async fn cleanup_remote_shell_integration(&self, temp_dir: &str) {
+        if let Some(command) = remote_cleanup_command(temp_dir) {
+            if let Err(error) = self.execute_command(&command).await {
+                tracing::warn!(
+                    "Failed to clean remote shell integration directory {}: {}",
+                    temp_dir,
+                    error
+                );
+            }
         }
     }
 

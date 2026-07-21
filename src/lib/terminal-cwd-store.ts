@@ -15,6 +15,44 @@ function containsControlCharacter(value: string): boolean {
   return false;
 }
 
+function isValidAbsolutePath(path: string): boolean {
+  return path.length > 0
+    && path.length <= 4096
+    && path.startsWith('/')
+    && !containsControlCharacter(path);
+}
+
+/** Decode the escaping used by OSC 633 property values. */
+export function decodeOsc633Value(value: string): string | null {
+  if (value.length === 0 || value.length > 4096 || containsControlCharacter(value)) {
+    return null;
+  }
+
+  let decoded = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character !== '\\') {
+      decoded += character;
+      continue;
+    }
+
+    const next = value[index + 1];
+    if (next === '\\') {
+      decoded += '\\';
+      index += 1;
+      continue;
+    }
+    if (next === 'x' && /^[0-9a-fA-F]{2}$/.test(value.slice(index + 2, index + 4))) {
+      decoded += String.fromCharCode(Number.parseInt(value.slice(index + 2, index + 4), 16));
+      index += 3;
+      continue;
+    }
+    return null;
+  }
+
+  return containsControlCharacter(decoded) ? null : decoded;
+}
+
 /**
  * Parse the OSC 7 payload emitted by shell integrations.
  *
@@ -32,7 +70,7 @@ export function parseOsc7Cwd(payload: string): string | null {
     if (url.protocol !== 'file:') return null;
 
     const path = decodeURIComponent(url.pathname);
-    if (!path.startsWith('/') || containsControlCharacter(path)) return null;
+    if (!isValidAbsolutePath(path)) return null;
     return path || '/';
   } catch {
     return null;
@@ -44,16 +82,8 @@ export function parseOsc1337Cwd(payload: string): string | null {
   const prefix = 'CurrentDir=';
   if (!payload.startsWith(prefix)) return null;
 
-  const encodedPath = payload.slice(prefix.length);
-  if (encodedPath.length === 0 || encodedPath.length > 4096) return null;
-
-  try {
-    const path = decodeURIComponent(encodedPath);
-    if (!path.startsWith('/') || containsControlCharacter(path)) return null;
-    return path;
-  } catch {
-    return null;
-  }
+  const path = payload.slice(prefix.length);
+  return isValidAbsolutePath(path) ? path : null;
 }
 
 /** Parse VS Code-compatible OSC 633 Cwd property reports. */
@@ -61,16 +91,8 @@ export function parseOsc633Cwd(payload: string): string | null {
   const prefix = 'P;Cwd=';
   if (!payload.startsWith(prefix)) return null;
 
-  const encodedPath = payload.slice(prefix.length);
-  if (encodedPath.length === 0 || encodedPath.length > 4096) return null;
-
-  try {
-    const path = decodeURIComponent(encodedPath);
-    if (!path.startsWith('/') || containsControlCharacter(path)) return null;
-    return path;
-  } catch {
-    return null;
-  }
+  const path = decodeOsc633Value(payload.slice(prefix.length));
+  return path && isValidAbsolutePath(path) ? path : null;
 }
 
 export function publishTerminalCwd(connectionId: string, path: string): void {

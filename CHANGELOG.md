@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Terminal CWD Tracking**: Automatically inject session-scoped bash/zsh integration for local and SSH terminals so the File Panel follows successful directory changes without requiring shell rc-file changes.
+
 ## [0.2.1] - 2026-07-21
 
 ### Added

@@ -41,10 +41,10 @@ portable-pty = "0.8"
 base64 = "0.22"
 sys-locale = "0.3"
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+tempfile = "3"
 
 [dev-dependencies]
 keyring = { version = "3.6", default-features = false }
-tempfile = "3"
 
 # Performance optimization profiles
 [profile.release]
