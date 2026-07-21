@@ -1,10 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { GridRenderer, StableTerminalGrid } from '../components/terminal/grid-renderer';
-import type { GridNode, TerminalGroupState } from '../lib/terminal-group-types';
+import { terminalGroupReducer } from '../lib/terminal-group-reducer';
+import type { GridNode, TerminalGroupState, TerminalTab } from '../lib/terminal-group-types';
+
+const ptyLifecycle = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
+
+vi.mock('../components/pty-terminal', async () => {
+  const React = await import('react');
+  return {
+    PtyTerminal: ({ connectionId }: { connectionId: string }) => {
+      React.useEffect(() => {
+        ptyLifecycle.mounts += 1;
+        return () => {
+          ptyLifecycle.unmounts += 1;
+        };
+      }, []);
+      return <div data-mock-pty={connectionId} />;
+    },
+  };
+});
 
 // Mock the context
 const mockDispatch = vi.fn();
+const makeTab = (id: string): TerminalTab => ({
+  id,
+  name: id,
+  protocol: 'SSH',
+  connectionStatus: 'connected',
+  reconnectCount: 0,
+});
+
 let mockState: TerminalGroupState = {
   groups: {
     g1: { id: 'g1', tabs: [], activeTabId: null },
@@ -29,6 +55,8 @@ vi.mock('../lib/terminal-group-context', () => ({
 describe('GridRenderer', () => {
   beforeEach(() => {
     mockDispatch.mockClear();
+    ptyLifecycle.mounts = 0;
+    ptyLifecycle.unmounts = 0;
     mockState = {
       groups: {
         g1: { id: 'g1', tabs: [], activeTabId: null },
@@ -40,6 +68,10 @@ describe('GridRenderer', () => {
       nextGroupId: 4,
       tabToGroupMap: {},
     };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders a leaf node as TerminalGroupView', () => {
@@ -132,27 +164,110 @@ describe('GridRenderer', () => {
     const originalGroupElement = view.container.querySelector('[data-group-id="g1"]');
     expect(originalGroupElement).not.toBeNull();
 
-    mockState = {
-      ...mockState,
-      groups: {
-        g1: mockState.groups.g1,
-        g2: { id: 'g2', tabs: [], activeTabId: null },
-      },
-      activeGroupId: 'g2',
-      gridLayout: {
-        type: 'branch',
-        direction: 'horizontal',
-        children: [
-          { type: 'leaf', groupId: 'g1' },
-          { type: 'leaf', groupId: 'g2' },
-        ],
-        sizes: [50, 50],
-      },
-    };
+    mockState = terminalGroupReducer(mockState, {
+      type: 'SPLIT_GROUP',
+      groupId: 'g1',
+      direction: 'right',
+    });
     view.rerender(<StableTerminalGrid />);
 
     expect(view.container.querySelector('[data-group-id="g1"]')).toBe(originalGroupElement);
-    expect(view.container.querySelector('[data-group-id="g2"]')).not.toBeNull();
-    vi.unstubAllGlobals();
+    expect(view.container.querySelector('[data-group-id="4"]')).not.toBeNull();
+
+    mockState = terminalGroupReducer(mockState, {
+      type: 'SPLIT_GROUP',
+      groupId: 'g1',
+      direction: 'down',
+    });
+    view.rerender(<StableTerminalGrid />);
+
+    expect(view.container.querySelector('[data-group-id="g1"]')).toBe(originalGroupElement);
+    expect(view.container.querySelector('[data-group-id="5"]')).not.toBeNull();
+  });
+
+  it('keeps one PTY mounted across repeated edge splits and a center move', async () => {
+    class ResizeObserverMock {
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const tabs = [makeTab('t1'), makeTab('t2'), makeTab('t3')];
+    mockState = {
+      groups: {
+        '1': { id: '1', tabs, activeTabId: 't1' },
+      },
+      activeGroupId: '1',
+      gridLayout: { type: 'leaf', groupId: '1' },
+      nextGroupId: 2,
+      tabToGroupMap: { t1: '1', t2: '1', t3: '1' },
+    };
+
+    const view = render(<StableTerminalGrid />);
+    await waitFor(() => expect(view.container.querySelector('[data-mock-pty="t1"]')).not.toBeNull());
+    const originalPty = view.container.querySelector('[data-mock-pty="t1"]');
+    expect(ptyLifecycle.mounts).toBe(3);
+    expect(ptyLifecycle.unmounts).toBe(0);
+
+    mockState = terminalGroupReducer(mockState, {
+      type: 'MOVE_TAB_TO_NEW_GROUP',
+      groupId: '1',
+      tabId: 't1',
+      direction: 'right',
+    });
+    view.rerender(<StableTerminalGrid />);
+
+    expect(view.container.querySelector('[data-mock-pty="t1"]')).toBe(originalPty);
+    expect(ptyLifecycle.mounts).toBe(3);
+    expect(ptyLifecycle.unmounts).toBe(0);
+
+    mockState = terminalGroupReducer(mockState, {
+      type: 'MOVE_TAB_TO_NEW_GROUP',
+      groupId: '2',
+      tabId: 't1',
+      direction: 'down',
+    });
+    view.rerender(<StableTerminalGrid />);
+
+    expect(view.container.querySelector('[data-mock-pty="t1"]')).toBe(originalPty);
+    expect(ptyLifecycle.mounts).toBe(3);
+    expect(ptyLifecycle.unmounts).toBe(0);
+
+    mockState = terminalGroupReducer(mockState, {
+      type: 'MOVE_TAB',
+      sourceGroupId: '3',
+      targetGroupId: '1',
+      tabId: 't1',
+    });
+    view.rerender(<StableTerminalGrid />);
+
+    expect(view.container.querySelector('[data-mock-pty="t1"]')).toBe(originalPty);
+    expect(ptyLifecycle.mounts).toBe(3);
+    expect(ptyLifecycle.unmounts).toBe(0);
+  });
+
+  it('still remounts a PTY for an explicit reconnect', async () => {
+    class ResizeObserverMock {
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const tab = makeTab('t1');
+    mockState = {
+      groups: { '1': { id: '1', tabs: [tab], activeTabId: tab.id } },
+      activeGroupId: '1',
+      gridLayout: { type: 'leaf', groupId: '1' },
+      nextGroupId: 2,
+      tabToGroupMap: { t1: '1' },
+    };
+    const view = render(<StableTerminalGrid />);
+    await waitFor(() => expect(ptyLifecycle.mounts).toBe(1));
+
+    mockState = terminalGroupReducer(mockState, { type: 'RECONNECT_TAB', tabId: 't1' });
+    view.rerender(<StableTerminalGrid />);
+
+    expect(ptyLifecycle.mounts).toBe(2);
+    expect(ptyLifecycle.unmounts).toBe(1);
   });
 });

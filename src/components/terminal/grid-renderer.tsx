@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { GridNode } from '../../lib/terminal-group-types';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
+import { useTerminalThemeKey } from '../../lib/use-terminal-theme-key';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
-import { TerminalGroupView } from './terminal-group-view';
+import { TerminalGroupView, TerminalTabSurface } from './terminal-group-view';
 
 interface GridRendererProps {
   node: GridNode;
@@ -148,6 +149,25 @@ interface PaneRect {
   height: number;
 }
 
+function rectMapsEqual(
+  current: Record<string, PaneRect>,
+  next: Record<string, PaneRect>,
+): boolean {
+  const currentIds = Object.keys(current);
+  const nextIds = Object.keys(next);
+  if (currentIds.length !== nextIds.length) return false;
+
+  return nextIds.every((id) => {
+    const a = current[id];
+    const b = next[id];
+    return a !== undefined
+      && Math.abs(a.left - b.left) < 0.01
+      && Math.abs(a.top - b.top) < 0.01
+      && Math.abs(a.width - b.width) < 0.01
+      && Math.abs(a.height - b.height) < 0.01;
+  });
+}
+
 /**
  * Keeps every TerminalGroupView mounted while the resizable grid changes shape.
  *
@@ -157,9 +177,12 @@ interface PaneRect {
  * overlay owns the live terminal instances and only updates their rectangles.
  */
 export function StableTerminalGrid() {
-  const { state } = useTerminalGroups();
+  const { state, dispatch } = useTerminalGroups();
   const containerRef = useRef<HTMLDivElement>(null);
   const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
+  const [contentRects, setContentRects] = useState<Record<string, PaneRect>>({});
+  const themeKey = useTerminalThemeKey();
+  const groupIdsKey = Object.keys(state.groups).join('|');
 
   const measurePanes = useCallback(() => {
     const container = containerRef.current;
@@ -181,7 +204,30 @@ export function StableTerminalGrid() {
       };
     }
 
-    setPaneRects(nextRects);
+    setPaneRects((current) => rectMapsEqual(current, nextRects) ? current : nextRects);
+  }, []);
+
+  const measureContentAreas = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const nextRects: Record<string, PaneRect> = {};
+    const contentAreas = container.querySelectorAll<HTMLElement>('[data-group-content]');
+
+    for (const contentArea of contentAreas) {
+      const groupId = contentArea.dataset.groupContent;
+      if (!groupId) continue;
+      const rect = contentArea.getBoundingClientRect();
+      nextRects[groupId] = {
+        left: rect.left - containerRect.left,
+        top: rect.top - containerRect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+
+    setContentRects((current) => rectMapsEqual(current, nextRects) ? current : nextRects);
   }, []);
 
   useLayoutEffect(() => {
@@ -198,6 +244,19 @@ export function StableTerminalGrid() {
     return () => observer.disconnect();
   }, [measurePanes, state.gridLayout]);
 
+  useLayoutEffect(() => {
+    measureContentAreas();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(measureContentAreas);
+    for (const contentArea of container.querySelectorAll<HTMLElement>('[data-group-content]')) {
+      observer.observe(contentArea);
+    }
+
+    return () => observer.disconnect();
+  }, [groupIdsKey, measureContentAreas, paneRects]);
+
   const renderSlot = useCallback((groupId: string) => (
     <div
       data-terminal-group-slot={groupId}
@@ -210,19 +269,50 @@ export function StableTerminalGrid() {
     <div ref={containerRef} className="relative h-full w-full overflow-hidden">
       <GridRenderer node={state.gridLayout} path={[]} renderLeaf={renderSlot} />
       <div className="pointer-events-none absolute inset-0 z-[1]">
+        {Object.values(state.groups).flatMap((group) =>
+          group.tabs.map((tab) => {
+            const ownerGroupId = state.tabToGroupMap[tab.id] ?? group.id;
+            const ownerGroup = state.groups[ownerGroupId];
+            const rect = contentRects[ownerGroupId];
+            const isVisible = ownerGroup?.activeTabId === tab.id;
+            const isActive = state.activeGroupId === ownerGroupId && isVisible;
+
+            return (
+              <div
+                key={tab.id}
+                className="pointer-events-auto absolute top-0 left-0 overflow-hidden"
+                style={rect ? {
+                  display: isVisible ? 'block' : 'none',
+                  transform: `translate(${rect.left}px, ${rect.top}px)`,
+                  width: rect.width,
+                  height: rect.height,
+                } : { visibility: 'hidden' }}
+                onMouseDownCapture={() => {
+                  if (state.activeGroupId !== ownerGroupId) {
+                    dispatch({ type: 'ACTIVATE_GROUP', groupId: ownerGroupId });
+                  }
+                }}
+              >
+                <TerminalTabSurface tab={tab} isActive={isActive} themeKey={themeKey} />
+              </div>
+            );
+          }),
+        )}
+      </div>
+      <div className="pointer-events-none absolute inset-0 z-[2]">
         {Object.keys(state.groups).map((groupId) => {
           const rect = paneRects[groupId];
           return (
             <div
               key={groupId}
-              className="pointer-events-auto absolute top-0 left-0 overflow-hidden"
+              className="pointer-events-none absolute top-0 left-0 overflow-hidden"
               style={rect ? {
                 transform: `translate(${rect.left}px, ${rect.top}px)`,
                 width: rect.width,
                 height: rect.height,
               } : { visibility: 'hidden' }}
             >
-              <TerminalGroupView groupId={groupId} />
+              <TerminalGroupView groupId={groupId} renderTabContents={false} />
             </div>
           );
         })}
