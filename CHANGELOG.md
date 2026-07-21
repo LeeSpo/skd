@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [0.2.2] - 2026-07-21
 
-- **Terminal CWD Tracking**: Automatically inject session-scoped bash/zsh integration for local and SSH terminals so the File Panel follows successful directory changes without requiring shell rc-file changes.
+### Added
+
+- **Session-Scoped Shell Integration**: Automatically inject session-scoped Bash and Zsh integration scripts into local and SSH terminal sessions to report current working directory changes (OSC 7 / OSC 633 / OSC 1337) without requiring shell rc file modifications.
+- **Terminal File Drag-and-Drop**: Enabled drag-and-drop of OS files and directories directly into active xterm.js terminals with automatic POSIX shell path escaping.
+- **GitHub Release Checker**: Replaced native Tauri updater with a custom GitHub releases checker that notifies users of new updates and opens release details in the browser.
+
+### Changed
+
+- **Terminal Drop Zone & Drag Behavior**: Refactored grid renderer and terminal group drop zone overlays for smoother tab drag-and-drop interactions and theme synchronization across split panes.
 
 ## [0.2.1] - 2026-07-21
 
