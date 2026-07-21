@@ -233,8 +233,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .setup({
             let connection_manager_clone = connection_manager.clone();
             move |app| {
@@ -322,6 +320,7 @@ pub fn run() {
             commands::rename_local_item,
             commands::create_local_directory,
             commands::open_in_os,
+            commands::open_url,
             commands::stat_local_path,
             // Directory synchronization commands
             commands::list_local_files_recursive,

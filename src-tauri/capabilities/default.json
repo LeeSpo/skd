@@ -9,8 +9,6 @@
     "core:window:allow-toggle-maximize",
     "core:webview:allow-create-webview-window",
     "dialog:default",
-    "updater:default",
-    "process:allow-restart",
     "window-state:default"
   ]
 }

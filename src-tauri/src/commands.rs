@@ -2971,6 +2971,15 @@ pub async fn open_in_os(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| format!("Failed to open '{}': {}", path, e))
 }
 
+/// Open an https URL in the user's default browser (used by Check for Updates).
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("Only https URLs can be opened".to_string());
+    }
+    open::that(&url).map_err(|e| format!("Failed to open URL '{}': {}", url, e))
+}
+
 /// Metadata for a local path. Returned by `stat_local_path` so the frontend can
 /// cheaply decide (without recursing) whether a dropped filesystem entry is a
 /// file or a directory before building an upload plan.

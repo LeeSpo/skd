@@ -23,17 +23,10 @@
       "csp": null
     }
   },
-  "plugins": {
-    "updater": {
-      "active": false,
-      "endpoints": [],
-      "dialog": false,
-      "pubkey": ""
-    }
-  },
+  "plugins": {},
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": [
       "app",
       "dmg"

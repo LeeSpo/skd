@@ -57,12 +57,6 @@ Produces a macOS `.app` bundle and `.dmg` installer:
 pnpm build && pnpm tauri build
 ```
 
-Local build without updater artifacts:
-
-```bash
-pnpm tauri:build:local
-```
-
 ## Release
 
 Bump the version (updates `package.json`, `Cargo.toml`, `tauri.conf.json`, and `CHANGELOG.md`), push, then tag:

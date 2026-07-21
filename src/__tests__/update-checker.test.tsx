@@ -3,11 +3,15 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 
 // ── Hoisted mocks (must exist before vi.mock factories run) ─────────────────
 
-const { mockCheck, mockDownload, mockInstall, mockRelaunch, mockToast } = vi.hoisted(() => ({
-  mockCheck: vi.fn(),
-  mockDownload: vi.fn(),
-  mockInstall: vi.fn(),
-  mockRelaunch: vi.fn(),
+const {
+  mockCheckForGithubUpdate,
+  mockGetVersion,
+  mockInvoke,
+  mockToast,
+} = vi.hoisted(() => ({
+  mockCheckForGithubUpdate: vi.fn(),
+  mockGetVersion: vi.fn(),
+  mockInvoke: vi.fn(),
   mockToast: {
     loading: vi.fn(),
     dismiss: vi.fn(),
@@ -17,16 +21,43 @@ const { mockCheck, mockDownload, mockInstall, mockRelaunch, mockToast } = vi.hoi
   },
 }));
 
-vi.mock('@tauri-apps/plugin-updater', () => ({
-  check: (...args: unknown[]) => mockCheck(...args),
+vi.mock('@/lib/github-release', () => ({
+  checkForGithubUpdate: (...args: unknown[]) => mockCheckForGithubUpdate(...args),
 }));
 
-vi.mock('@tauri-apps/plugin-process', () => ({
-  relaunch: () => mockRelaunch(),
+vi.mock('@tauri-apps/api/app', () => ({
+  getVersion: () => mockGetVersion(),
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 vi.mock('sonner', () => ({
   toast: mockToast,
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, string>) => {
+      const map: Record<string, string> = {
+        'updateChecker.checking': 'Checking for updates…',
+        'updateChecker.upToDate': "You're up to date!",
+        'updateChecker.upToDateDesc': `skd ${opts?.version ?? ''} is the latest version.`,
+        'updateChecker.updateAvailable': 'Update available',
+        'updateChecker.updateAvailableDesc': `Version ${opts?.version ?? ''} is now available. You have ${opts?.currentVersion ?? ''}.`,
+        'updateChecker.releaseNotesFallback':
+          'A new version is available with improvements and fixes.',
+        'updateChecker.later': 'Later',
+        'updateChecker.viewOnGitHub': 'View on GitHub',
+        'updateChecker.openFailed': 'Could not open browser',
+        'updateChecker.openFailedDesc': 'Unable to open the release page.',
+        'updateChecker.checkFailed': 'Update check failed',
+        'updateChecker.checkFailedDesc': 'Unable to check for updates. Please try again later.',
+      };
+      return map[key] ?? key;
+    },
+  }),
 }));
 
 // Minimal UI stubs – AlertDialog renders children so we can query by text
@@ -40,13 +71,16 @@ vi.mock('../components/ui/alert-dialog', () => ({
   AlertDialogFooter: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../components/ui/progress', () => ({
-  Progress: ({ value }: { value: number }) => <div data-testid="progress" data-value={value} />,
-}));
-
 vi.mock('../components/ui/button', () => ({
-  Button: ({ children, onClick, disabled, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }) => (
-    <button onClick={onClick} disabled={disabled} {...rest}>{children}</button>
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    ...rest
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }) => (
+    <button onClick={onClick} disabled={disabled} {...rest}>
+      {children}
+    </button>
   ),
 }));
 
@@ -59,16 +93,14 @@ function enableAutoCheck() {
   localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ checkUpdates: true }));
 }
 
-/** Create a fake Update object matching the plugin-updater shape. */
-function makeUpdate(version = '9.9.9', body?: string) {
+function makeAvailable(latest = '2.0.0', body: string | null = 'Bug fixes') {
   return {
-    available: true,
+    status: 'available' as const,
     currentVersion: '1.0.0',
-    version,
+    latestVersion: latest,
+    htmlUrl: `https://github.com/LeeSpo/skd/releases/tag/v${latest}`,
     body,
-    rawJson: {},
-    download: mockDownload,
-    install: mockInstall,
+    name: `skd v${latest}`,
   };
 }
 
@@ -78,37 +110,46 @@ describe('UpdateChecker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // Default: check() resolves to null (no update)
-    mockCheck.mockResolvedValue(null);
+    mockGetVersion.mockResolvedValue('1.0.0');
+    mockCheckForGithubUpdate.mockResolvedValue({
+      status: 'up-to-date',
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
+    });
+    mockInvoke.mockResolvedValue(undefined);
   });
 
   // ── Auto-check on mount ────────────────────────────────────────────────
 
   describe('auto-check on mount', () => {
-    it('skips check() when auto-check is disabled (default)', async () => {
+    it('skips check when auto-check is disabled (default)', async () => {
       render(<UpdateChecker />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      expect(mockCheck).not.toHaveBeenCalled();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(mockCheckForGithubUpdate).not.toHaveBeenCalled();
     });
 
-    it('calls check() when checkUpdates is true in localStorage', async () => {
+    it('calls check when checkUpdates is true in localStorage', async () => {
       localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ checkUpdates: true }));
       render(<UpdateChecker />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
+      expect(mockGetVersion).toHaveBeenCalled();
     });
 
-    it('skips check() when checkUpdates is false in localStorage', async () => {
+    it('skips check when checkUpdates is false in localStorage', async () => {
       localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ checkUpdates: false }));
       render(<UpdateChecker />);
-      // Give time for the effect to run
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      expect(mockCheck).not.toHaveBeenCalled();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(mockCheckForGithubUpdate).not.toHaveBeenCalled();
     });
 
     it('shows no toast on silent auto-check when no update', async () => {
       enableAutoCheck();
       render(<UpdateChecker />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
       expect(mockToast.success).not.toHaveBeenCalled();
       expect(mockToast.error).not.toHaveBeenCalled();
       expect(mockToast.loading).not.toHaveBeenCalled();
@@ -116,9 +157,12 @@ describe('UpdateChecker', () => {
 
     it('shows no toast on silent auto-check when check fails', async () => {
       enableAutoCheck();
-      mockCheck.mockRejectedValue(new Error('network timeout'));
+      mockCheckForGithubUpdate.mockResolvedValue({
+        status: 'error',
+        message: 'Could not reach GitHub. Check your internet connection.',
+      });
       render(<UpdateChecker />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
       expect(mockToast.error).not.toHaveBeenCalled();
     });
   });
@@ -126,56 +170,78 @@ describe('UpdateChecker', () => {
   // ── Manual check via signal ────────────────────────────────────────────
 
   describe('manual check via signal', () => {
-    it('triggers check() when checkSignal changes', async () => {
+    it('triggers check when checkSignal changes', async () => {
       enableAutoCheck();
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      // auto-check fires on mount
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
-      mockCheck.mockClear();
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
+      mockCheckForGithubUpdate.mockClear();
 
-      // Increment signal → manual check
       rerender(<UpdateChecker checkSignal={1} />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
     });
 
     it('shows loading toast during manual check', async () => {
       enableAutoCheck();
-      // Make check() hang until we resolve it
-      let resolveCheck: (v: null) => void;
-      mockCheck.mockImplementation(() => new Promise(r => { resolveCheck = r as (v: null) => void; }));
+      let resolveCheck: (v: unknown) => void;
+      mockCheckForGithubUpdate.mockImplementation(
+        () => new Promise((r) => {
+          resolveCheck = r;
+        }),
+      );
 
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      // Let auto-check settle (it will hang too, but we test manual below)
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
 
-      // Resolve the auto-check so busy clears
-      await act(async () => { resolveCheck!(null); });
-      mockCheck.mockClear();
+      await act(async () => {
+        resolveCheck!({
+          status: 'up-to-date',
+          currentVersion: '1.0.0',
+          latestVersion: '1.0.0',
+        });
+      });
+      mockCheckForGithubUpdate.mockClear();
       mockToast.loading.mockClear();
 
-      // Manual check
-      mockCheck.mockImplementation(() => new Promise(r => { resolveCheck = r as (v: null) => void; }));
+      mockCheckForGithubUpdate.mockImplementation(
+        () => new Promise((r) => {
+          resolveCheck = r;
+        }),
+      );
       rerender(<UpdateChecker checkSignal={1} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
 
-      expect(mockToast.loading).toHaveBeenCalledWith('Checking for updates…', { id: 'update-check' });
+      expect(mockToast.loading).toHaveBeenCalledWith('Checking for updates…', {
+        id: 'update-check',
+      });
 
-      // Resolve
-      await act(async () => { resolveCheck!(null); });
+      await act(async () => {
+        resolveCheck!({
+          status: 'up-to-date',
+          currentVersion: '1.0.0',
+          latestVersion: '1.0.0',
+        });
+      });
       expect(mockToast.dismiss).toHaveBeenCalledWith('update-check');
-      expect(mockToast.success).toHaveBeenCalledWith('You are up to date.');
+      expect(mockToast.success).toHaveBeenCalledWith("You're up to date!", {
+        description: 'skd 1.0.0 is the latest version.',
+      });
     });
 
-    it('does NOT trigger check() when signal is same value', async () => {
+    it('does NOT trigger check when signal is same value', async () => {
       enableAutoCheck();
       const { rerender } = render(<UpdateChecker checkSignal={5} />);
-      await waitFor(() => expect(mockCheck).toHaveBeenCalledTimes(1));
-      mockCheck.mockClear();
+      await waitFor(() => expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1));
+      mockCheckForGithubUpdate.mockClear();
 
-      // Re-render with same signal → no new check
       rerender(<UpdateChecker checkSignal={5} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      expect(mockCheck).not.toHaveBeenCalled();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(mockCheckForGithubUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -184,7 +250,7 @@ describe('UpdateChecker', () => {
   describe('update available', () => {
     it('opens dialog with version info when update is found', async () => {
       enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('2.0.0', 'Bug fixes'));
+      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('2.0.0', 'Bug fixes'));
       render(<UpdateChecker />);
 
       await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
@@ -195,82 +261,89 @@ describe('UpdateChecker', () => {
 
     it('shows fallback notes when update has no body', async () => {
       enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('2.0.0'));
+      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('2.0.0', null));
       render(<UpdateChecker />);
 
       await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-      expect(screen.getByText('A new version is available with improvements and fixes.')).toBeTruthy();
+      expect(
+        screen.getByText('A new version is available with improvements and fixes.'),
+      ).toBeTruthy();
     });
 
-    it('shows Download update button in available state', async () => {
+    it('shows View on GitHub button in available state', async () => {
       enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('3.0.0'));
+      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('3.0.0'));
       render(<UpdateChecker />);
 
       await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-      expect(screen.getByText('Download update')).toBeTruthy();
+      expect(screen.getByText('View on GitHub')).toBeTruthy();
       expect(screen.getByText('Later')).toBeTruthy();
+    });
+
+    it('opens the release page when View on GitHub is clicked', async () => {
+      enableAutoCheck();
+      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('3.0.0'));
+      render(<UpdateChecker />);
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+
+      await act(async () => {
+        screen.getByText('View on GitHub').click();
+        await new Promise((r) => setTimeout(r, 30));
+      });
+
+      expect(mockInvoke).toHaveBeenCalledWith('open_url', {
+        url: 'https://github.com/LeeSpo/skd/releases/tag/v3.0.0',
+      });
     });
   });
 
   // ── Error handling ────────────────────────────────────────────────────
 
   describe('error handling', () => {
-    it('maps 404 error to friendly message on manual check', async () => {
-      mockCheck.mockRejectedValue(new Error('HTTP 404 not found'));
+    it('shows error toast on manual check failure', async () => {
+      mockCheckForGithubUpdate.mockResolvedValue({
+        status: 'error',
+        message: 'No releases found on GitHub for this project.',
+      });
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      mockCheck.mockClear();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      mockCheckForGithubUpdate.mockClear();
+      mockToast.error.mockClear();
 
-      mockCheck.mockRejectedValue(new Error('HTTP 404 not found'));
+      mockCheckForGithubUpdate.mockResolvedValue({
+        status: 'error',
+        message: 'No releases found on GitHub for this project.',
+      });
       rerender(<UpdateChecker checkSignal={1} />);
       await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
 
       const [title, opts] = mockToast.error.mock.calls[0];
       expect(title).toBe('Update check failed');
-      expect(opts.description).toContain('Update server is not configured');
+      expect(opts.description).toContain('No releases found');
     });
 
-    it('maps network error to friendly message on manual check', async () => {
-      mockCheck.mockRejectedValue(new Error('dns resolution failed'));
+    it('maps network error message through to toast', async () => {
+      mockCheckForGithubUpdate.mockResolvedValue({
+        status: 'error',
+        message: 'Could not reach GitHub. Check your internet connection.',
+      });
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      mockCheck.mockClear();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      mockCheckForGithubUpdate.mockClear();
 
-      mockCheck.mockRejectedValue(new Error('dns resolution failed'));
+      mockCheckForGithubUpdate.mockResolvedValue({
+        status: 'error',
+        message: 'Could not reach GitHub. Check your internet connection.',
+      });
       rerender(<UpdateChecker checkSignal={1} />);
       await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
 
       const [, opts] = mockToast.error.mock.calls[0];
-      expect(opts.description).toContain('Could not reach the update server');
-    });
-
-    it('maps signature/verify error to friendly message', async () => {
-      mockCheck.mockRejectedValue(new Error('signature verification failed'));
-      const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      mockCheck.mockClear();
-
-      mockCheck.mockRejectedValue(new Error('signature verification failed'));
-      rerender(<UpdateChecker checkSignal={1} />);
-      await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
-
-      const [, opts] = mockToast.error.mock.calls[0];
-      expect(opts.description).toContain('Update verification failed');
-    });
-
-    it('passes through unknown error messages as-is', async () => {
-      mockCheck.mockRejectedValue(new Error('something weird happened'));
-      const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-      mockCheck.mockClear();
-
-      mockCheck.mockRejectedValue(new Error('something weird happened'));
-      rerender(<UpdateChecker checkSignal={1} />);
-      await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
-
-      const [, opts] = mockToast.error.mock.calls[0];
-      expect(opts.description).toBe('something weird happened');
+      expect(opts.description).toContain('Could not reach GitHub');
     });
   });
 
@@ -279,125 +352,31 @@ describe('UpdateChecker', () => {
   describe('busy guard', () => {
     it('prevents concurrent checks when already checking', async () => {
       enableAutoCheck();
-      let resolveCheck: (v: null) => void;
-      mockCheck.mockImplementation(() => new Promise(r => { resolveCheck = r as (v: null) => void; }));
+      let resolveCheck: (v: unknown) => void;
+      mockCheckForGithubUpdate.mockImplementation(
+        () => new Promise((r) => {
+          resolveCheck = r;
+        }),
+      );
 
       const { rerender } = render(<UpdateChecker checkSignal={0} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 30)); });
-      // check() is pending (busy)
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
 
-      // Try manual check while busy
       rerender(<UpdateChecker checkSignal={1} />);
-      await act(async () => { await new Promise(r => setTimeout(r, 30)); });
-
-      // check() should still only be called once (from auto-check)
-      expect(mockCheck).toHaveBeenCalledTimes(1);
-
-      // Resolve the pending check
-      await act(async () => { resolveCheck!(null); });
-    });
-  });
-
-  // ── Download flow ─────────────────────────────────────────────────────
-
-  describe('download flow', () => {
-    it('tracks download progress and shows ready state', async () => {
-      enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
-
-      // Simulate download with progress events
-      mockDownload.mockImplementation(async (onEvent: (e: any) => void) => {
-        onEvent({ event: 'Started', data: { contentLength: 1000 } });
-        onEvent({ event: 'Progress', data: { chunkLength: 500 } });
-        onEvent({ event: 'Progress', data: { chunkLength: 500 } });
-        onEvent({ event: 'Finished' });
-      });
-
-      render(<UpdateChecker />);
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-
-      // Click "Download update"
       await act(async () => {
-        screen.getByText('Download update').click();
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 30));
       });
 
-      // After download completes, should show "Restart now"
-      await waitFor(() => expect(screen.getByText('Restart now')).toBeTruthy());
-      expect(screen.getByText('Update ready to install')).toBeTruthy();
-    });
-
-    it('shows error toast when download fails', async () => {
-      enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
-      mockDownload.mockRejectedValue(new Error('disk full'));
-
-      render(<UpdateChecker />);
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+      expect(mockCheckForGithubUpdate).toHaveBeenCalledTimes(1);
 
       await act(async () => {
-        screen.getByText('Download update').click();
-        await new Promise(r => setTimeout(r, 50));
-      });
-
-      await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
-      const [title, opts] = mockToast.error.mock.calls[0];
-      expect(title).toBe('Update failed');
-      expect(opts.description).toBe('disk full');
-    });
-  });
-
-  // ── Install flow ──────────────────────────────────────────────────────
-
-  describe('install flow', () => {
-    it('calls install() then relaunch() on Restart now', async () => {
-      enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
-      mockDownload.mockResolvedValue(undefined);
-
-      render(<UpdateChecker />);
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-
-      // Download first
-      await act(async () => {
-        screen.getByText('Download update').click();
-        await new Promise(r => setTimeout(r, 50));
-      });
-      await waitFor(() => expect(screen.getByText('Restart now')).toBeTruthy());
-
-      // Install
-      await act(async () => {
-        screen.getByText('Restart now').click();
-        await new Promise(r => setTimeout(r, 50));
-      });
-
-      expect(mockInstall).toHaveBeenCalledTimes(1);
-      expect(mockRelaunch).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows error toast when install fails', async () => {
-      enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
-      mockDownload.mockResolvedValue(undefined);
-      mockInstall.mockRejectedValue(new Error('permission denied'));
-
-      render(<UpdateChecker />);
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-
-      await act(async () => {
-        screen.getByText('Download update').click();
-        await new Promise(r => setTimeout(r, 50));
-      });
-      await waitFor(() => expect(screen.getByText('Restart now')).toBeTruthy());
-
-      await act(async () => {
-        screen.getByText('Restart now').click();
-        await new Promise(r => setTimeout(r, 50));
-      });
-
-      await waitFor(() => {
-        const calls = mockToast.error.mock.calls;
-        expect(calls.some(([t]: [string]) => t === 'Install failed')).toBe(true);
+        resolveCheck!({
+          status: 'up-to-date',
+          currentVersion: '1.0.0',
+          latestVersion: '1.0.0',
+        });
       });
     });
   });
@@ -407,7 +386,7 @@ describe('UpdateChecker', () => {
   describe('later button', () => {
     it('closes dialog and resets state', async () => {
       enableAutoCheck();
-      mockCheck.mockResolvedValue(makeUpdate('5.0.0'));
+      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('5.0.0'));
       render(<UpdateChecker />);
       await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
 
@@ -415,7 +394,6 @@ describe('UpdateChecker', () => {
         screen.getByText('Later').click();
       });
 
-      // Dialog should be gone
       expect(screen.queryByRole('dialog')).toBeNull();
     });
   });

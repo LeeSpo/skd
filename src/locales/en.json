@@ -347,7 +347,7 @@
       "logLevel": "Log Level",
       "maxLogSize": "Max Log Size: {{size}}MB",
       "checkUpdates": "Check for Updates",
-      "checkUpdatesDesc": "Automatically check for application updates",
+      "checkUpdatesDesc": "Automatically check GitHub for new releases",
       "checkNow": "Check Now"
     },
     "button": {
@@ -698,18 +698,17 @@
   },
   "updateChecker": {
     "checkForUpdates": "Check for Updates",
-    "checking": "Checking for updates...",
+    "checking": "Checking for updates…",
     "upToDate": "You're up to date!",
     "upToDateDesc": "skd {{version}} is the latest version.",
     "updateAvailable": "Update available",
     "updateAvailableDesc": "Version {{version}} is now available. You have {{currentVersion}}.",
-    "downloading": "Downloading update...",
-    "downloadComplete": "Download Complete",
-    "downloadCompleteDesc": "The update will be installed on next restart.",
-    "installNow": "Install Now",
-    "downloadFailed": "Download Failed",
-    "downloadFailedDesc": "Unable to download the update. Please try again later.",
-    "checkFailed": "Check Failed",
+    "releaseNotesFallback": "A new version is available with improvements and fixes.",
+    "later": "Later",
+    "viewOnGitHub": "View on GitHub",
+    "openFailed": "Could not open browser",
+    "openFailedDesc": "Unable to open the release page. Please visit GitHub manually.",
+    "checkFailed": "Update check failed",
     "checkFailedDesc": "Unable to check for updates. Please try again later."
   },
   "syncDialog": {

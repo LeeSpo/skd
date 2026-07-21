@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
-// relaunch() calls the process plugin's restart command (process:allow-restart capability)
+import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -12,15 +11,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { Progress } from './ui/progress';
 import { Button } from './ui/button';
 import { APP_SETTINGS_STORAGE_KEY } from '@/lib/keyboard-shortcuts';
+import {
+  checkForGithubUpdate,
+  type UpdateCheckResult,
+} from '@/lib/github-release';
 
 interface UpdateCheckerProps {
   checkSignal?: number;
 }
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'ready' | 'error';
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'error';
+
+interface AvailableUpdate {
+  currentVersion: string;
+  latestVersion: string;
+  htmlUrl: string;
+  body: string | null;
+}
 
 /** Read the user's "auto check for updates" preference from localStorage. */
 const isAutoCheckEnabled = () => {
@@ -39,174 +48,148 @@ const isAutoCheckEnabled = () => {
 export function UpdateChecker({ checkSignal }: UpdateCheckerProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<UpdateStatus>('idle');
-  const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
-  const [progress, setProgress] = useState(0);
+  const [updateInfo, setUpdateInfo] = useState<AvailableUpdate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const lastSignalRef = useRef<number | undefined>(checkSignal);
-  const downloadTotalRef = useRef<number | null>(null);
-  const downloadedBytesRef = useRef(0);
   const busyRef = useRef(false);
 
-  const busy = status === 'downloading' || status === 'installing' || status === 'checking';
-  busyRef.current = busy;
-  const readyToInstall = status === 'ready' || status === 'installing';
+  const busy = status === 'checking';
 
   const resetState = useCallback(() => {
     setStatus('idle');
     setUpdateInfo(null);
-    setProgress(0);
     setError(null);
     setDialogOpen(false);
   }, []);
 
-  const checkForUpdates = useCallback(async (manual: boolean) => {
-    // Guard against concurrent checks (rapid clicks, overlapping auto+manual)
-    if (busyRef.current) {
-      return;
-    }
-
-    setStatus('checking');
-    setError(null);
-
-    if (manual) {
-      toast.loading('Checking for updates…', { id: 'update-check' });
-    }
-
-    try {
-      const update = await check();
-
-      if (manual) {
-        toast.dismiss('update-check');
-      }
-
-      if (update) {
-        setUpdateInfo(update);
+  const applyResult = useCallback(
+    (result: UpdateCheckResult, manual: boolean) => {
+      if (result.status === 'available') {
+        setUpdateInfo({
+          currentVersion: result.currentVersion,
+          latestVersion: result.latestVersion,
+          htmlUrl: result.htmlUrl,
+          body: result.body,
+        });
         setStatus('available');
         setDialogOpen(true);
-      } else {
+        return;
+      }
+
+      if (result.status === 'up-to-date') {
         setStatus('idle');
         if (manual) {
-          toast.success('You are up to date.');
+          toast.success(t('updateChecker.upToDate'), {
+            description: t('updateChecker.upToDateDesc', {
+              version: result.currentVersion,
+            }),
+          });
         }
-      }
-    } catch (caught) {
-      if (manual) {
-        toast.dismiss('update-check');
+        return;
       }
 
-      const raw = caught instanceof Error ? caught.message : 'Failed to check for updates.';
-      // Tauri updater throws when the endpoint is unreachable or returns invalid
-      // data. Map the common Rust error substrings to friendlier messages.
-      const lower = raw.toLowerCase();
+      // error
+      setStatus('error');
+      setError(result.message);
+      if (manual) {
+        toast.error(t('updateChecker.checkFailed'), {
+          description: result.message,
+        });
+      }
+    },
+    [t],
+  );
+
+  const checkForUpdates = useCallback(
+    async (manual: boolean) => {
+      // Guard against concurrent checks (rapid clicks, overlapping auto+manual)
+      if (busyRef.current) {
+        return;
+      }
+      busyRef.current = true;
+
+      setStatus('checking');
+      setError(null);
+
+      if (manual) {
+        toast.loading(t('updateChecker.checking'), { id: 'update-check' });
+      }
+
+      try {
+        const currentVersion = await getVersion();
+        const result = await checkForGithubUpdate(currentVersion);
+
+        if (manual) {
+          toast.dismiss('update-check');
+        }
+
+        applyResult(result, manual);
+      } catch (caught) {
+        if (manual) {
+          toast.dismiss('update-check');
+        }
+
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : t('updateChecker.checkFailedDesc');
+        setStatus('error');
+        setError(message);
+        if (manual) {
+          toast.error(t('updateChecker.checkFailed'), { description: message });
+        }
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [applyResult, t],
+  );
+
+  const handleOpenGithub = useCallback(async () => {
+    if (!updateInfo?.htmlUrl) {
+      return;
+    }
+
+    try {
+      await invoke('open_url', { url: updateInfo.htmlUrl });
+    } catch (caught) {
       const message =
-        lower.includes('404') || lower.includes('not found')
-          ? 'Update server is not configured for this version.'
-          : lower.includes('network') ||
-              lower.includes('dns') ||
-              lower.includes('timeout') ||
-              lower.includes('connection refused') ||
-              lower.includes('failed to connect')
-            ? 'Could not reach the update server. Check your internet connection.'
-            : lower.includes('signature') ||
-                lower.includes('verify') ||
-                lower.includes('verification') ||
-                lower.includes('invalid')
-              ? 'Update verification failed. Please try again later.'
-              : raw;
-      setStatus('error');
-      setError(message);
-      if (manual) {
-        toast.error('Update check failed', { description: message });
-      }
+        caught instanceof Error
+          ? caught.message
+          : t('updateChecker.openFailedDesc');
+      toast.error(t('updateChecker.openFailed'), { description: message });
     }
-  }, []);
+  }, [t, updateInfo]);
 
-  const handleDownload = useCallback(async () => {
-    if (!updateInfo) {
-      return;
-    }
-
-    setStatus('downloading');
-    setProgress(0);
-    setError(null);
-    downloadTotalRef.current = null;
-    downloadedBytesRef.current = 0;
-
-    try {
-      await updateInfo.download((event: DownloadEvent) => {
-        if (event.event === 'Started') {
-          downloadTotalRef.current = event.data.contentLength ?? null;
-          return;
-        }
-
-        if (event.event === 'Progress') {
-          downloadedBytesRef.current += event.data.chunkLength;
-          if (downloadTotalRef.current) {
-            const percent = Math.round((downloadedBytesRef.current / downloadTotalRef.current) * 100);
-            setProgress(Math.max(0, Math.min(100, percent)));
-          }
-          return;
-        }
-
-        if (event.event === 'Finished') {
-          setProgress(100);
-        }
-      });
-
-      setStatus('ready');
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Failed to download update.';
-      setStatus('error');
-      setError(message);
-      toast.error('Update failed', { description: message });
-    }
-  }, [updateInfo]);
-
-  const handleInstall = useCallback(async () => {
-    if (!updateInfo) {
-      return;
-    }
-
-    setStatus('installing');
-
-    try {
-      await updateInfo.install();
-      // On macOS/Linux, install() replaces the binary but does not restart the app.
-      // relaunch() is needed to start the new version.
-      // On Windows (NSIS), the installer handles restart, but relaunch() is a no-op
-      // in that case so calling it is safe.
-      await relaunch();
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Failed to install update.';
-      setStatus('error');
-      setError(message);
-      toast.error('Install failed', { description: message });
-    }
-  }, [updateInfo]);
+  // Keep a stable ref so mount/signal effects do not re-fire when the
+  // callback identity changes (e.g. i18n `t` recreating each render).
+  const checkForUpdatesRef = useRef(checkForUpdates);
+  useEffect(() => {
+    checkForUpdatesRef.current = checkForUpdates;
+  }, [checkForUpdates]);
 
   useEffect(() => {
     if (isAutoCheckEnabled()) {
-      checkForUpdates(false);
+      void checkForUpdatesRef.current(false);
     }
-  }, [checkForUpdates]);
+  }, []);
 
   useEffect(() => {
     if (typeof checkSignal === 'number') {
       if (lastSignalRef.current !== checkSignal) {
         lastSignalRef.current = checkSignal;
-        checkForUpdates(true);
+        void checkForUpdatesRef.current(true);
       }
     }
-  }, [checkSignal, checkForUpdates]);
+  }, [checkSignal]);
 
   const notes = useMemo(() => {
-    if (!updateInfo?.body) {
-      return 'A new version is available with improvements and fixes.';
+    if (!updateInfo?.body?.trim()) {
+      return t('updateChecker.releaseNotesFallback');
     }
-
     return updateInfo.body;
-  }, [updateInfo?.body]);
+  }, [t, updateInfo?.body]);
 
   const onDialogOpenChange = useCallback(
     (open: boolean) => {
@@ -220,63 +203,46 @@ export function UpdateChecker({ checkSignal }: UpdateCheckerProps) {
         setDialogOpen(open);
       }
     },
-    [busy, resetState]
+    [busy, resetState],
   );
 
   return (
     <AlertDialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {status === 'ready' ? 'Update ready to install' : t('updateChecker.updateAvailable')}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t('updateChecker.updateAvailable')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {updateInfo?.version
-              ? `Version ${updateInfo.version} is ready to download.`
-              : 'A new version is available.'}
+            {updateInfo
+              ? t('updateChecker.updateAvailableDesc', {
+                  version: updateInfo.latestVersion,
+                  currentVersion: updateInfo.currentVersion,
+                })
+              : t('updateChecker.updateAvailable')}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground whitespace-pre-line">{notes}</p>
-          {status === 'downloading' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{t('updateChecker.downloading')}</span>
-                <span>{progress}%</span>
-              </div>
-              <Progress value={progress} />
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground whitespace-pre-line max-h-48 overflow-y-auto">
+            {notes}
+          </p>
           {status === 'error' && error && (
             <p className="text-sm text-destructive">{error}</p>
-          )}
-          {readyToInstall && (
-            <p className="text-sm text-muted-foreground">
-              The update has been downloaded. Restart now to finish installing.
-            </p>
           )}
         </div>
 
         <AlertDialogFooter>
-          {!readyToInstall && (
-            <Button
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={busy}
-            >
-              Later
-            </Button>
-          )}
-          {readyToInstall ? (
-            <Button onClick={handleInstall} disabled={status === 'installing'}>
-              {status === 'installing' ? 'Restarting…' : 'Restart now'}
-            </Button>
-          ) : (
-            <Button onClick={handleDownload} disabled={busy}>
-              {status === 'downloading' ? 'Downloading…' : 'Download update'}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetState();
+            }}
+            disabled={busy}
+          >
+            {t('updateChecker.later')}
+          </Button>
+          <Button onClick={() => void handleOpenGithub()} disabled={busy || !updateInfo}>
+            {t('updateChecker.viewOnGitHub')}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
