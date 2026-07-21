@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-21
+
+### Added
+
+- **Terminal CWD Tracking**: Added support for shell working directory synchronization via OSC 7 / OSC 633 / OSC 1337 sequences, allowing the integrated file browser to automatically follow terminal navigation.
+- **Connection Attempt & Diagnostic Tracking**: Added real-time connection progress tracking and diagnostic reporting modal for SSH connection attempts.
+
+### Changed
+
+- **UI Component Pruning**: Removed unused UI primitives, redundant components, and obsolete dependencies to clean up codebase footprint.
+
+### Fixed
+
+- **Terminal Layout Instance Persistence**: Fixed terminal instances being re-created or losing active state during grid splits and panel layout transitions.
+- **Drop Zone Overlay Preview**: Adjusted tab drag drop zone overlay geometry to accurately match half-pane split boundaries.
+
+
 ## [0.2.0] - 2026-07-13
 
 ### Added
