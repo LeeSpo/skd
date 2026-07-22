@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded `russh` from 0.44 to 0.62.3 to incorporate current denial-of-service protections while preserving password, private-key, keyboard-interactive, SFTP, port-forwarding, and legacy `ssh-rsa` compatibility.
+
 ## [0.2.2] - 2026-07-21
 
 ### Added

@@ -9,13 +9,15 @@ use crate::known_hosts::{
 };
 use crate::pty_session::PtySession;
 use crate::shell_integration::{
-    build_remote_launch, parse_remote_shell_probe, parse_remote_temp_dir,
-    remote_cleanup_command, remote_prepare_command, RemoteShellLaunch, REMOTE_SHELL_PROBE_COMMAND,
+    build_remote_launch, parse_remote_shell_probe, parse_remote_temp_dir, remote_cleanup_command,
+    remote_prepare_command, RemoteShellLaunch, REMOTE_SHELL_PROBE_COMMAND,
 };
 use anyhow::Result;
+pub use key_loader::{
+    key_file_permission_warning, load_private_key_from_content, read_private_key_file,
+};
+use russh::keys::*;
 use russh::*;
-use russh_keys::*;
-pub use key_loader::{key_file_permission_warning, load_private_key_from_content, read_private_key_file};
 use russh_sftp::client::SftpSession;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -31,15 +33,26 @@ use tokio_util::sync::CancellationToken;
 /// Preferred host-key algorithms advertised to the server, ordered from most to
 /// least preferred.  RSA variants (including the legacy `ssh-rsa` / SHA-1) are
 /// included so that older servers that only offer RSA host keys are still
-/// reachable.  The `openssl` feature on `russh` / `russh-keys` must be enabled
-/// for the RSA entries to have any effect.
-pub static PREFERRED_HOST_KEY_ALGOS: &[russh_keys::key::Name] = &[
-    russh_keys::key::ED25519,
-    russh_keys::key::ECDSA_SHA2_NISTP256,
-    russh_keys::key::ECDSA_SHA2_NISTP521,
-    russh_keys::key::RSA_SHA2_256,
-    russh_keys::key::RSA_SHA2_512,
-    russh_keys::key::SSH_RSA,
+/// reachable. Modern RSA signatures are preferred; legacy `ssh-rsa` is kept
+/// only as the final compatibility fallback.
+pub static PREFERRED_HOST_KEY_ALGOS: &[Algorithm] = &[
+    Algorithm::Ed25519,
+    Algorithm::Ecdsa {
+        curve: EcdsaCurve::NistP256,
+    },
+    Algorithm::Ecdsa {
+        curve: EcdsaCurve::NistP384,
+    },
+    Algorithm::Ecdsa {
+        curve: EcdsaCurve::NistP521,
+    },
+    Algorithm::Rsa {
+        hash: Some(HashAlg::Sha512),
+    },
+    Algorithm::Rsa {
+        hash: Some(HashAlg::Sha256),
+    },
+    Algorithm::Rsa { hash: None },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,13 +129,12 @@ impl SshHandler {
 /// Thread-safe stage reporter shared with russh's host-key callback.
 pub type StageReporter = Arc<dyn Fn(ConnectStage) + Send + Sync>;
 
-#[async_trait::async_trait]
 impl client::Handler for SshHandler {
     type Error = anyhow::Error;
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &key::PublicKey,
+        server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
         if let Some(report) = &self.stage_reporter {
             report(ConnectStage::VerifyingHostKey);
@@ -141,9 +153,7 @@ impl client::Handler for SshHandler {
             VerifyResult::Mismatch { .. } => {
                 let result = verify_host_key(&self.host, self.port, server_public_key)?;
                 Err(anyhow::anyhow!(format_mismatch_host_error(
-                    &self.host,
-                    self.port,
-                    &result,
+                    &self.host, self.port, &result,
                 )))
             }
         }
@@ -254,10 +264,7 @@ pub async fn establish_authenticated_session(
                     ConnectDiagnosticError::new(
                         ConnectErrorKind::Unknown,
                         ConnectStage::EstablishingTcp,
-                        format!(
-                            "Failed to connect to {}:{}",
-                            config.host, config.port
-                        ),
+                        format!("Failed to connect to {}:{}", config.host, config.port),
                     )
                 })
                 .into());
@@ -289,14 +296,14 @@ pub async fn establish_authenticated_session(
         Some(on_stage.clone()),
     );
 
-    let mut ssh_session =
-        match client::connect_stream(Arc::new(ssh_config), stream, handler).await {
-            Ok(session) => session,
-            Err(e) => {
-                let err = anyhow::anyhow!(e);
-                return Err(classify_handshake_error(&err, &config.host, config.port).into());
-            }
-        };
+    let mut ssh_session = match client::connect_stream(Arc::new(ssh_config), stream, handler).await
+    {
+        Ok(session) => session,
+        Err(e) => {
+            let err = anyhow::anyhow!(e);
+            return Err(classify_handshake_error(&err, &config.host, config.port).into());
+        }
+    };
 
     // ── 4. Authenticate ─────────────────────────────────────────────────────
     on_stage(ConnectStage::Authenticating);
@@ -306,7 +313,7 @@ pub async fn establish_authenticated_session(
             .authenticate_password(&config.username, password)
             .await
         {
-            Ok(ok) => ok,
+            Ok(result) => result.success(),
             Err(e) => {
                 return Err(ConnectDiagnosticError::new(
                     ConnectErrorKind::PasswordIncorrect,
@@ -340,11 +347,28 @@ pub async fn establish_authenticated_session(
                 }
             };
 
+            let hash_alg = if key.algorithm().is_rsa() {
+                ssh_session
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(|e| {
+                        ConnectDiagnosticError::new(
+                            ConnectErrorKind::PublicKeyUnauthorized,
+                            ConnectStage::Authenticating,
+                            format!("Failed to negotiate an RSA signature algorithm: {e}"),
+                        )
+                    })?
+                    .flatten()
+            } else {
+                None
+            };
+            let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg);
+
             match ssh_session
-                .authenticate_publickey(&config.username, Arc::new(key))
+                .authenticate_publickey(&config.username, key)
                 .await
             {
-                Ok(ok) => ok,
+                Ok(result) => result.success(),
                 Err(e) => {
                     return Err(ConnectDiagnosticError::new(
                         ConnectErrorKind::PublicKeyUnauthorized,
@@ -380,7 +404,7 @@ pub async fn establish_authenticated_session(
             loop {
                 match response {
                     client::KeyboardInteractiveAuthResponse::Success => break true,
-                    client::KeyboardInteractiveAuthResponse::Failure => {
+                    client::KeyboardInteractiveAuthResponse::Failure { .. } => {
                         return Err(ConnectDiagnosticError::new(
                             ConnectErrorKind::KeyboardInteractiveRejected,
                             ConnectStage::Authenticating,
@@ -450,7 +474,9 @@ pub async fn establish_authenticated_session(
                 "Keyboard-interactive authentication was rejected by the server.".to_string(),
             ),
         };
-        return Err(ConnectDiagnosticError::new(kind, ConnectStage::Authenticating, message).into());
+        return Err(
+            ConnectDiagnosticError::new(kind, ConnectStage::Authenticating, message).into(),
+        );
     }
 
     Ok(ssh_session)
@@ -557,7 +583,9 @@ impl SshClient {
 
             // Open a new SSH channel
             let mut channel = session.channel_open_session().await.map_err(|e| {
-                ConnectDiagnosticError::pty_failed(format!("Failed to open SSH channel for PTY: {e}"))
+                ConnectDiagnosticError::pty_failed(format!(
+                    "Failed to open SSH channel for PTY: {e}"
+                ))
             })?;
 
             request_pty(&channel, cols, rows).await?;
@@ -574,7 +602,8 @@ impl SshClient {
                             error
                         );
                         let _ = channel.close().await;
-                        self.cleanup_remote_shell_integration(&launch.temp_dir).await;
+                        self.cleanup_remote_shell_integration(&launch.temp_dir)
+                            .await;
                         channel = session.channel_open_session().await.map_err(|e| {
                             ConnectDiagnosticError::pty_failed(format!(
                                 "Failed to reopen SSH channel for PTY: {e}"
@@ -676,7 +705,9 @@ impl SshClient {
 
                 if let Some(temp_dir) = active_remote_temp_dir {
                     if let Some(command) = remote_cleanup_command(&temp_dir) {
-                        if let Err(error) = execute_command_on_session(&session_for_cleanup, &command).await {
+                        if let Err(error) =
+                            execute_command_on_session(&session_for_cleanup, &command).await
+                        {
                             tracing::warn!(
                                 "Failed to clean remote shell integration directory {}: {}",
                                 temp_dir,
@@ -714,7 +745,10 @@ impl SshClient {
                 return None;
             }
         };
-        let prepare_output = match self.execute_command(&remote_prepare_command(info.kind)).await {
+        let prepare_output = match self
+            .execute_command(&remote_prepare_command(info.kind))
+            .await
+        {
             Ok(output) => output,
             Err(error) => {
                 tracing::warn!("Failed to create remote shell integration files: {}", error);

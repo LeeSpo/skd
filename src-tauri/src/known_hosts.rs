@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use russh_keys::{key::PublicKey, PublicKeyBase64};
+use russh::keys::{HashAlg, PublicKey, PublicKeyBase64};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -17,7 +17,10 @@ pub const UNKNOWN_HOST_KEY_PREFIX: &str = "UNKNOWN_HOST_KEY:";
 #[serde(tag = "type")]
 pub enum VerifyResult {
     Known,
-    Unknown { fingerprint: String, key_type: String },
+    Unknown {
+        fingerprint: String,
+        key_type: String,
+    },
     Mismatch {
         fingerprint: String,
         expected_fingerprint: String,
@@ -31,7 +34,8 @@ pub fn known_hosts_path() -> Result<PathBuf> {
             return Ok(path.clone());
         }
     }
-    let base = dirs::data_local_dir().ok_or_else(|| anyhow!("Could not resolve app data directory"))?;
+    let base =
+        dirs::data_local_dir().ok_or_else(|| anyhow!("Could not resolve app data directory"))?;
     Ok(base.join("com.spo.skd").join("known_hosts"))
 }
 
@@ -52,7 +56,11 @@ fn parse_line(line: &str) -> Option<(String, String, String)> {
     let hostnames = parts.next()?;
     let key_type = parts.next()?;
     let key_data = parts.next()?;
-    Some((hostnames.to_string(), key_type.to_string(), key_data.to_string()))
+    Some((
+        hostnames.to_string(),
+        key_type.to_string(),
+        key_data.to_string(),
+    ))
 }
 
 fn read_entries() -> Result<Vec<(String, String, String)>> {
@@ -81,11 +89,13 @@ fn write_entries(entries: &[(String, String, String)]) -> Result<()> {
 }
 
 pub fn verify_host_key(host: &str, port: u16, public_key: &PublicKey) -> Result<VerifyResult> {
-    let _guard = KNOWN_HOSTS_LOCK.lock().map_err(|_| anyhow!("Lock poisoned"))?;
+    let _guard = KNOWN_HOSTS_LOCK
+        .lock()
+        .map_err(|_| anyhow!("Lock poisoned"))?;
     let label = host_port_label(host, port);
-    let key_type = public_key.name().to_string();
+    let key_type = public_key.algorithm().as_str().to_string();
     let key_data = public_key.public_key_base64();
-    let fingerprint = public_key.fingerprint();
+    let fingerprint = public_key.fingerprint(HashAlg::Sha256).to_string();
 
     let entries = read_entries()?;
     for (hostnames, stored_type, stored_data) in &entries {
@@ -110,13 +120,10 @@ pub fn verify_host_key(host: &str, port: u16, public_key: &PublicKey) -> Result<
 
 /// Store a trusted host key using the exact algorithm name and base64 blob
 /// reported by the server (matches `verify_host_key` comparison fields).
-pub fn trust_host_key_entry(
-    host: &str,
-    port: u16,
-    key_type: &str,
-    key_data: &str,
-) -> Result<()> {
-    let _guard = KNOWN_HOSTS_LOCK.lock().map_err(|_| anyhow!("Lock poisoned"))?;
+pub fn trust_host_key_entry(host: &str, port: u16, key_type: &str, key_data: &str) -> Result<()> {
+    let _guard = KNOWN_HOSTS_LOCK
+        .lock()
+        .map_err(|_| anyhow!("Lock poisoned"))?;
     let label = host_port_label(host, port);
 
     let mut entries = read_entries()?;
@@ -131,8 +138,8 @@ pub fn format_unknown_host_error(host: &str, port: u16, public_key: &PublicKey) 
         serde_json::json!({
             "host": host,
             "port": port,
-            "fingerprint": public_key.fingerprint(),
-            "keyType": public_key.name(),
+            "fingerprint": public_key.fingerprint(HashAlg::Sha256).to_string(),
+            "keyType": public_key.algorithm().as_str(),
             "keyData": public_key.public_key_base64(),
         })
     )
@@ -153,7 +160,7 @@ pub fn format_mismatch_host_error(host: &str, port: u16, result: &VerifyResult) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use russh_keys::key::KeyPair;
+    use russh::keys::{key::safe_rng, Algorithm, PrivateKey};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -181,12 +188,12 @@ mod tests {
     #[test]
     fn trust_and_verify_round_trip() {
         with_temp_store(|| {
-            let keypair = KeyPair::generate_ed25519().unwrap();
-            let public = keypair.clone_public_key().unwrap();
+            let keypair = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+            let public = keypair.public_key().clone();
             trust_host_key_entry(
                 "example.com",
                 22,
-                public.name(),
+                public.algorithm().as_str(),
                 &public.public_key_base64(),
             )
             .unwrap();
@@ -198,8 +205,8 @@ mod tests {
     #[test]
     fn unknown_host_returns_unknown() {
         with_temp_store(|| {
-            let keypair = KeyPair::generate_ed25519().unwrap();
-            let public = keypair.clone_public_key().unwrap();
+            let keypair = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+            let public = keypair.public_key().clone();
             let result = verify_host_key("new.host", 22, &public).unwrap();
             assert!(matches!(result, VerifyResult::Unknown { .. }));
         });
@@ -208,12 +215,12 @@ mod tests {
     #[test]
     fn trust_entry_round_trip_from_key_parts() {
         with_temp_store(|| {
-            let keypair = KeyPair::generate_ed25519().unwrap();
-            let public = keypair.clone_public_key().unwrap();
-            let key_type = public.name();
+            let keypair = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+            let public = keypair.public_key().clone();
+            let key_type = public.algorithm().as_str().to_string();
             let key_data = public.public_key_base64();
 
-            trust_host_key_entry("10.0.0.1", 22, key_type, &key_data).unwrap();
+            trust_host_key_entry("10.0.0.1", 22, &key_type, &key_data).unwrap();
             let result = verify_host_key("10.0.0.1", 22, &public).unwrap();
             assert_eq!(result, VerifyResult::Known);
         });

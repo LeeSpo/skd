@@ -4,6 +4,7 @@ version = "0.2.2"
 description = "A lightweight SSH/SFTP terminal workspace"
 authors = ["you"]
 edition = "2021"
+rust-version = "1.85"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,9 +24,7 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-russh = { version = "0.44", features = ["openssl", "vendored-openssl"] }
-russh-keys = { version = "0.44", features = [] }
+russh = { version = "0.62.3", default-features = false, features = ["ring", "rsa", "flate2", "legacy-ed25519-pkcs8-parser"] }
 russh-sftp = "2"
 anyhow = "1"
 tracing = "0.1"

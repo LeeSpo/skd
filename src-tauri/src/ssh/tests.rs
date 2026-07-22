@@ -178,14 +178,15 @@ mod tests {
 
 #[cfg(test)]
 mod key_loading_tests {
-    use russh_keys::{decode_secret_key, encode_pkcs8_pem, key::KeyPair};
+    use russh::keys::{decode_secret_key, encode_pkcs8_pem, key::safe_rng, Algorithm, PrivateKey};
     use std::io::Write;
     use tempfile::NamedTempFile;
 
     /// Generate a fresh Ed25519 key pair and return its PKCS#8 PEM encoding as a
     /// `String` with Unix (`\n`) line endings.
     fn generate_pem_lf() -> String {
-        let key = KeyPair::generate_ed25519().expect("Ed25519 generation must succeed");
+        let key = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519)
+            .expect("Ed25519 generation must succeed");
         let mut buf = Vec::new();
         encode_pkcs8_pem(&key, &mut buf).expect("PEM encoding must succeed");
         String::from_utf8(buf).expect("PEM is valid UTF-8")
@@ -346,9 +347,7 @@ mod key_loading_tests {
 }
 
 mod keyboard_interactive_tests {
-    use crate::ssh::{
-        AuthMethod, KeyboardInteractiveResponder, SshClient, SshConfig,
-    };
+    use crate::ssh::{AuthMethod, KeyboardInteractiveResponder, SshClient, SshConfig};
     use russh::server::{Auth, Response, Session};
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
@@ -357,7 +356,6 @@ mod keyboard_interactive_tests {
     #[derive(Clone)]
     struct KeyboardInteractiveServer;
 
-    #[async_trait::async_trait]
     impl russh::server::Handler for KeyboardInteractiveServer {
         type Error = anyhow::Error;
 
@@ -365,7 +363,7 @@ mod keyboard_interactive_tests {
             &mut self,
             _user: &str,
             _submethods: &str,
-            response: Option<Response<'async_trait>>,
+            response: Option<Response<'_>>,
         ) -> Result<Auth, Self::Error> {
             let Some(response) = response else {
                 return Ok(Auth::Partial {
@@ -376,7 +374,7 @@ mod keyboard_interactive_tests {
             };
 
             let values = response
-                .map(|value| String::from_utf8_lossy(value).into_owned())
+                .map(|value| String::from_utf8_lossy(&value).into_owned())
                 .collect::<Vec<_>>();
             match values.as_slice() {
                 [password] if password == "secret" => Ok(Auth::Partial {
@@ -387,6 +385,7 @@ mod keyboard_interactive_tests {
                 [otp] if otp == "123456" => Ok(Auth::Accept),
                 _ => Ok(Auth::Reject {
                     proceed_with_methods: None,
+                    partial_success: false,
                 }),
             }
         }
@@ -398,15 +397,19 @@ mod keyboard_interactive_tests {
 
     #[tokio::test]
     async fn completes_two_round_keyboard_interactive_authentication() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let mut server_config = russh::server::Config::default();
-        server_config.auth_rejection_time = Duration::ZERO;
-        server_config
-            .keys
-            .push(russh_keys::key::KeyPair::generate_ed25519().unwrap());
+        let mut server_config = russh::server::Config {
+            auth_rejection_time: Duration::ZERO,
+            ..Default::default()
+        };
+        server_config.keys.push(
+            russh::keys::PrivateKey::random(
+                &mut russh::keys::key::safe_rng(),
+                russh::keys::Algorithm::Ed25519,
+            )
+            .unwrap(),
+        );
         let server_config = Arc::new(server_config);
 
         let server_task = tokio::spawn(async move {
@@ -456,5 +459,95 @@ mod keyboard_interactive_tests {
         );
         client.disconnect().await.unwrap();
         server_task.await.unwrap();
+    }
+}
+
+mod rsa_host_key_compatibility_tests {
+    use crate::ssh::{AuthMethod, SshClient, SshConfig};
+    use russh::keys::{
+        encode_pkcs8_pem, key::safe_rng, ssh_key::private::RsaKeypair, Algorithm, HashAlg,
+        PrivateKey, PublicKey,
+    };
+    use russh::server::Auth;
+    use std::borrow::Cow;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[derive(Clone)]
+    struct PublicKeyServer;
+
+    impl russh::server::Handler for PublicKeyServer {
+        type Error = anyhow::Error;
+
+        async fn auth_publickey(
+            &mut self,
+            _user: &str,
+            _public_key: &PublicKey,
+        ) -> Result<Auth, Self::Error> {
+            Ok(Auth::Accept)
+        }
+    }
+
+    async fn connects_with_rsa_algorithm(
+        host_key: PrivateKey,
+        key_content: String,
+        algorithm: Algorithm,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server_config = russh::server::Config {
+            auth_rejection_time: Duration::ZERO,
+            preferred: russh::Preferred {
+                key: Cow::Owned(vec![algorithm]),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        server_config.keys.push(host_key);
+        let server_config = Arc::new(server_config);
+
+        let server_task = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            russh::server::run_stream(server_config, socket, PublicKeyServer)
+                .await
+                .unwrap();
+        });
+
+        let config = SshConfig {
+            host: address.ip().to_string(),
+            port: address.port(),
+            username: "testuser".to_string(),
+            auth_method: AuthMethod::PublicKey {
+                key_content,
+                passphrase: None,
+            },
+            host_key_verification: false,
+        };
+        let mut client = SshClient::new();
+        client
+            .connect_with_progress(&config, Duration::from_secs(5), |_| {}, None)
+            .await
+            .unwrap();
+        client.disconnect().await.unwrap();
+        server_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn supports_modern_and_legacy_rsa_signatures() {
+        let rsa = RsaKeypair::random(&mut safe_rng(), 2048).unwrap();
+        let host_key = PrivateKey::new(rsa.into(), "test-rsa-host").unwrap();
+        let mut key_content = Vec::new();
+        encode_pkcs8_pem(&host_key, &mut key_content).unwrap();
+        let key_content = String::from_utf8(key_content).unwrap();
+
+        connects_with_rsa_algorithm(
+            host_key.clone(),
+            key_content.clone(),
+            Algorithm::Rsa {
+                hash: Some(HashAlg::Sha512),
+            },
+        )
+        .await;
+        connects_with_rsa_algorithm(host_key, key_content, Algorithm::Rsa { hash: None }).await;
     }
 }

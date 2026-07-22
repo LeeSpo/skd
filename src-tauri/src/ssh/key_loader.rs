@@ -1,5 +1,5 @@
 use anyhow::Result;
-use russh_keys::{decode_secret_key, key::KeyPair};
+use russh::keys::{decode_secret_key, PrivateKey};
 use std::path::Path;
 
 /// Expand a leading `~` to the user's home directory.
@@ -19,10 +19,17 @@ pub fn normalise_key_content(content: &str) -> String {
 }
 
 /// Decode a private key from in-memory PEM / OpenSSH content.
-pub fn load_private_key_from_content(content: &str, passphrase: Option<&str>) -> Result<KeyPair> {
+pub fn load_private_key_from_content(
+    content: &str,
+    passphrase: Option<&str>,
+) -> Result<PrivateKey> {
     let normalised = normalise_key_content(content);
     decode_secret_key(&normalised, passphrase).map_err(|e| {
-        if e.to_string().contains("encrypted") || e.to_string().contains("passphrase") {
+        let lower = e.to_string().to_lowercase();
+        if lower.contains("encrypted")
+            || lower.contains("passphrase")
+            || lower.contains("decrypt")
+        {
             anyhow::anyhow!(
                 "Failed to decrypt SSH key. The key may be encrypted. Please provide the correct passphrase."
             )
@@ -75,14 +82,21 @@ pub fn key_file_permission_warning(_path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use russh_keys::{encode_pkcs8_pem, key::KeyPair};
+    use russh::keys::{
+        encode_pkcs8_pem, encode_pkcs8_pem_encrypted, key::safe_rng, ssh_key::private::RsaKeypair,
+        Algorithm, EcdsaCurve, PrivateKey,
+    };
     use std::io::Write;
     use tempfile::NamedTempFile;
 
     fn sample_pem() -> String {
-        let key = KeyPair::generate_ed25519().unwrap();
+        let key = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+        encode_pem(&key)
+    }
+
+    fn encode_pem(key: &PrivateKey) -> String {
         let mut pem = Vec::new();
-        encode_pkcs8_pem(&key, &mut pem).unwrap();
+        encode_pkcs8_pem(key, &mut pem).unwrap();
         String::from_utf8(pem).unwrap()
     }
 
@@ -97,6 +111,45 @@ mod tests {
     fn load_from_content_round_trip() {
         let pem = sample_pem();
         assert!(load_private_key_from_content(&pem, None).is_ok());
+    }
+
+    #[test]
+    fn loads_supported_rsa_and_ecdsa_keys() {
+        let rsa = RsaKeypair::random(&mut safe_rng(), 2048).unwrap();
+        let rsa = PrivateKey::new(rsa.into(), "test-rsa").unwrap();
+        let ecdsa = PrivateKey::random(
+            &mut safe_rng(),
+            Algorithm::Ecdsa {
+                curve: EcdsaCurve::NistP256,
+            },
+        )
+        .unwrap();
+
+        for key in [&rsa, &ecdsa] {
+            let decoded = load_private_key_from_content(&encode_pem(key), None).unwrap();
+            assert_eq!(decoded.algorithm(), key.algorithm());
+        }
+    }
+
+    #[test]
+    fn loads_encrypted_key_and_rejects_wrong_passphrase() {
+        let key = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+        let mut pem = Vec::new();
+        encode_pkcs8_pem_encrypted(&key, b"correct horse", 100, &mut pem).unwrap();
+        let pem = String::from_utf8(pem).unwrap();
+
+        assert!(load_private_key_from_content(&pem, Some("correct horse")).is_ok());
+        let error = load_private_key_from_content(&pem, Some("wrong passphrase")).unwrap_err();
+        assert!(
+            error.to_string().contains("Failed to decrypt SSH key"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_private_key_content() {
+        let error = load_private_key_from_content("not a private key", None).unwrap_err();
+        assert!(error.to_string().contains("Failed to load SSH private key"));
     }
 
     #[test]

@@ -3380,7 +3380,7 @@ pub struct TrustHostKeyRequest {
 #[tauri::command]
 pub fn trust_host_key(request: TrustHostKeyRequest) -> Result<(), String> {
     use crate::known_hosts::trust_host_key_entry;
-    use russh_keys::parse_public_key_base64;
+    use russh::keys::parse_public_key_base64;
 
     parse_public_key_base64(&request.key_data).map_err(|e| e.to_string())?;
     trust_host_key_entry(
