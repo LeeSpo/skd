@@ -96,6 +96,7 @@ impl StandaloneSftpClient {
             &ssh_config,
             sftp_tcp_timeout(),
             Arc::new(on_stage),
+            None,
         )
         .await?;
 

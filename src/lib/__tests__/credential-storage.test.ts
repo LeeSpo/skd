@@ -10,6 +10,8 @@ import {
 import { APP_SETTINGS_STORAGE_KEY } from '../keyboard-shortcuts';
 import {
   clearAllConnectionsWithCredentials,
+  cleanupKeyboardInteractiveCredentials,
+  connectionHasStoredCredentials,
   ConnectionStorageManager,
   getConnectionWithCredentials,
   migratePlaintextCredentialsToKeychain,
@@ -333,5 +335,67 @@ describe('credential storage', () => {
       connectionId: 'conn-key-only',
       secretType: 'private_key',
     });
+  });
+
+  it('keyboard-interactive connections do not require stored credentials', () => {
+    expect(connectionHasStoredCredentials({
+      id: 'kbd-1',
+      name: 'Interactive',
+      host: 'example.com',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'keyboard-interactive',
+      createdAt: new Date().toISOString(),
+    })).toBe(true);
+  });
+
+  it('keyboard-interactive secret pruning removes every stored secret', async () => {
+    invokeMock.mockResolvedValue(null);
+
+    const flags = await updateConnectionSecrets(
+      'kbd-prune',
+      { password: 'must-not-survive', passphrase: 'also-remove', privateKey: 'key' },
+      { hasStoredPassword: true, hasStoredPassphrase: true, hasStoredPrivateKey: true },
+      { rememberPassword: true, authMethod: 'keyboard-interactive' },
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith('delete_connection_secrets', {
+      connectionId: 'kbd-prune',
+    });
+    expect(flags).toEqual({
+      hasStoredPassword: false,
+      hasStoredPassphrase: false,
+      hasStoredPrivateKey: false,
+    });
+  });
+
+  it('cleans legacy keyboard-interactive credentials once', async () => {
+    invokeMock.mockResolvedValue(null);
+    ConnectionStorageManager.saveConnectionWithId('kbd-legacy', {
+      name: 'Legacy Interactive',
+      host: 'example.com',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'keyboard-interactive',
+      hasStoredPassword: true,
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+    });
+
+    expect(await cleanupKeyboardInteractiveCredentials()).toBe(1);
+    expect(invokeMock).toHaveBeenCalledWith('delete_connection_secrets', {
+      connectionId: 'kbd-legacy',
+    });
+    expect(ConnectionStorageManager.getConnection('kbd-legacy')).toMatchObject({
+      hasStoredPassword: false,
+      hasStoredPassphrase: false,
+      hasStoredPrivateKey: false,
+    });
+
+    invokeMock.mockClear();
+    expect(await cleanupKeyboardInteractiveCredentials()).toBe(0);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

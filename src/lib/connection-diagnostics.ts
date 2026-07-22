@@ -26,6 +26,8 @@ export type ConnectErrorKind =
   | 'publicKeyUnauthorized'
   | 'privateKeyFormatUnsupported'
   | 'privateKeyPassphraseIncorrect'
+  | 'keyboardInteractiveRejected'
+  | 'keyboardInteractiveTimeout'
   | 'ptyCreateFailed'
   | 'cancelled'
   | 'unknown';

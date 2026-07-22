@@ -10,6 +10,7 @@ import { TerminalInputProvider } from './lib/terminal-input-context';
 import { WelcomeScreen } from './components/welcome-screen';
 import {
   ConnectionStorageManager,
+  cleanupKeyboardInteractiveCredentials,
   connectionHasStoredCredentials,
   getConnectionWithCredentials,
   migratePlaintextCredentialsToKeychain,
@@ -46,6 +47,10 @@ import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 import { startLocalForward } from './lib/port-forward';
 import { getAutoStartPortForwardBookmarks } from './lib/port-forward-bookmarks';
 import { ConnectionAttemptProvider } from './lib/connection-attempt-context';
+import {
+  KeyboardInteractiveProvider,
+  useKeyboardInteractive,
+} from './lib/keyboard-interactive-context';
 import { useTerminalCwd } from './lib/terminal-cwd-store';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
@@ -107,6 +112,7 @@ function AppContent() {
     failAttempt,
     clearAttempt,
   } = useConnectionAttempts();
+  const keyboardInteractive = useKeyboardInteractive();
 
   // Modal states
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -169,6 +175,7 @@ function AppContent() {
             failAttempt(params.connection_id, response);
           }
         },
+        keyboardInteractive,
       );
     } catch (error) {
       failAttempt(params.connection_id, {
@@ -178,7 +185,7 @@ function AppContent() {
       });
       throw error;
     }
-  }, [awaitHostKey, beginAttempt, clearAttempt, dispatch, failAttempt, reportStage]);
+  }, [awaitHostKey, beginAttempt, clearAttempt, dispatch, failAttempt, keyboardInteractive, reportStage]);
 
   const buildAuthRequest = useCallback(async (data: ConnectionData) => ({
     auth_method: data.authMethod || 'password',
@@ -358,8 +365,11 @@ function AppContent() {
   useKeyboardShortcuts([...layoutShortcuts, ...splitViewShortcuts, ...localTerminalShortcuts], true);
 
   useEffect(() => {
-    void migratePlaintextCredentialsToKeychain().catch((error: unknown) => {
-      console.error('Failed to migrate credentials to Keychain:', error);
+    void (async () => {
+      await migratePlaintextCredentialsToKeychain();
+      await cleanupKeyboardInteractiveCredentials();
+    })().catch((error: unknown) => {
+      console.error('Failed to migrate credentials in Keychain:', error);
     });
   }, []);
 
@@ -1683,13 +1693,15 @@ export default function App() {
   return (
     <ErrorBoundary label="skd">
       <LayoutProvider>
-        <ConnectionAttemptProvider>
-          <TerminalGroupProvider>
-            <TerminalInputProvider>
-              <AppContent />
-            </TerminalInputProvider>
-          </TerminalGroupProvider>
-        </ConnectionAttemptProvider>
+        <KeyboardInteractiveProvider>
+          <ConnectionAttemptProvider>
+            <TerminalGroupProvider>
+              <TerminalInputProvider>
+                <AppContent />
+              </TerminalInputProvider>
+            </TerminalGroupProvider>
+          </ConnectionAttemptProvider>
+        </KeyboardInteractiveProvider>
       </LayoutProvider>
     </ErrorBoundary>
   );

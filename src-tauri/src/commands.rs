@@ -106,6 +106,7 @@ pub async fn ssh_connect(
             key_content: request.key_content.ok_or("Private key content required")?,
             passphrase: request.passphrase,
         },
+        "keyboard-interactive" => AuthMethod::KeyboardInteractive,
         _ => return Err("Invalid auth method".to_string()),
     };
 
@@ -135,6 +136,33 @@ pub async fn ssh_connect(
             ConnectStage::EstablishingTcp,
         )),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KeyboardInteractiveResponseRequest {
+    pub connection_id: String,
+    pub challenge_id: String,
+    pub responses: Vec<String>,
+}
+
+#[tauri::command]
+pub fn ssh_keyboard_interactive_respond(
+    request: KeyboardInteractiveResponseRequest,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<CommandResponse, String> {
+    state
+        .respond_to_keyboard_interactive(
+            &request.connection_id,
+            &request.challenge_id,
+            request.responses,
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(CommandResponse {
+        success: true,
+        output: Some("Keyboard-interactive response accepted".to_string()),
+        error: None,
+    })
 }
 
 #[tauri::command]

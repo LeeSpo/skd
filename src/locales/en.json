@@ -224,6 +224,8 @@
       "publicKeyUnauthorized": "Public key not authorized",
       "privateKeyFormatUnsupported": "Private key format not supported",
       "privateKeyPassphraseIncorrect": "Incorrect private key passphrase",
+      "keyboardInteractiveRejected": "Interactive authentication rejected",
+      "keyboardInteractiveTimeout": "Interactive authentication timed out",
       "ptyCreateFailed": "Failed to create PTY",
       "cancelled": "Connection cancelled",
       "unknown": "Connection failed"
@@ -235,6 +237,15 @@
     "technicalDetails": "Technical details",
     "retry": "Retry",
     "editConnection": "Edit connection"
+  },
+  "keyboardInteractive": {
+    "title": "Interactive authentication",
+    "description": "The SSH server requires additional information to authenticate.",
+    "responseLabel": "Response {{count}}",
+    "submit": "Continue",
+    "submitting": "Submitting…",
+    "responseFailed": "Could not submit authentication response",
+    "cancelFailed": "Could not cancel authentication"
   },
   "settings": {
     "title": "Settings & Preferences",

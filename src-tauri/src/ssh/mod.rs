@@ -18,7 +18,9 @@ use russh_keys::*;
 pub use key_loader::{key_file_permission_warning, load_private_key_from_content, read_private_key_file};
 use russh_sftp::client::SftpSession;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -59,7 +61,29 @@ pub enum AuthMethod {
         key_content: String,
         passphrase: Option<String>,
     },
+    KeyboardInteractive,
 }
+
+#[derive(Debug, Clone)]
+pub struct KeyboardInteractivePrompt {
+    pub prompt: String,
+    pub echo: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct KeyboardInteractiveChallenge {
+    pub name: String,
+    pub instructions: String,
+    pub prompts: Vec<KeyboardInteractivePrompt>,
+}
+
+pub type KeyboardInteractiveResponder = Arc<
+    dyn Fn(
+            KeyboardInteractiveChallenge,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<String>>> + Send>>
+        + Send
+        + Sync,
+>;
 
 pub struct SshClient {
     session: Option<Arc<client::Handle<Client>>>,
@@ -140,8 +164,15 @@ impl SshClient {
         config: &SshConfig,
         tcp_timeout: Duration,
         on_stage: impl Fn(ConnectStage) + Send + Sync + 'static,
+        keyboard_interactive_responder: Option<KeyboardInteractiveResponder>,
     ) -> Result<()> {
-        let session = establish_authenticated_session(config, tcp_timeout, Arc::new(on_stage)).await?;
+        let session = establish_authenticated_session(
+            config,
+            tcp_timeout,
+            Arc::new(on_stage),
+            keyboard_interactive_responder,
+        )
+        .await?;
         self.session = Some(Arc::new(session));
         Ok(())
     }
@@ -154,6 +185,7 @@ pub async fn establish_authenticated_session(
     config: &SshConfig,
     tcp_timeout: Duration,
     on_stage: StageReporter,
+    keyboard_interactive_responder: Option<KeyboardInteractiveResponder>,
 ) -> Result<client::Handle<SshHandler>> {
     // ── 1. DNS ──────────────────────────────────────────────────────────────
     on_stage(ConnectStage::ResolvingDns);
@@ -325,6 +357,80 @@ pub async fn establish_authenticated_session(
                 }
             }
         }
+        AuthMethod::KeyboardInteractive => {
+            let responder = keyboard_interactive_responder.ok_or_else(|| {
+                ConnectDiagnosticError::new(
+                    ConnectErrorKind::AuthenticationFailed,
+                    ConnectStage::Authenticating,
+                    "Keyboard-interactive authentication is unavailable in this context.",
+                )
+            })?;
+
+            let mut response = ssh_session
+                .authenticate_keyboard_interactive_start(&config.username, None::<String>)
+                .await
+                .map_err(|e| {
+                    ConnectDiagnosticError::new(
+                        ConnectErrorKind::AuthenticationFailed,
+                        ConnectStage::Authenticating,
+                        format!("Keyboard-interactive authentication failed: {e}"),
+                    )
+                })?;
+
+            loop {
+                match response {
+                    client::KeyboardInteractiveAuthResponse::Success => break true,
+                    client::KeyboardInteractiveAuthResponse::Failure => {
+                        return Err(ConnectDiagnosticError::new(
+                            ConnectErrorKind::KeyboardInteractiveRejected,
+                            ConnectStage::Authenticating,
+                            "Keyboard-interactive authentication was rejected by the server.",
+                        )
+                        .into());
+                    }
+                    client::KeyboardInteractiveAuthResponse::InfoRequest {
+                        name,
+                        instructions,
+                        prompts,
+                    } => {
+                        let expected_responses = prompts.len();
+                        let challenge = KeyboardInteractiveChallenge {
+                            name,
+                            instructions,
+                            prompts: prompts
+                                .into_iter()
+                                .map(|prompt| KeyboardInteractivePrompt {
+                                    prompt: prompt.prompt,
+                                    echo: prompt.echo,
+                                })
+                                .collect(),
+                        };
+                        let responses = responder(challenge).await?;
+                        if responses.len() != expected_responses {
+                            return Err(ConnectDiagnosticError::new(
+                                ConnectErrorKind::AuthenticationFailed,
+                                ConnectStage::Authenticating,
+                                format!(
+                                    "Keyboard-interactive response count mismatch: expected {expected_responses}, received {}.",
+                                    responses.len()
+                                ),
+                            )
+                            .into());
+                        }
+                        response = ssh_session
+                            .authenticate_keyboard_interactive_respond(responses)
+                            .await
+                            .map_err(|e| {
+                                ConnectDiagnosticError::new(
+                                    ConnectErrorKind::AuthenticationFailed,
+                                    ConnectStage::Authenticating,
+                                    format!("Keyboard-interactive authentication failed: {e}"),
+                                )
+                            })?;
+                    }
+                }
+            }
+        }
     };
 
     if !authenticated {
@@ -338,6 +444,10 @@ pub async fn establish_authenticated_session(
                 ConnectErrorKind::PublicKeyUnauthorized,
                 "Public key authentication failed. The key may not be authorized on the server."
                     .to_string(),
+            ),
+            AuthMethod::KeyboardInteractive => (
+                ConnectErrorKind::KeyboardInteractiveRejected,
+                "Keyboard-interactive authentication was rejected by the server.".to_string(),
             ),
         };
         return Err(ConnectDiagnosticError::new(kind, ConnectStage::Authenticating, message).into());

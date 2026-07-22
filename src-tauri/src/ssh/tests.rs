@@ -28,6 +28,7 @@ mod tests {
                 config,
                 crate::connection_diagnostics::default_tcp_timeout(),
                 |_| {},
+                None,
             )
             .await
     }
@@ -264,6 +265,7 @@ mod key_loading_tests {
                 &config,
                 crate::connection_diagnostics::default_tcp_timeout(),
                 |_| {},
+                None,
             )
             .await
             .unwrap_err();
@@ -341,4 +343,118 @@ mod key_loading_tests {
     /// Replication of the tilde-expansion logic from `SshClient::connect` so it
     /// can be tested independently without constructing a full `SshConfig`.
     use crate::ssh::key_loader::expand_tilde;
+}
+
+mod keyboard_interactive_tests {
+    use crate::ssh::{
+        AuthMethod, KeyboardInteractiveResponder, SshClient, SshConfig,
+    };
+    use russh::server::{Auth, Response, Session};
+    use std::borrow::Cow;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    #[derive(Clone)]
+    struct KeyboardInteractiveServer;
+
+    #[async_trait::async_trait]
+    impl russh::server::Handler for KeyboardInteractiveServer {
+        type Error = anyhow::Error;
+
+        async fn auth_keyboard_interactive(
+            &mut self,
+            _user: &str,
+            _submethods: &str,
+            response: Option<Response<'async_trait>>,
+        ) -> Result<Auth, Self::Error> {
+            let Some(response) = response else {
+                return Ok(Auth::Partial {
+                    name: Cow::Borrowed("Password authentication"),
+                    instructions: Cow::Borrowed("Enter your account password"),
+                    prompts: Cow::Owned(vec![(Cow::Borrowed("Password:"), false)]),
+                });
+            };
+
+            let values = response
+                .map(|value| String::from_utf8_lossy(value).into_owned())
+                .collect::<Vec<_>>();
+            match values.as_slice() {
+                [password] if password == "secret" => Ok(Auth::Partial {
+                    name: Cow::Borrowed("Two-factor authentication"),
+                    instructions: Cow::Borrowed("Enter the current OTP"),
+                    prompts: Cow::Owned(vec![(Cow::Borrowed("Verification code:"), true)]),
+                }),
+                [otp] if otp == "123456" => Ok(Auth::Accept),
+                _ => Ok(Auth::Reject {
+                    proceed_with_methods: None,
+                }),
+            }
+        }
+
+        async fn auth_succeeded(&mut self, _session: &mut Session) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn completes_two_round_keyboard_interactive_authentication() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server_config = russh::server::Config::default();
+        server_config.auth_rejection_time = Duration::ZERO;
+        server_config
+            .keys
+            .push(russh_keys::key::KeyPair::generate_ed25519().unwrap());
+        let server_config = Arc::new(server_config);
+
+        let server_task = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            russh::server::run_stream(server_config, socket, KeyboardInteractiveServer)
+                .await
+                .unwrap();
+        });
+
+        let observed = Arc::new(Mutex::new(Vec::<(String, bool)>::new()));
+        let responder_observed = observed.clone();
+        let responder: KeyboardInteractiveResponder = Arc::new(move |challenge| {
+            let observed = responder_observed.clone();
+            Box::pin(async move {
+                let prompt = challenge.prompts.first().unwrap();
+                observed
+                    .lock()
+                    .unwrap()
+                    .push((prompt.prompt.clone(), prompt.echo));
+                if prompt.prompt == "Password:" {
+                    Ok(vec!["secret".to_string()])
+                } else {
+                    Ok(vec!["123456".to_string()])
+                }
+            })
+        });
+
+        let config = SshConfig {
+            host: address.ip().to_string(),
+            port: address.port(),
+            username: "testuser".to_string(),
+            auth_method: AuthMethod::KeyboardInteractive,
+            host_key_verification: false,
+        };
+        let mut client = SshClient::new();
+        client
+            .connect_with_progress(&config, Duration::from_secs(5), |_| {}, Some(responder))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![
+                ("Password:".to_string(), false),
+                ("Verification code:".to_string(), true),
+            ]
+        );
+        client.disconnect().await.unwrap();
+        server_task.await.unwrap();
+    }
 }

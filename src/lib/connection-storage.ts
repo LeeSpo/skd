@@ -22,6 +22,9 @@ import {
   deletePortForwardBookmarksForConnection,
 } from './port-forward-bookmarks';
 
+const KEYBOARD_INTERACTIVE_CREDENTIAL_CLEANUP_FLAG =
+  'skd-keyboard-interactive-credentials-cleaned-v1';
+
 export type { ConnectionSecretUpdate, CredentialAuthMethod, CredentialStoreOptions } from './credential-storage';
 
 export interface ConnectionData {
@@ -97,6 +100,10 @@ export function connectionHasStoredCredentials(connection: ConnectionData): bool
 
   if (connection.authMethod === 'password') {
     return !!(connection.password || connection.hasStoredPassword);
+  }
+
+  if (connection.authMethod === 'keyboard-interactive') {
+    return true;
   }
 
   return !!(
@@ -595,6 +602,10 @@ export async function getConnectionWithCredentials(id: string): Promise<Connecti
   const connection = ConnectionStorageManager.getConnection(id);
   if (!connection) return undefined;
 
+  if (connection.authMethod === 'keyboard-interactive') {
+    return connection;
+  }
+
   const secrets = await loadConnectionSecrets(id, {
     hasStoredPassword: connection.hasStoredPassword,
     hasStoredPassphrase: connection.hasStoredPassphrase,
@@ -721,6 +732,33 @@ export async function migratePlaintextCredentialsToKeychain(): Promise<number> {
   localStorage.removeItem(KEYCHAIN_MIGRATION_FLAG_V1);
 
   return migratedCount;
+}
+
+export async function cleanupKeyboardInteractiveCredentials(): Promise<number> {
+  if (localStorage.getItem(KEYBOARD_INTERACTIVE_CREDENTIAL_CLEANUP_FLAG)) {
+    return 0;
+  }
+
+  const connections = ConnectionStorageManager.getConnections();
+  let cleanedCount = 0;
+  const updatedConnections = await Promise.all(connections.map(async (connection) => {
+    if (connection.authMethod !== 'keyboard-interactive') {
+      return connection;
+    }
+
+    await deleteConnectionSecrets(connection.id);
+    cleanedCount += 1;
+    return {
+      ...connection,
+      hasStoredPassword: false,
+      hasStoredPassphrase: false,
+      hasStoredPrivateKey: false,
+    };
+  }));
+
+  ConnectionStorageManager.replaceAllConnections(updatedConnections);
+  localStorage.setItem(KEYBOARD_INTERACTIVE_CREDENTIAL_CLEANUP_FLAG, '1');
+  return cleanedCount;
 }
 
 /**

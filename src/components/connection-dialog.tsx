@@ -43,6 +43,7 @@ import {
   type ConnectStage,
 } from '../lib/connection-diagnostics';
 import { useConnectionAttempts } from '../lib/connection-attempt-context';
+import { useKeyboardInteractive } from '../lib/keyboard-interactive-context';
 import { ConnectionProgressSegments } from './connection-progress';
 import { HostKeyTrustDialog } from './host-key-trust-dialog';
 import { toast } from 'sonner';
@@ -163,6 +164,7 @@ export function ConnectionDialog({
     failAttempt,
     clearAttempt,
   } = useConnectionAttempts();
+  const keyboardInteractive = useKeyboardInteractive();
 
   const onHostKeyTrustRequired = (request: HostKeyTrustRequest) => {
     if (connectionIdRef.current) {
@@ -519,9 +521,9 @@ export function ConnectionDialog({
     };
 
     const credentialSecrets = {
-      password: config.password || undefined,
-      passphrase: config.passphrase || undefined,
-      privateKey: privateKeyForStorage,
+      password: config.authMethod === 'password' ? config.password || undefined : undefined,
+      passphrase: config.authMethod === 'publickey' ? config.passphrase || undefined : undefined,
+      privateKey: config.authMethod === 'publickey' ? privateKeyForStorage : undefined,
     };
 
     // For SFTP/FTP protocols, delegate connection to App.tsx (via onConnect)
@@ -615,6 +617,8 @@ export function ConnectionDialog({
           setConnectStage(stage);
           reportStage(connectionId, stage);
         },
+        undefined,
+        keyboardInteractive,
       );
 
       if (result.success) {

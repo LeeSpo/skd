@@ -163,7 +163,6 @@ export async function pruneSecretsForAuthMethod(
 
   switch (authMethod) {
     case 'password':
-    case 'keyboard-interactive':
       if (hasStoredPrivateKey) {
         await deleteConnectionSecret(connectionId, 'private_key');
         hasStoredPrivateKey = false;
@@ -172,6 +171,12 @@ export async function pruneSecretsForAuthMethod(
         await deleteConnectionSecret(connectionId, 'passphrase');
         hasStoredPassphrase = false;
       }
+      break;
+    case 'keyboard-interactive':
+      await deleteConnectionSecrets(connectionId);
+      hasStoredPassword = false;
+      hasStoredPassphrase = false;
+      hasStoredPrivateKey = false;
       break;
     case 'publickey':
       if (hasStoredPassword) {

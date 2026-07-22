@@ -7,6 +7,7 @@ import {
   isConnectStage,
 } from './connection-diagnostics';
 import { isHostKeyVerificationEnabled, parseUnknownHostKeyError } from './host-key-verification';
+import type { KeyboardInteractiveCoordinator } from './keyboard-interactive-context';
 
 export interface SshConnectParams {
   connection_id: string;
@@ -62,8 +63,10 @@ export async function sshConnectWithHostKeyTrust(
   onTrustRequired: (request: HostKeyTrustRequest) => void,
   onStage?: ConnectProgressHandler,
   onAttemptResult?: (response: ConnectResponse) => void,
+  keyboardInteractive?: KeyboardInteractiveCoordinator,
 ): Promise<ConnectResponse> {
   const attempt = async (): Promise<ConnectResponse> => {
+    await keyboardInteractive?.ensureReady();
     const unlisten = onStage
       ? await listenConnectProgress(params.connection_id, onStage)
       : null;
@@ -78,6 +81,7 @@ export async function sshConnectWithHostKeyTrust(
       return response;
     } finally {
       unlisten?.();
+      keyboardInteractive?.finish(params.connection_id);
     }
   };
 

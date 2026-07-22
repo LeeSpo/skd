@@ -7,13 +7,18 @@ use crate::port_forward::{LocalForwardInfo, PortForwardManager};
 use crate::sftp_client::StandaloneSftpClient;
 use crate::local_shell;
 use crate::pty_session::PtySession;
-use crate::ssh::{SshClient, SshConfig};
+use crate::ssh::{
+    KeyboardInteractiveChallenge, KeyboardInteractiveResponder, SshClient, SshConfig,
+};
 use anyhow::{anyhow, Result};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::RwLock;
+use tokio::sync::{oneshot, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub struct ConnectionManager {
@@ -23,6 +28,7 @@ pub struct ConnectionManager {
     /// Used to prevent a stale Close from killing a newly created session.
     pty_generations: Arc<RwLock<HashMap<String, u64>>>,
     pending_connections: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    keyboard_interactive: Arc<KeyboardInteractiveBroker>,
     /// Standalone SFTP connections (no PTY)
     sftp_connections: Arc<RwLock<HashMap<String, StandaloneSftpClient>>>,
     /// FTP/FTPS connections
@@ -33,6 +39,169 @@ pub struct ConnectionManager {
     os_info_cache: OsInfoCache,
     /// Session-scoped local port forwards (cleaned up on disconnect)
     port_forwards: PortForwardManager,
+}
+
+pub const KEYBOARD_INTERACTIVE_PROMPT_EVENT: &str = "ssh-keyboard-interactive-prompt";
+const KEYBOARD_INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyboardInteractivePromptPayload {
+    pub connection_id: String,
+    pub challenge_id: String,
+    pub name: String,
+    pub instructions: String,
+    pub prompts: Vec<KeyboardInteractivePromptPayloadItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyboardInteractivePromptPayloadItem {
+    pub prompt: String,
+    pub echo: bool,
+}
+
+struct PendingKeyboardInteractiveChallenge {
+    challenge_id: String,
+    expected_responses: usize,
+    sender: oneshot::Sender<Vec<String>>,
+}
+
+#[derive(Default)]
+struct KeyboardInteractiveBroker {
+    sequence: AtomicU64,
+    pending: StdMutex<HashMap<String, PendingKeyboardInteractiveChallenge>>,
+}
+
+impl KeyboardInteractiveBroker {
+    async fn request(
+        &self,
+        app: &AppHandle,
+        connection_id: &str,
+        challenge: KeyboardInteractiveChallenge,
+    ) -> Result<Vec<String>> {
+        let challenge_id = format!(
+            "{}-{}",
+            connection_id,
+            self.sequence.fetch_add(1, Ordering::Relaxed)
+        );
+        let expected_responses = challenge.prompts.len();
+        let (sender, receiver) = oneshot::channel();
+
+        {
+            let mut pending = self.pending.lock().expect("keyboard-interactive lock poisoned");
+            pending.insert(
+                connection_id.to_string(),
+                PendingKeyboardInteractiveChallenge {
+                    challenge_id: challenge_id.clone(),
+                    expected_responses,
+                    sender,
+                },
+            );
+        }
+
+        let payload = KeyboardInteractivePromptPayload {
+            connection_id: connection_id.to_string(),
+            challenge_id: challenge_id.clone(),
+            name: challenge.name,
+            instructions: challenge.instructions,
+            prompts: challenge
+                .prompts
+                .into_iter()
+                .map(|prompt| KeyboardInteractivePromptPayloadItem {
+                    prompt: prompt.prompt,
+                    echo: prompt.echo,
+                })
+                .collect(),
+        };
+
+        if let Err(error) = app.emit(KEYBOARD_INTERACTIVE_PROMPT_EVENT, payload) {
+            self.remove_if_current(connection_id, &challenge_id);
+            return Err(ConnectDiagnosticError::new(
+                crate::connection_diagnostics::ConnectErrorKind::AuthenticationFailed,
+                ConnectStage::Authenticating,
+                format!("Failed to display keyboard-interactive challenge: {error}"),
+            )
+            .into());
+        }
+
+        self.wait_for_response(
+            connection_id,
+            &challenge_id,
+            receiver,
+            KEYBOARD_INTERACTIVE_TIMEOUT,
+        )
+        .await
+    }
+
+    async fn wait_for_response(
+        &self,
+        connection_id: &str,
+        challenge_id: &str,
+        receiver: oneshot::Receiver<Vec<String>>,
+        timeout: Duration,
+    ) -> Result<Vec<String>> {
+        match tokio::time::timeout(timeout, receiver).await {
+            Ok(Ok(responses)) => Ok(responses),
+            Ok(Err(_)) => Err(ConnectDiagnosticError::cancelled().into()),
+            Err(_) => {
+                self.remove_if_current(connection_id, &challenge_id);
+                Err(ConnectDiagnosticError::new(
+                    crate::connection_diagnostics::ConnectErrorKind::KeyboardInteractiveTimeout,
+                    ConnectStage::Authenticating,
+                    "Keyboard-interactive authentication timed out while waiting for a response.",
+                )
+                .into())
+            }
+        }
+    }
+
+    fn respond(
+        &self,
+        connection_id: &str,
+        challenge_id: &str,
+        responses: Vec<String>,
+    ) -> Result<()> {
+        let pending = {
+            let mut challenges = self.pending.lock().expect("keyboard-interactive lock poisoned");
+            let Some(current) = challenges.get(connection_id) else {
+                return Err(anyhow!("No keyboard-interactive challenge is pending for this connection."));
+            };
+            if current.challenge_id != challenge_id {
+                return Err(anyhow!("The keyboard-interactive challenge is no longer current."));
+            }
+            if current.expected_responses != responses.len() {
+                return Err(anyhow!(
+                    "Expected {} keyboard-interactive responses, received {}.",
+                    current.expected_responses,
+                    responses.len()
+                ));
+            }
+            challenges.remove(connection_id).expect("pending challenge disappeared")
+        };
+
+        pending
+            .sender
+            .send(responses)
+            .map_err(|_| anyhow!("The keyboard-interactive challenge is no longer active."))
+    }
+
+    fn cancel(&self, connection_id: &str) {
+        self.pending
+            .lock()
+            .expect("keyboard-interactive lock poisoned")
+            .remove(connection_id);
+    }
+
+    fn remove_if_current(&self, connection_id: &str, challenge_id: &str) {
+        let mut pending = self.pending.lock().expect("keyboard-interactive lock poisoned");
+        if pending
+            .get(connection_id)
+            .is_some_and(|challenge| challenge.challenge_id == challenge_id)
+        {
+            pending.remove(connection_id);
+        }
+    }
 }
 
 fn emit_connect_progress(app: &Option<AppHandle>, connection_id: &str, stage: ConnectStage) {
@@ -53,6 +222,7 @@ impl ConnectionManager {
             pty_sessions: Arc::new(RwLock::new(HashMap::new())),
             pty_generations: Arc::new(RwLock::new(HashMap::new())),
             pending_connections: Arc::new(RwLock::new(HashMap::new())),
+            keyboard_interactive: Arc::new(KeyboardInteractiveBroker::default()),
             sftp_connections: Arc::new(RwLock::new(HashMap::new())),
             ftp_connections: Arc::new(RwLock::new(HashMap::new())),
             connection_types: Arc::new(RwLock::new(HashMap::new())),
@@ -73,14 +243,27 @@ impl ConnectionManager {
         let timeout = tcp_timeout.unwrap_or_else(crate::connection_diagnostics::default_tcp_timeout);
         let progress_id = connection_id.clone();
         let app_for_progress = app.clone();
+        let keyboard_interactive_responder = app.as_ref().map(|app| {
+            let broker = self.keyboard_interactive.clone();
+            let app = app.clone();
+            let responder_connection_id = connection_id.clone();
+            Arc::new(move |challenge: KeyboardInteractiveChallenge| {
+                let broker = broker.clone();
+                let app = app.clone();
+                let connection_id = responder_connection_id.clone();
+                Box::pin(async move { broker.request(&app, &connection_id, challenge).await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>>> + Send>>
+            }) as KeyboardInteractiveResponder
+        });
 
         let connect_result = tokio::select! {
             res = client.connect_with_progress(&config, timeout, move |stage| {
                 emit_connect_progress(&app_for_progress, &progress_id, stage);
-            }) => res,
+            }, keyboard_interactive_responder) => res,
             _ = cancel_token.cancelled() => Err(ConnectDiagnosticError::cancelled().into()),
         };
 
+        self.keyboard_interactive.cancel(&connection_id);
         self.clear_pending_connection(&connection_id).await;
 
         connect_result?;
@@ -107,10 +290,21 @@ impl ConnectionManager {
         let mut pending = self.pending_connections.write().await;
         if let Some(token) = pending.remove(connection_id) {
             token.cancel();
+            self.keyboard_interactive.cancel(connection_id);
             true
         } else {
             false
         }
+    }
+
+    pub fn respond_to_keyboard_interactive(
+        &self,
+        connection_id: &str,
+        challenge_id: &str,
+        responses: Vec<String>,
+    ) -> Result<()> {
+        self.keyboard_interactive
+            .respond(connection_id, challenge_id, responses)
     }
 
     pub async fn get_connection(&self, connection_id: &str) -> Option<Arc<RwLock<SshClient>>> {
@@ -548,6 +742,104 @@ mod tests {
         let mgr = ConnectionManager::new();
         let cancelled = mgr.cancel_pending_connection("ghost").await;
         assert!(!cancelled);
+    }
+
+    #[tokio::test]
+    async fn keyboard_interactive_accepts_matching_response() {
+        let broker = KeyboardInteractiveBroker::default();
+        let (sender, receiver) = oneshot::channel();
+        broker.pending.lock().unwrap().insert(
+            "conn-1".to_string(),
+            PendingKeyboardInteractiveChallenge {
+                challenge_id: "challenge-1".to_string(),
+                expected_responses: 2,
+                sender,
+            },
+        );
+
+        broker
+            .respond(
+                "conn-1",
+                "challenge-1",
+                vec!["password".to_string(), "123456".to_string()],
+            )
+            .unwrap();
+
+        assert_eq!(
+            receiver.await.unwrap(),
+            vec!["password".to_string(), "123456".to_string()]
+        );
+        assert!(broker.pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn keyboard_interactive_rejects_stale_and_wrong_sized_responses() {
+        let broker = KeyboardInteractiveBroker::default();
+        let (sender, _receiver) = oneshot::channel();
+        broker.pending.lock().unwrap().insert(
+            "conn-1".to_string(),
+            PendingKeyboardInteractiveChallenge {
+                challenge_id: "challenge-current".to_string(),
+                expected_responses: 2,
+                sender,
+            },
+        );
+
+        assert!(broker
+            .respond("conn-1", "challenge-stale", vec!["one".to_string()])
+            .is_err());
+        assert!(broker
+            .respond("conn-1", "challenge-current", vec!["one".to_string()])
+            .is_err());
+        assert!(broker.pending.lock().unwrap().contains_key("conn-1"));
+    }
+
+    #[tokio::test]
+    async fn keyboard_interactive_cancel_drops_waiter() {
+        let broker = KeyboardInteractiveBroker::default();
+        let (sender, receiver) = oneshot::channel();
+        broker.pending.lock().unwrap().insert(
+            "conn-cancel".to_string(),
+            PendingKeyboardInteractiveChallenge {
+                challenge_id: "challenge-cancel".to_string(),
+                expected_responses: 1,
+                sender,
+            },
+        );
+
+        broker.cancel("conn-cancel");
+        assert!(receiver.await.is_err());
+        assert!(broker.pending.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn keyboard_interactive_timeout_cleans_pending_challenge() {
+        let broker = KeyboardInteractiveBroker::default();
+        let (sender, receiver) = oneshot::channel();
+        broker.pending.lock().unwrap().insert(
+            "conn-timeout".to_string(),
+            PendingKeyboardInteractiveChallenge {
+                challenge_id: "challenge-timeout".to_string(),
+                expected_responses: 1,
+                sender,
+            },
+        );
+
+        let error = broker
+            .wait_for_response(
+                "conn-timeout",
+                "challenge-timeout",
+                receiver,
+                Duration::from_millis(1),
+            )
+            .await
+            .unwrap_err();
+        let diagnostic = crate::connection_diagnostics::diagnostic_from_anyhow(&error).unwrap();
+        assert_eq!(
+            diagnostic.kind,
+            crate::connection_diagnostics::ConnectErrorKind::KeyboardInteractiveTimeout
+        );
+        assert!(broker.pending.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

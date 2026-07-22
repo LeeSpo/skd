@@ -81,6 +81,7 @@ const EDITABLE_ERROR_KINDS = new Set([
   'publicKeyUnauthorized',
   'privateKeyFormatUnsupported',
   'privateKeyPassphraseIncorrect',
+  'keyboardInteractiveRejected',
 ]);
 
 interface ConnectionFailureViewProps {
