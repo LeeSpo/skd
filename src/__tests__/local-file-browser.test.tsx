@@ -129,6 +129,73 @@ describe('IntegratedFileBrowser local mode', () => {
     ).toBe('true');
   });
 
+  it('keeps a manually opened folder until the terminal reports a new cwd', async () => {
+    mockedInvoke.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === 'get_home_directory') return '/Users/test';
+      if (command === 'list_local_files') {
+        const path = (args as { path: string }).path;
+        if (path === '/tmp/project') {
+          return [{
+            name: 'manual',
+            file_type: 'Directory',
+            size: 0,
+            modified: '2026-01-01T10:00:00',
+            permissions: 'drwxr-xr-x',
+          }];
+        }
+        if (path === '/tmp/project/manual') {
+          return [{
+            name: 'inside.md',
+            file_type: 'File',
+            size: 64,
+            modified: '2026-01-01T10:00:00',
+            permissions: '-rw-r--r--',
+          }];
+        }
+        if (path === '/var/next') {
+          return [{
+            name: 'next.md',
+            file_type: 'File',
+            size: 64,
+            modified: '2026-01-01T10:00:00',
+            permissions: '-rw-r--r--',
+          }];
+        }
+        return [];
+      }
+      throw new Error(`Unexpected invoke: ${command}`);
+    });
+
+    const view = render(
+      <IntegratedFileBrowser mode="local" terminalCwd="/tmp/project" />,
+    );
+    const manualFolder = await screen.findByText('manual');
+
+    fireEvent.doubleClick(manualFolder);
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', {
+        path: '/tmp/project/manual',
+      });
+      expect(screen.getByText('inside.md')).toBeTruthy();
+    });
+    expect(
+      screen.getByRole('button', { name: 'fileBrowser.toolbar.followTerminal' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+
+    view.rerender(
+      <IntegratedFileBrowser mode="local" terminalCwd="/var/next" />,
+    );
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', {
+        path: '/var/next',
+      });
+      expect(screen.getByText('next.md')).toBeTruthy();
+    });
+  });
+
   it('loads the reported directory for a connected SSH terminal', async () => {
     render(
       <IntegratedFileBrowser

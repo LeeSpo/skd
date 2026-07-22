@@ -646,12 +646,12 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     if (!followTerminalCwd || !props.terminalCwd || !isAvailable) return;
 
     const targetPath = adapter.normalizeNavPath(props.terminalCwd);
-    if (!targetPath.startsWith('/') || targetPath === currentPath) return;
+    if (!targetPath.startsWith('/') || targetPath === committedPathRef.current) return;
 
     void loadFiles(targetPath, { preserveCurrentOnError: true });
   // loadFiles intentionally stays out of deps because it is an inline function.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adapter, currentPath, followTerminalCwd, isAvailable, props.terminalCwd, sessionKey]);
+  }, [adapter, followTerminalCwd, isAvailable, props.terminalCwd, sessionKey]);
 
   const toggleFollowTerminalCwd = () => {
     setFollowTerminalCwd((enabled) => {
