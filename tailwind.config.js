@@ -27,6 +27,7 @@ export default {
           DEFAULT: 'var(--primary)',
           foreground: 'var(--primary-foreground)'
         },
+        'primary-hover': 'var(--primary-hover)',
         secondary: {
           DEFAULT: 'var(--secondary)',
           foreground: 'var(--secondary-foreground)'
@@ -97,6 +98,11 @@ export default {
         workspace: 'var(--workspace-bg)',
         statusbar: 'var(--statusbar-bg)',
         'drop-zone': 'var(--drop-zone)',
+        overlay: 'var(--overlay)',
+        scrollbar: {
+          thumb: 'var(--scrollbar-thumb)',
+          'thumb-hover': 'var(--scrollbar-thumb-hover)',
+        },
       },
       fontFamily: {
         sans: ['var(--font-sans)'],

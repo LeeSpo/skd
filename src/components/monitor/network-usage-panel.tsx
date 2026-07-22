@@ -197,14 +197,14 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
                     dataKey="time"
                     axisLine
                     tick={{ fontSize: 8, fill: 'currentColor' }}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     tickLine={false}
                     interval="preserveStartEnd"
                     minTickGap={50}
                   />
                   <YAxis
                     tick={{ fontSize: 9, fill: 'currentColor' }}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     domain={[-1500, 1500]}
                     ticks={[-1228.8, -614.4, 0, 614.4, 1228.8]}
                     tickFormatter={(value: number) => {
@@ -218,11 +218,11 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
                     width={50}
                     tickLine={false}
                   />
-                  <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} />
+                  <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeWidth={1.5} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--popover))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: 'var(--popover)',
+                      border: '1px solid var(--border)',
                       borderRadius: '6px',
                       fontSize: '11px',
                     }}

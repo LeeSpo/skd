@@ -70,9 +70,9 @@ function statusIcon(status: TransferItem["status"]) {
     case "queued":
       return <Clock className="h-3.5 w-3.5 text-muted-foreground" />;
     case "transferring":
-      return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />;
+      return <Loader2 className="h-3.5 w-3.5 animate-spin text-status-pending" />;
     case "completed":
-      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
+      return <CheckCircle2 className="h-3.5 w-3.5 text-success" />;
     case "failed":
       return <AlertCircle className="h-3.5 w-3.5 text-destructive" />;
     case "cancelled":
@@ -133,7 +133,7 @@ export function TransferQueue({
               </Badge>
             )}
             {completedCount > 0 && (
-              <span className="text-green-500">{t('transferQueue.done', { count: completedCount })}</span>
+              <span className="text-success">{t('transferQueue.done', { count: completedCount })}</span>
             )}
             {failedCount > 0 && (
               <span className="text-destructive">{t('transferQueue.failed', { count: failedCount })}</span>
@@ -169,9 +169,9 @@ export function TransferQueue({
                   className="flex items-center gap-2 px-3 py-1 text-xs"
                 >
                   {item.direction === "upload" ? (
-                    <Upload className="h-3 w-3 text-blue-400 shrink-0" />
+                    <Upload className="h-3 w-3 text-primary shrink-0" />
                   ) : (
-                    <Download className="h-3 w-3 text-green-400 shrink-0" />
+                    <Download className="h-3 w-3 text-primary shrink-0" />
                   )}
                   {statusIcon(item.status)}
                   <span

@@ -84,17 +84,17 @@ export interface SyncDialogProps {
 function actionIcon(action: SyncEntry["action"]) {
   switch (action) {
     case "upload":
-      return <Upload className="h-3.5 w-3.5 text-blue-500" />;
+      return <Upload className="h-3.5 w-3.5 text-primary" />;
     case "download":
-      return <Download className="h-3.5 w-3.5 text-green-500" />;
+      return <Download className="h-3.5 w-3.5 text-primary" />;
     case "create-dir":
-      return <FolderPlus className="h-3.5 w-3.5 text-yellow-500" />;
+      return <FolderPlus className="h-3.5 w-3.5 text-warning" />;
     case "delete-remote":
       return <Trash2 className="h-3.5 w-3.5 text-destructive" />;
     case "skip":
       return <Equal className="h-3.5 w-3.5 text-muted-foreground" />;
     case "conflict":
-      return <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />;
+      return <AlertTriangle className="h-3.5 w-3.5 text-warning" />;
   }
 }
 
@@ -561,7 +561,7 @@ export function SyncDialog({
                   variant="secondary"
                   className="text-[10px] gap-1 h-5"
                 >
-                  <Upload className="h-3 w-3 text-blue-500" />
+                  <Upload className="h-3 w-3 text-primary" />
                   {summary.toUpload} upload
                 </Badge>
               )}
@@ -570,7 +570,7 @@ export function SyncDialog({
                   variant="secondary"
                   className="text-[10px] gap-1 h-5"
                 >
-                  <FolderPlus className="h-3 w-3 text-yellow-500" />
+                  <FolderPlus className="h-3 w-3 text-warning" />
                   {summary.toCreateDir} mkdir
                 </Badge>
               )}
@@ -588,7 +588,7 @@ export function SyncDialog({
                   variant="secondary"
                   className="text-[10px] gap-1 h-5"
                 >
-                  <Download className="h-3 w-3 text-green-500" />
+                  <Download className="h-3 w-3 text-primary" />
                   {summary.toDownload} download
                 </Badge>
               )}

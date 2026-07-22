@@ -1,8 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StatusDot } from '@/components/ui/status-dot';
 import { PanelHeader, PanelToolbar } from '@/components/ui/panel-chrome';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('StatusDot', () => {
   it('renders connected variant with semantic class', () => {
@@ -47,5 +61,18 @@ describe('Tabs variants', () => {
     expect(screen.getByTestId('list').getAttribute('data-variant')).toBe('underline');
     expect(screen.getByRole('tab').getAttribute('data-variant')).toBe('underline');
     expect(screen.getByTestId('list').className).toContain('border-b');
+  });
+});
+
+describe('Interactive control colours', () => {
+  it('uses the primary colour for slider progress and focus state', () => {
+    const { container } = render(<Slider value={[50]} />);
+    expect(container.querySelector('[data-slot="slider-range"]')?.className).toContain('bg-primary');
+    expect(container.querySelector('[data-slot="slider-thumb"]')?.className).toContain('border-primary');
+  });
+
+  it('uses the primary colour for checked switches', () => {
+    render(<Switch checked aria-label="Enabled" />);
+    expect(screen.getByRole('switch').className).toContain('data-[state=checked]:bg-primary');
   });
 });

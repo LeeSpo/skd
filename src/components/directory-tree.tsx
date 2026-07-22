@@ -397,7 +397,7 @@ export function DirectoryTree({
                   aria-label={t('directoryTree.navigateTo', { path: row.path })}
                   disabled={disabled}
                 >
-                  <Folder className="h-4 w-4 text-blue-500 shrink-0" />
+                  <Folder className="h-4 w-4 text-primary shrink-0" />
                   <span className="truncate">{row.name}</span>
                   {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </button>

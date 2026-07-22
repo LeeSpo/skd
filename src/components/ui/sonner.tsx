@@ -13,10 +13,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "rounded-xl border border-border shadow-lg",
-          success: "border-green-500/30",
-          error: "border-red-500/30",
-          warning: "border-yellow-500/30",
-          info: "border-blue-500/30",
+          success: "border-success/30",
+          error: "border-destructive/30",
+          warning: "border-warning/30",
+          info: "border-primary/30",
         },
       }}
       style={

@@ -106,29 +106,29 @@ const LOG_LEVELS: LogLevel[] = ["error", "warn", "info", "debug", "trace"];
 
 const LEVEL_COLORS: Record<LogLevel, { bg: string; text: string; badge: string }> = {
   error: {
-    bg: "bg-red-500/10",
-    text: "text-red-400",
-    badge: "bg-red-500/20 text-red-400 border-red-500/30",
+    bg: "bg-destructive/10",
+    text: "text-destructive",
+    badge: "bg-destructive/15 text-destructive border-destructive/30",
   },
   warn: {
-    bg: "bg-yellow-500/10",
-    text: "text-yellow-400",
-    badge: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+    bg: "bg-warning/10",
+    text: "text-warning",
+    badge: "bg-warning/15 text-warning border-warning/30",
   },
   info: {
-    bg: "bg-blue-500/10",
-    text: "text-blue-400",
-    badge: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    bg: "bg-primary/10",
+    text: "text-primary",
+    badge: "bg-primary/15 text-primary border-primary/30",
   },
   debug: {
-    bg: "bg-gray-500/10",
-    text: "text-gray-400",
-    badge: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+    bg: "bg-muted/50",
+    text: "text-muted-foreground",
+    badge: "bg-muted text-muted-foreground border-border",
   },
   trace: {
-    bg: "bg-purple-500/10",
-    text: "text-purple-400",
-    badge: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    bg: "bg-chart-5/10",
+    text: "text-chart-5",
+    badge: "bg-chart-5/15 text-chart-5 border-chart-5/30",
   },
   unknown: {
     bg: "",
@@ -712,10 +712,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
               <Button
                 size="icon"
                 variant={autoRefresh ? "default" : "ghost"}
-                className={cn(
-                  "h-7 w-7 shrink-0",
-                  autoRefresh && "bg-green-600 hover:bg-green-700 text-white"
-                )}
+                className="h-7 w-7 shrink-0"
                 onClick={() => setAutoRefresh(!autoRefresh)}
                 disabled={!selectedSourceId}
               >
@@ -1030,10 +1027,10 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
             {autoRefresh && (
               <span className="flex items-center gap-1">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
                 </span>
-                <span className="text-green-400">{t('logMonitor.live')}</span>
+                <span className="text-success">{t('logMonitor.live')}</span>
               </span>
             )}
 

@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   defaultAppearanceSettings,
+  defaultTerminalTheme,
   defaultTerminalOptions,
+  getThemeAwareTerminalTheme,
   getTerminalOptions,
   isLegacyLatinOnlyFontFamily,
   LEGACY_LATIN_ONLY_TERMINAL_FONT,
   loadAppearanceSettings,
   MACOS_MULTILINGUAL_TERMINAL_FONT,
   migrateAppearanceSettings,
+  terminalThemes,
 } from '../terminal-config';
 
 describe('terminal multilingual font configuration', () => {
@@ -81,5 +84,59 @@ describe('terminal multilingual font configuration', () => {
 
     expect(migrated.fontFamily).toBe(MACOS_MULTILINGUAL_TERMINAL_FONT);
     expect(migrated.useWebglRenderer).toBe(true);
+  });
+});
+
+describe('palette-aware terminal backgrounds', () => {
+  beforeEach(() => {
+    document.documentElement.className = 'dark';
+    document.documentElement.dataset.colorPalette = 'midnight';
+    document.documentElement.style.setProperty('--terminal-bg', '#050b16');
+  });
+
+  afterEach(() => {
+    document.documentElement.className = '';
+    delete document.documentElement.dataset.colorPalette;
+    document.documentElement.style.removeProperty('--terminal-bg');
+  });
+
+  it('harmonizes the default theme background without changing ANSI colours', () => {
+    const theme = getThemeAwareTerminalTheme({
+      ...defaultAppearanceSettings,
+      theme: 'vs-code-dark',
+    });
+
+    expect(theme.background).toBe('#050b16');
+    expect(theme.foreground).toBe(defaultTerminalTheme.foreground);
+    expect(theme.red).toBe(defaultTerminalTheme.red);
+  });
+
+  it('harmonizes the palette-recommended theme background only', () => {
+    const theme = getThemeAwareTerminalTheme({
+      ...defaultAppearanceSettings,
+      theme: 'tokyo-night',
+    });
+
+    expect(theme.background).toBe('#050b16');
+    expect(theme.blue).toBe(terminalThemes['tokyo-night'].blue);
+  });
+
+  it('preserves a custom terminal theme background', () => {
+    const theme = getThemeAwareTerminalTheme({
+      ...defaultAppearanceSettings,
+      theme: 'dracula',
+    });
+
+    expect(theme.background).toBe(terminalThemes.dracula.background);
+  });
+
+  it('keeps the existing light-mode fallback', () => {
+    document.documentElement.className = '';
+    const theme = getThemeAwareTerminalTheme({
+      ...defaultAppearanceSettings,
+      theme: 'vs-code-dark',
+    });
+
+    expect(theme.background).toBe(terminalThemes['vs-code-light'].background);
   });
 });

@@ -220,14 +220,14 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                           type="category"
                           allowDuplicatedCategory={false}
                           tick={{ fontSize: 8, fill: 'currentColor' }}
-                          stroke="hsl(var(--muted-foreground))"
+                          stroke="var(--muted-foreground)"
                           strokeWidth={0.5}
                           interval="preserveStartEnd"
                           minTickGap={30}
                         />
                         <YAxis
                           tick={{ fontSize: 8, fill: 'currentColor' }}
-                          stroke="hsl(var(--muted-foreground))"
+                          stroke="var(--muted-foreground)"
                           strokeWidth={0.5}
                           domain={[0, 100]}
                           ticks={[0, 50, 100]}
@@ -235,8 +235,8 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
+                            backgroundColor: 'var(--popover)',
+                            border: '1px solid var(--border)',
                             borderRadius: '6px',
                             fontSize: '11px',
                           }}
@@ -401,14 +401,14 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               <XAxis
                                 dataKey="time"
                                 tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="var(--muted-foreground)"
                                 strokeWidth={0.5}
                                 interval="preserveStartEnd"
                                 minTickGap={30}
                               />
                               <YAxis
                                 tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="var(--muted-foreground)"
                                 strokeWidth={0.5}
                                 domain={[0, 100]}
                                 ticks={[0, 50, 100]}
@@ -416,8 +416,8 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               />
                               <Tooltip
                                 contentStyle={{
-                                  backgroundColor: 'hsl(var(--popover))',
-                                  border: '1px solid hsl(var(--border))',
+                                  backgroundColor: 'var(--popover)',
+                                  border: '1px solid var(--border)',
                                   borderRadius: '6px',
                                   fontSize: '11px',
                                 }}
@@ -473,14 +473,14 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               <XAxis
                                 dataKey="time"
                                 tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="var(--muted-foreground)"
                                 strokeWidth={0.5}
                                 interval="preserveStartEnd"
                                 minTickGap={30}
                               />
                               <YAxis
                                 tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="var(--muted-foreground)"
                                 strokeWidth={0.5}
                                 domain={[30, 100]}
                                 ticks={[40, 60, 80]}
@@ -488,8 +488,8 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                               />
                               <Tooltip
                                 contentStyle={{
-                                  backgroundColor: 'hsl(var(--popover))',
-                                  border: '1px solid hsl(var(--border))',
+                                  backgroundColor: 'var(--popover)',
+                                  border: '1px solid var(--border)',
                                   borderRadius: '6px',
                                   fontSize: '11px',
                                 }}

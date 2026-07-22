@@ -740,7 +740,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   const getFileIcon = (file: FileItem) => {
     if (file.type === 'directory') {
-      return <Folder className="h-4 w-4 text-blue-500" />;
+      return <Folder className="h-4 w-4 text-primary" />;
     }
     
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -748,23 +748,23 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       case 'txt':
       case 'md':
       case 'log':
-        return <FileText className="h-4 w-4 text-gray-500" />;
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
       case 'jpg':
       case 'png':
       case 'gif':
       case 'jpeg':
-        return <Image className="h-4 w-4 text-green-500" />;
+        return <Image className="h-4 w-4 text-chart-5" />;
       case 'zip':
       case 'tar':
       case 'gz':
-        return <Archive className="h-4 w-4 text-orange-500" />;
+        return <Archive className="h-4 w-4 text-warning" />;
       case 'js':
       case 'py':
       case 'sh':
       case 'json':
-        return <Code className="h-4 w-4 text-purple-500" />;
+        return <Code className="h-4 w-4 text-chart-5" />;
       default:
-        return <File className="h-4 w-4 text-gray-400" />;
+        return <File className="h-4 w-4 text-muted-foreground" />;
     }
   };
 

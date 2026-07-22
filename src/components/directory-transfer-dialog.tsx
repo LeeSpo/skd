@@ -353,9 +353,9 @@ export function DirectoryTransferDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             {direction === "upload" ? (
-              <FolderUp className="h-5 w-5 text-blue-500" />
+              <FolderUp className="h-5 w-5 text-primary" />
             ) : (
-              <FolderDown className="h-5 w-5 text-green-500" />
+              <FolderDown className="h-5 w-5 text-primary" />
             )}
             {direction === "upload"
               ? t('directoryTransferDialog.title.upload')
@@ -390,9 +390,9 @@ export function DirectoryTransferDialog({
             {progress.phase === "transferring" && (
               <>
                 {direction === "upload" ? (
-                  <Upload className="h-4 w-4 text-blue-500" />
+                  <Upload className="h-4 w-4 text-primary" />
                 ) : (
-                  <Download className="h-4 w-4 text-green-500" />
+                  <Download className="h-4 w-4 text-primary" />
                 )}
                 <span className="text-sm">
                   {progress.currentItem ?? t('directoryTransferDialog.status.preparing')}
@@ -401,8 +401,8 @@ export function DirectoryTransferDialog({
             )}
             {progress.phase === "completed" && (
               <>
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <span className="text-sm text-success">
                   {t('directoryTransferDialog.status.complete')}
                 </span>
               </>

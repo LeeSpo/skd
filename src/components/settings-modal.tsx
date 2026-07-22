@@ -99,9 +99,9 @@ interface AppSettings {
 }
 
 const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> = {
-  graphite: ['#15171A', '#22262C', '#5EA7FF'],
-  midnight: ['#0B1020', '#18223A', '#7AA2F7'],
-  nordic: ['#242933', '#3B4252', '#88C0D0'],
+  graphite: ['#11141A', '#1D232D', '#5B8FF9'],
+  midnight: ['#07101F', '#14223A', '#6B9BFA'],
+  nordic: ['#20262F', '#303947', '#88C0D0'],
 };
 
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {

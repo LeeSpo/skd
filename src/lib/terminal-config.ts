@@ -1,5 +1,6 @@
 // Terminal configuration and utilities
 import { ITerminalOptions, ITheme } from '@xterm/xterm';
+import { normalizeColorPalette, PALETTE_TERMINAL_THEMES } from './utils';
 
 export interface TerminalConfig {
   rendererType: 'webgl' | 'canvas' | 'dom';
@@ -483,7 +484,8 @@ export function getOptimalFontSize(containerWidth: number, cols: number): number
 }
 
 export function getThemeAwareTerminalTheme(settings: TerminalAppearanceSettings): ITheme {
-  const isDark = document.documentElement.classList.contains('dark');
+  const root = document.documentElement;
+  const isDark = root.classList.contains('dark');
   let theme = terminalThemes[settings.theme] || defaultTerminalTheme;
   
   // Only auto-switch the default vs-code-dark theme in light mode.
@@ -496,6 +498,23 @@ export function getThemeAwareTerminalTheme(settings: TerminalAppearanceSettings)
     const lightThemeName = settings.theme.replace('-dark', '-light');
     if (lightThemeName !== settings.theme && terminalThemes[lightThemeName]) {
       theme = terminalThemes[lightThemeName];
+    }
+  } else {
+    const palette = normalizeColorPalette(root.dataset.colorPalette);
+    const usesPaletteManagedBackground =
+      settings.theme === 'vs-code-dark'
+      || settings.theme === PALETTE_TERMINAL_THEMES[palette];
+    const paletteBackground = getComputedStyle(root)
+      .getPropertyValue('--terminal-bg')
+      .trim();
+
+    if (usesPaletteManagedBackground && paletteBackground) {
+      theme = {
+        ...theme,
+        // Keep the preset's ANSI, foreground and cursor colours intact; only
+        // harmonize the default/recommended background with the app palette.
+        background: paletteBackground,
+      };
     }
   }
   

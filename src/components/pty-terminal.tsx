@@ -11,8 +11,6 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   loadAppearanceSettings,
   getThemeAwareTerminalOptions,
-  terminalThemes,
-  defaultTerminalTheme,
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
@@ -182,6 +180,8 @@ export function PtyTerminal({
     () => loadAppearanceSettings(),
     [appearanceKey, settingsRevision],
   );
+  const resolvedTerminalBackground =
+    getThemeAwareTerminalOptions(appearance).theme?.background ?? '#1e1e1e';
   
   // Track whether we need to switch renderers due to background image change
   // This is necessary because WebGL renderer doesn't support transparency
@@ -1088,7 +1088,7 @@ export function PtyTerminal({
       }}
       style={{
         opacity: appearance.allowTransparency ? appearance.opacity / 100 : 1,
-        backgroundColor: (terminalThemes[appearance.theme] || defaultTerminalTheme).background || '#1e1e1e',
+        backgroundColor: resolvedTerminalBackground,
       }}
     >
       {/* Background image layer */}
@@ -1126,7 +1126,7 @@ export function PtyTerminal({
       <style>{`
         /* Scrollbar appearance — scoped to this terminal instance */
         .pty-term-${scopeId} .xterm-viewport {
-          scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+          scrollbar-color: var(--scrollbar-thumb) transparent;
           scrollbar-width: ${hasScrollableContent ? 'thin' : 'none'};
           scrollbar-gutter: ${hasScrollableContent ? 'stable' : 'auto'};
           overflow-y: ${hasScrollableContent ? 'auto' : 'hidden'};
@@ -1137,14 +1137,14 @@ export function PtyTerminal({
           height: 10px;
         }
         .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-thumb {
-          background-color: rgba(148, 163, 184, 0.55);
+          background-color: var(--scrollbar-thumb);
           border: 2px solid transparent;
           border-radius: 999px;
           background-clip: content-box;
           min-height: 40px;
         }
         .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(148, 163, 184, 0.75);
+          background-color: var(--scrollbar-thumb-hover);
         }
         .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-track {
           background: transparent;

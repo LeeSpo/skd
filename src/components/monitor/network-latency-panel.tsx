@@ -75,19 +75,19 @@ export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPane
                 <XAxis
                   dataKey="time"
                   tick={{ fontSize: 8, fill: 'currentColor' }}
-                  stroke="hsl(var(--muted-foreground))"
+                  stroke="var(--muted-foreground)"
                   strokeWidth={0.5}
                 />
                 <YAxis
                   tick={{ fontSize: 8, fill: 'currentColor' }}
-                  stroke="hsl(var(--muted-foreground))"
+                  stroke="var(--muted-foreground)"
                   strokeWidth={0.5}
                   width={30}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: 'hsl(var(--popover))',
-                    border: '1px solid hsl(var(--border))',
+                    backgroundColor: 'var(--popover)',
+                    border: '1px solid var(--border)',
                     borderRadius: '6px',
                     fontSize: '12px',
                   }}

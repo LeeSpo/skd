@@ -28,16 +28,16 @@ export type RemoteFileEntry = FileEntry;
 
 export function getFileIcon(entry: FileEntry) {
   if (entry.file_type === "Directory")
-    return <Folder className="h-4 w-4 text-yellow-500" />;
+    return <Folder className="h-4 w-4 text-primary" />;
   if (entry.file_type === "Symlink")
-    return <Link className="h-4 w-4 text-blue-400" />;
+    return <Link className="h-4 w-4 text-primary" />;
   const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
   if (
     ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"].includes(ext)
   )
-    return <Image className="h-4 w-4 text-green-400" />;
+    return <Image className="h-4 w-4 text-chart-5" />;
   if (["zip", "tar", "gz", "bz2", "xz", "7z", "rar"].includes(ext))
-    return <Archive className="h-4 w-4 text-orange-400" />;
+    return <Archive className="h-4 w-4 text-warning" />;
   if (
     [
       "js",
@@ -55,7 +55,7 @@ export function getFileIcon(entry: FileEntry) {
       "lua",
     ].includes(ext)
   )
-    return <Code className="h-4 w-4 text-purple-400" />;
+    return <Code className="h-4 w-4 text-chart-5" />;
   if (
     [
       "md",
