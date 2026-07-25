@@ -3426,6 +3426,12 @@ pub fn delete_connection_secrets(connection_id: String) -> Result<(), String> {
 
 // ========== Native Menu i18n ==========
 
+/// Exit the entire application, including auxiliary windows.
+#[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 /// Rebuild the native macOS menu bar with translated labels from the frontend.
 #[tauri::command]
 pub async fn update_menu_language(

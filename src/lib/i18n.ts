@@ -6,7 +6,7 @@ import en from '@/locales/en.json';
 /** Keys used by the native macOS menu bar */
 const NATIVE_MENU_KEYS = [
   'menuBar.file', 'menuBar.edit', 'menuBar.tools', 'menuBar.connection', 'menuBar.window',
-  'menuBar.newConnection', 'menuBar.newLocalTerminal', 'menuBar.saveConnection', 'menuBar.closeTab',
+  'menuBar.newConnection', 'menuBar.newLocalTerminal', 'menuBar.saveConnection', 'menuBar.close',
   'menuBar.find', 'menuBar.clearScreen',
   'menuBar.options', 'menuBar.checkForUpdates',
   'menuBar.newTab', 'menuBar.duplicateTab', 'menuBar.nextTab', 'menuBar.previousTab',

@@ -16,7 +16,7 @@ mod websocket_server;
 use connection_manager::ConnectionManager;
 use std::sync::atomic::AtomicU16;
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use websocket_server::WebSocketServer;
 
 // Global atomic to store the WebSocket port (shared between backend and frontend)
@@ -81,9 +81,9 @@ fn build_app_menu<F: Fn(&str) -> String>(
             &MenuItem::with_id(
                 app,
                 "close_connection",
-                &t("menuBar.closeTab"),
+                &t("menuBar.close"),
                 true,
-                None::<&str>,
+                Some("CmdOrCtrl+W"),
             )?,
         ],
     )?;
@@ -197,7 +197,7 @@ fn default_menu_text(key: &str) -> String {
         "menuBar.newConnection" => "New Connection...",
         "menuBar.newLocalTerminal" => "New Local Terminal",
         "menuBar.saveConnection" => "Save Connection",
-        "menuBar.closeTab" => "Close Tab",
+        "menuBar.close" => "Close",
         "menuBar.find" => "Find...",
         "menuBar.clearScreen" => "Clear Screen",
         "menuBar.options" => "Options...",
@@ -259,8 +259,27 @@ pub fn run() {
             }
         })
         .on_menu_event(|app, event| {
-            // Forward custom menu item IDs to the frontend so React can handle them
-            let _ = app.emit("menu-action", event.id().0.as_str());
+            let menu_id = event.id().0.as_str();
+
+            // Close is context-sensitive: auxiliary windows close themselves,
+            // while the main window decides between closing its active tab and
+            // exiting an already-empty workspace.
+            if menu_id == "close_connection" {
+                let focused_window = app
+                    .webview_windows()
+                    .into_values()
+                    .find(|window| window.is_focused().unwrap_or(false));
+                if let Some(window) = focused_window {
+                    if window.label() != "main" {
+                        let _ = window.close();
+                        return;
+                    }
+                }
+            }
+
+            // Send app actions only to the main window. A global emit would make
+            // Cmd+W in a file viewer close a terminal tab in the background.
+            let _ = app.emit_to("main", "menu-action", menu_id);
         })
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
@@ -300,6 +319,7 @@ pub fn run() {
             commands::read_file_content,
             commands::read_remote_file_base64,
             commands::copy_file,
+            commands::quit_app,
             commands::detect_gpu,
             commands::get_gpu_stats,
             commands::get_websocket_port,

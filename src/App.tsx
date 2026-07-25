@@ -52,6 +52,7 @@ import {
   useKeyboardInteractive,
 } from './lib/keyboard-interactive-context';
 import { useTerminalCwd } from './lib/terminal-cwd-store';
+import { resolveMainWindowCloseAction } from './lib/window-close';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
@@ -273,6 +274,17 @@ function AppContent() {
     }
   }, [allTabs, clearAttempt]);
 
+  const handleMainWindowClose = useCallback(() => {
+    const action = resolveMainWindowCloseAction(activeGroup);
+    if (action.type === 'quit-app') {
+      void invoke('quit_app');
+      return;
+    }
+
+    void handleTabClose(action.tabId);
+    dispatch({ type: 'REMOVE_TAB', groupId: action.groupId, tabId: action.tabId });
+  }, [activeGroup, dispatch, handleTabClose]);
+
   const handleNewLocalTab = useCallback(() => {
     const tabId = `local-${Date.now()}`;
     const newTab: TerminalTab = {
@@ -320,10 +332,7 @@ function AppContent() {
           }
         },
         closeTab: () => {
-          if (activeGroup && activeGroup.activeTabId) {
-            void handleTabClose(activeGroup.activeTabId);
-            dispatch({ type: 'REMOVE_TAB', groupId: activeGroup.id, tabId: activeGroup.activeTabId });
-          }
+          handleMainWindowClose();
         },
         nextTab: () => {
           if (activeGroup && activeGroup.activeTabId && activeGroup.tabs.length > 1) {
@@ -342,7 +351,7 @@ function AppContent() {
       },
       keyboardShortcutSettings,
     );
-  }, [state.activeGroupId, state.groups, activeGroup, dispatch, keyboardShortcutSettings, handleTabClose]);
+  }, [state.activeGroupId, state.groups, activeGroup, dispatch, keyboardShortcutSettings, handleMainWindowClose]);
 
   const localTerminalShortcuts = useMemo<KeyboardShortcut[]>(() => [
     {
@@ -1142,10 +1151,7 @@ function AppContent() {
           void handleNewLocalTab();
           break;
         case 'close_connection':
-          if (activeGroup && activeGroup.activeTabId) {
-            void handleTabClose(activeGroup.activeTabId);
-            dispatch({ type: 'REMOVE_TAB', groupId: activeGroup.id, tabId: activeGroup.activeTabId });
-          }
+          handleMainWindowClose();
           break;
         case 'clone_tab':
           if (activeTab) { handleDuplicateTab(activeTab.id); }
@@ -1178,7 +1184,7 @@ function AppContent() {
       }
     });
     return () => { unlistenPromise.then(fn => fn()); };
-  }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleTabClose, handleOpenSettings, handleOpenPortForward, handleDuplicateTab, dispatch]);
+  }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleMainWindowClose, handleOpenSettings, handleOpenPortForward, handleDuplicateTab, dispatch]);
 
   const handleEditConnection = useCallback((connection: ConnectionNode) => {
     if (connection.type === 'connection') {
