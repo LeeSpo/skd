@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-25
+
+### Added
+
+- **SSH Keyboard-Interactive Authentication**: Added backend support and UI prompt handling for SSH `keyboard-interactive` (2FA / OTP / multi-prompt) authentication flows.
+- **Context-Sensitive Window Close & Quit**: Implemented context-aware main window close logic and explicit quit command handling.
+
 ### Changed
 
-- Upgraded `russh` from 0.44 to 0.62.3 to incorporate current denial-of-service protections while preserving password, private-key, keyboard-interactive, SFTP, port-forwarding, and legacy `ssh-rsa` compatibility.
+- **Russh Upgrade**: Upgraded `russh` from 0.44 to 0.62.3 to incorporate current denial-of-service protections while preserving password, private-key, keyboard-interactive, SFTP, port-forwarding, and legacy `ssh-rsa` compatibility.
+- **Color Palette & UI System**: Standardized CSS variable color tokens across UI components and added theme validation contract tests.
+
+### Fixed
+
+- **File Browser Navigation**: Fixed an issue where shell CWD integration updates could overwrite manual folder navigation in the integrated file browser.
 
 ## [0.2.2] - 2026-07-21
 
