@@ -442,16 +442,16 @@ export function ConnectionManager({
         onDragEnd={handleDragEnd}
       >
         {node.type === 'folder' && (
-          <Button variant="ghost" size="sm" className="p-0 h-4 w-4">
+          <Button variant="ghost" size="sm" className="h-4 w-4 shrink-0 p-0">
             {node.isExpanded ?
               <ChevronDown className="w-3 h-3" /> :
               <ChevronRight className="w-3 h-3" />
             }
           </Button>
         )}
-        {node.type === 'connection' && <div className="w-4" />}
+        {node.type === 'connection' && <div className="h-4 w-4 shrink-0" />}
 
-        <div className="relative">
+        <div className="relative shrink-0">
           {getIcon(node)}
           {isConnected && (
             <StatusDot
@@ -460,7 +460,7 @@ export function ConnectionManager({
             />
           )}
         </div>
-        <span className="text-sm flex-1">{node.name}</span>
+        <span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
       </div>
     );
 
