@@ -308,11 +308,11 @@ export function GroupTabBar({
 
   return (
     <>
-      <div className="flex items-center border-b border-panel-border bg-panel-toolbar">
+      <div className="flex h-8 shrink-0 items-center border-b border-panel-border bg-panel-toolbar">
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`relative flex flex-1 items-center overflow-x-auto transition-colors ${
+          className={`relative flex h-full flex-1 items-center overflow-x-auto transition-colors ${
             isDragOver ? 'bg-accent/40' : ''
           }`}
         >
@@ -320,13 +320,13 @@ export function GroupTabBar({
             <React.Fragment key={tab.id}>
               {/* Insertion indicator line */}
               {dropIndex === index && (
-                <div className="w-0.5 h-6 bg-primary shrink-0" />
+                <div className="w-0.5 h-4 bg-primary shrink-0" />
               )}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    className={`group flex min-w-0 cursor-pointer select-none items-center gap-2 border-r border-t-2 border-panel-border px-3 py-2 outline-none focus:outline-none focus-visible:outline-none ${
+                    className={`group box-border flex h-full min-w-0 cursor-pointer select-none items-center gap-1.5 border-r border-t-2 border-panel-border px-2.5 outline-none focus:outline-none focus-visible:outline-none ${
                       tab.id === activeTabId
                         ? 'border-t-primary bg-surface-raised text-foreground'
                         : 'border-t-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground'
@@ -336,7 +336,7 @@ export function GroupTabBar({
                     draggable={false}
                     onClick={() => handleTabSelect(tab.id)}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex min-w-0 items-center gap-1.5">
                       {tab.tabType === 'file-browser' ? (
                         <FolderSync className="h-3.5 w-3.5 shrink-0 text-warning" />
                       ) : tab.tabType === 'editor' ? (
@@ -353,7 +353,7 @@ export function GroupTabBar({
                               : 'disconnected'
                         }
                       />
-                      <span className="text-sm truncate">{getTabDisplayName(tab, tabs)}</span>
+                      <span className="truncate text-sm leading-none">{getTabDisplayName(tab, tabs)}</span>
                     </div>
 
                     <Button
@@ -448,18 +448,18 @@ export function GroupTabBar({
           ))}
           {/* Insertion indicator at the end */}
           {dropIndex === tabs.length && (
-            <div className="w-0.5 h-6 bg-primary shrink-0" />
+            <div className="w-0.5 h-4 bg-primary shrink-0" />
           )}
         </div>
 
         {/* Add new tab button */}
         <Button
           variant="ghost"
-          size="sm"
-          className="p-2 h-8 w-8"
+          size="toolbar"
+          className="mx-1"
           onClick={onNewTab}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
 

@@ -45,6 +45,17 @@ describe('PanelChrome', () => {
     expect(screen.getByTestId('header').getAttribute('data-slot')).toBe('panel-header');
     expect(screen.getByTestId('toolbar').getAttribute('data-slot')).toBe('panel-toolbar');
   });
+
+  it('uses fixed h-8 chrome height for default density', () => {
+    render(
+      <div>
+        <PanelHeader data-testid="header">Header</PanelHeader>
+        <PanelToolbar data-testid="toolbar">Toolbar</PanelToolbar>
+      </div>,
+    );
+    expect(screen.getByTestId('header').className).toContain('h-8');
+    expect(screen.getByTestId('toolbar').className).toContain('h-8');
+  });
 });
 
 describe('Tabs variants', () => {
