@@ -14,6 +14,7 @@ import {
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
+import { selectTerminalContent } from '@/lib/terminal-selection';
 import { TerminalSearchBar } from './terminal/terminal-search-bar';
 import { toast } from 'sonner';
 import { signalReady } from '../lib/restoration-manager';
@@ -358,7 +359,7 @@ export function PtyTerminal({
       // Handle select all shortcut
       if (modKey && key === 'a') {
         event.preventDefault();
-        term.selectAll();
+        selectTerminalContent(term);
         return false;
       }
       
@@ -1003,7 +1004,10 @@ export function PtyTerminal({
   }, []);
 
   const handleSelectAll = React.useCallback(() => {
-    xtermRef.current?.selectAll();
+    const term = xtermRef.current;
+    if (term) {
+      selectTerminalContent(term);
+    }
   }, []);
 
   const { onReconnectTab } = useTerminalCallbacks();
