@@ -291,3 +291,17 @@ skd is English-only. User-facing strings are centralized in `react-i18next` with
 - **Do NOT translate**: protocol values (`"SSH"`), keyboard symbols (`⌘N`), font names, Rust error messages in toast descriptions, layout preset internal names
 - **Select option values**: Only translate display text, never the `value` attribute passed to backend
 - **After adding new strings**: Add keys to `en.json` only
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the default five canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Uses a single-context layout. See `docs/agents/domain.md`.

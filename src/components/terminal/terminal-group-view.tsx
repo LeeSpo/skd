@@ -150,6 +150,8 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
   const {
     onDuplicateTab,
     onNewTab,
+    onNewLocalTab,
+    onOpenSavedConnection,
     onReconnectTab,
   } = useTerminalCallbacks();
   const group = state.groups[groupId];
@@ -228,7 +230,9 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
           activeTabId={group.activeTabId}
           onReconnect={handleReconnect}
           onDuplicateTab={onDuplicateTab}
-          onNewTab={onNewTab}
+          onNewConnection={onNewTab}
+          onNewLocalTerminal={onNewLocalTab}
+          onOpenSavedConnection={onOpenSavedConnection}
         />
       </div>
       <div

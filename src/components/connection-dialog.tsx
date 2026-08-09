@@ -62,6 +62,8 @@ interface ConnectionDialogProps {
   onOpenChange: (open: boolean) => void;
   onConnect: (config: ConnectionConfig) => void;
   editingConnection?: ConnectionConfig | null;
+  /** Backend session ID to use while editing an existing saved profile. */
+  sessionIdOverride?: string;
 }
 
 export interface ConnectionConfig {
@@ -99,7 +101,8 @@ export function ConnectionDialog({
   open,
   onOpenChange,
   onConnect,
-  editingConnection
+  editingConnection,
+  sessionIdOverride,
 }: ConnectionDialogProps) {
   const defaultConfig: ConnectionConfig = {
     name: '',
@@ -376,7 +379,7 @@ export function ConnectionDialog({
     setIsConnecting(true);
     setIsCancelling(false);
     cancelRequestedRef.current = false;
-    const connectionId = editingConnection?.id || `connection-${Date.now()}`;
+    const connectionId = sessionIdOverride || editingConnection?.id || `connection-${Date.now()}`;
     connectionIdRef.current = connectionId;
 
     const storedConnection = editingConnection?.id

@@ -117,6 +117,11 @@ function AppContent() {
 
   // Modal states
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [connectionDialogSession, setConnectionDialogSession] = useState<{
+    sessionId: string;
+    profileId: string;
+    targetGroupId: string;
+  } | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
@@ -399,113 +404,65 @@ function AppContent() {
     }
   };
 
-  const handleConnectionConnect = async (connection: ConnectionNode) => {
-    if (connection.type === 'connection') {
-      setSelectedConnection(connection);
+  const handleOpenSavedConnection = useCallback(async (connectionId: string, targetGroupId: string) => {
+    // Check if this connection already has a session in ANY group (including active).
+    // If so, we need a unique session ID to avoid sharing the same backend connection.
+    const existsAnywhere = allTabs.some(
+      tab => tab.id === connectionId || tab.originalConnectionId === connectionId
+    );
 
-      // Check if this connection already has a session in ANY group (including active).
-      // If so, we need a unique session ID to avoid sharing the same backend connection.
-      const existsAnywhere = allTabs.some(
-        tab => tab.id === connection.id || tab.originalConnectionId === connection.id
-      );
+    const connectionMeta = ConnectionStorageManager.getConnection(connectionId);
+    if (!connectionMeta) return;
 
-      const connectionMeta = ConnectionStorageManager.getConnection(connection.id);
-      if (!connectionMeta) return;
+    const isSftp = connectionMeta.protocol === 'SFTP';
+    const isFtp = connectionMeta.protocol === 'FTP';
+    const isFileBrowser = isSftp || isFtp;
 
-      const isSftp = connectionMeta.protocol === 'SFTP';
-      const isFtp = connectionMeta.protocol === 'FTP';
-      const isFileBrowser = isSftp || isFtp;
-
-      if (!connectionHasStoredCredentials(connectionMeta)) {
-        setEditingConnection({
-          id: connection.id,
-          name: connectionMeta.name,
-          protocol: connectionMeta.protocol as ConnectionConfig['protocol'],
-          host: connectionMeta.host,
-          port: connectionMeta.port,
-          username: connectionMeta.username,
-          authMethod: connectionMeta.authMethod || 'password',
-        });
-        setConnectionDialogOpen(true);
-        return;
-      }
-
-      const connectionData = await getConnectionWithCredentials(connection.id);
-      if (!connectionData) return;
-
-      // Use a unique session ID if the connection already exists anywhere
+    if (!connectionHasStoredCredentials(connectionMeta)) {
       const sessionId = existsAnywhere
-        ? `${connection.id}-dup-${Date.now()}`
-        : connection.id;
+        ? `${connectionId}-dup-${Date.now()}`
+        : connectionId;
+      setConnectionDialogSession({ sessionId, profileId: connectionId, targetGroupId });
+      setEditingConnection({
+        id: connectionId,
+        name: connectionMeta.name,
+        protocol: connectionMeta.protocol as ConnectionConfig['protocol'],
+        host: connectionMeta.host,
+        port: connectionMeta.port,
+        username: connectionMeta.username,
+        authMethod: connectionMeta.authMethod || 'password',
+      });
+      setConnectionDialogOpen(true);
+      return;
+    }
 
-      if (isFileBrowser) {
-        // SFTP/FTP connect flow
-        const newTab: TerminalTab = {
-          id: sessionId,
-          name: connectionData.name,
-          tabType: 'file-browser',
-          protocol: connectionData.protocol,
-          host: connectionData.host,
-          username: connectionData.username,
-          originalConnectionId: existsAnywhere ? connection.id : undefined,
-          connectionStatus: 'connecting',
-          reconnectCount: 0,
-        };
-        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+    const connectionData = await getConnectionWithCredentials(connectionId);
+    if (!connectionData) return;
 
-        try {
-          if (isSftp) {
-            const auth = await buildAuthRequest(connectionData);
-            const sftpResult = await sftpConnectWithHostKeyTrust(
-              {
-                connection_id: sessionId,
-                host: connectionData.host,
-                port: connectionData.port || 22,
-                username: connectionData.username,
-                ...auth,
-              },
-              onHostKeyTrustRequired,
-            );
-            if (!sftpResult.success) {
-              throw new Error(sftpResult.error || 'SFTP connection failed');
-            }
-          } else {
-            await invoke('ftp_connect', {
-              request: {
-                connection_id: sessionId,
-                host: connectionData.host,
-                port: connectionData.port || 21,
-                username: connectionData.username || '',
-                password: connectionData.password || '',
-                ftps_enabled: connectionData.ftpsEnabled ?? false,
-                anonymous: connectionData.authMethod === 'anonymous',
-              }
-            });
-          }
-          ConnectionStorageManager.updateLastConnected(connection.id);
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connected' });
-        } catch (error) {
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
-          toast.error(t('app.connectionFailed'), {
-            description: error instanceof Error ? error.message : String(error),
-          });
-        }
-      } else {
-        const newTab: TerminalTab = {
-          id: sessionId,
-          name: connectionData.name,
-          protocol: connectionData.protocol,
-          host: connectionData.host,
-          username: connectionData.username,
-          originalConnectionId: existsAnywhere ? connection.id : undefined,
-          connectionStatus: 'pending',
-          reconnectCount: 0,
-        };
-        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+    // Use a unique session ID if the connection already exists anywhere
+    const sessionId = existsAnywhere
+      ? `${connectionId}-dup-${Date.now()}`
+      : connectionId;
 
-        try {
+    if (isFileBrowser) {
+      // SFTP/FTP connect flow
+      const newTab: TerminalTab = {
+        id: sessionId,
+        name: connectionData.name,
+        tabType: 'file-browser',
+        protocol: connectionData.protocol,
+        host: connectionData.host,
+        username: connectionData.username,
+        originalConnectionId: existsAnywhere ? connectionId : undefined,
+        connectionStatus: 'connecting',
+        reconnectCount: 0,
+      };
+      dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
+
+      try {
+        if (isSftp) {
           const auth = await buildAuthRequest(connectionData);
-          const result = await connectSshWithDiagnostics(
+          const sftpResult = await sftpConnectWithHostKeyTrust(
             {
               connection_id: sessionId,
               host: connectionData.host,
@@ -515,27 +472,81 @@ function AppContent() {
             },
             onHostKeyTrustRequired,
           );
-
-          if (result.success) {
-            ConnectionStorageManager.updateLastConnected(connection.id);
-            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connecting' });
-          } else {
-            console.error('SSH connection failed:', result.error);
-            dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
-            {
-              const formatted = formatConnectError(t, result);
-              toast.error(formatted?.title ?? t('app.connectionFailed'));
-            }
+          if (!sftpResult.success) {
+            throw new Error(sftpResult.error || 'SFTP connection failed');
           }
-        } catch (error) {
-          console.error('Error connecting to SSH:', error);
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
-          toast.error(t('app.connectionError'), {
-            description: error instanceof Error ? error.message : t('app.connectionErrorDesc'),
+        } else {
+          await invoke('ftp_connect', {
+            request: {
+              connection_id: sessionId,
+              host: connectionData.host,
+              port: connectionData.port || 21,
+              username: connectionData.username || '',
+              password: connectionData.password || '',
+              ftps_enabled: connectionData.ftpsEnabled ?? false,
+              anonymous: connectionData.authMethod === 'anonymous',
+            }
           });
         }
+        ConnectionStorageManager.updateLastConnected(connectionId);
+        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connected' });
+      } catch (error) {
+        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
+        toast.error(t('app.connectionFailed'), {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else {
+      const newTab: TerminalTab = {
+        id: sessionId,
+        name: connectionData.name,
+        protocol: connectionData.protocol,
+        host: connectionData.host,
+        username: connectionData.username,
+        originalConnectionId: existsAnywhere ? connectionId : undefined,
+        connectionStatus: 'pending',
+        reconnectCount: 0,
+      };
+      dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
+
+      try {
+        const auth = await buildAuthRequest(connectionData);
+        const result = await connectSshWithDiagnostics(
+          {
+            connection_id: sessionId,
+            host: connectionData.host,
+            port: connectionData.port || 22,
+            username: connectionData.username,
+            ...auth,
+          },
+          onHostKeyTrustRequired,
+        );
+
+        if (result.success) {
+          ConnectionStorageManager.updateLastConnected(connectionId);
+          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connecting' });
+        } else {
+          console.error('SSH connection failed:', result.error);
+          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
+          {
+            const formatted = formatConnectError(t, result);
+            toast.error(formatted?.title ?? t('app.connectionFailed'));
+          }
+        }
+      } catch (error) {
+        console.error('Error connecting to SSH:', error);
+        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
+        toast.error(t('app.connectionError'), {
+          description: error instanceof Error ? error.message : t('app.connectionErrorDesc'),
+        });
       }
     }
+  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, t]);
+
+  const handleConnectionConnect = async (connection: ConnectionNode) => {
+    if (connection.type !== 'connection') return;
+    setSelectedConnection(connection);
+    await handleOpenSavedConnection(connection.id, state.activeGroupId);
   };
 
   const handleTabSelect = useCallback((tabId: string) => {
@@ -573,6 +584,7 @@ function AppContent() {
   }, [state.groups, dispatch]);
 
   const handleNewTab = useCallback(() => {
+    setConnectionDialogSession(null);
     setConnectionDialogOpen(true);
     setEditingConnection(null);
   }, []);
@@ -972,7 +984,9 @@ function AppContent() {
   }, [openFileInEditorWindow]);
 
   const handleConnectionDialogConnect = useCallback(async (config: ConnectionConfig) => {
-    const tabId = config.id || `connection-${Date.now()}`;
+    const tabId = connectionDialogSession?.sessionId || config.id || `connection-${Date.now()}`;
+    const targetGroupId = connectionDialogSession?.targetGroupId || state.activeGroupId;
+    const originalConnectionId = connectionDialogSession?.profileId;
     const isSftp = config.protocol === 'SFTP';
     const isFtp = config.protocol === 'FTP';
     const isFileBrowser = isSftp || isFtp;
@@ -1045,7 +1059,10 @@ function AppContent() {
           connectionStatus: 'connecting',
           reconnectCount: 0,
         };
-        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+        if (originalConnectionId && originalConnectionId !== tabId) {
+          newTab.originalConnectionId = originalConnectionId;
+        }
+        dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
 
         try {
           if (isSftp) {
@@ -1078,7 +1095,7 @@ function AppContent() {
               }
             });
           }
-          ConnectionStorageManager.updateLastConnected(config.id || tabId);
+          ConnectionStorageManager.updateLastConnected(originalConnectionId || config.id || tabId);
           dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'connected' });
         } catch (error) {
           dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'disconnected' });
@@ -1096,11 +1113,15 @@ function AppContent() {
           username: config.username,
           connectionStatus: 'connecting',
           reconnectCount: 0,
+          originalConnectionId:
+            originalConnectionId && originalConnectionId !== tabId
+              ? originalConnectionId
+              : undefined,
         };
-        dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: newTab });
+        dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
       }
     }
-  }, [allTabs, state.groups, state.activeGroupId, dispatch, onHostKeyTrustRequired, t]);
+  }, [allTabs, connectionDialogSession, state.groups, state.activeGroupId, dispatch, onHostKeyTrustRequired, t]);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsModalOpen(true);
@@ -1403,6 +1424,7 @@ function AppContent() {
     onDuplicateTab: handleDuplicateTab,
     onNewTab: handleNewTab,
     onNewLocalTab: handleNewLocalTab,
+    onOpenSavedConnection: handleOpenSavedConnection,
     onReconnectTab: handleReconnect,
     onEditConnection: handleEditConnectionForTab,
     onTabClose: handleTabClose,
@@ -1411,6 +1433,7 @@ function AppContent() {
     handleDuplicateTab,
     handleNewTab,
     handleNewLocalTab,
+    handleOpenSavedConnection,
     handleReconnect,
     handleEditConnectionForTab,
     handleTabClose,
@@ -1634,9 +1657,13 @@ function AppContent() {
         {connectionDialogOpen && (
           <ConnectionDialog
             open={connectionDialogOpen}
-            onOpenChange={setConnectionDialogOpen}
+            onOpenChange={(open) => {
+              setConnectionDialogOpen(open);
+              if (!open) setConnectionDialogSession(null);
+            }}
             onConnect={handleConnectionDialogConnect}
             editingConnection={editingConnection}
+            sessionIdOverride={connectionDialogSession?.sessionId}
           />
         )}
 

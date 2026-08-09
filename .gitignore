@@ -26,3 +26,7 @@ target
 *.sw?
 
 .superpowers/*
+
+# Local agent skills and installer metadata
+.agents/
+skills-lock.json

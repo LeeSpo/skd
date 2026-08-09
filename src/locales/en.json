@@ -1008,6 +1008,17 @@
   "terminalGroup": {
     "waitingForConnection": "Waiting for connection..."
   },
+  "newTabMenu": {
+    "title": "New Tab",
+    "searchPlaceholder": "Search saved connections...",
+    "recentConnections": "Recent Connections",
+    "allConnections": "All Connections",
+    "searchResults": "Search Results",
+    "noResults": "No matching connections",
+    "noSavedConnections": "No saved connections",
+    "newConnection": "New Connection...",
+    "newLocalTerminal": "New Local Terminal"
+  },
   "terminalSearchBar": {
     "findInTerminal": "Find in terminal...",
     "matchCase": "Match Case",

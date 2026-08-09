@@ -8,6 +8,8 @@ export interface TerminalCallbacks {
   onDuplicateTab?: (tabId: string) => void | Promise<void>;
   onNewTab?: () => void;
   onNewLocalTab?: () => void | Promise<void>;
+  /** Open a saved connection as a new session in the specified terminal group. */
+  onOpenSavedConnection?: (connectionId: string, targetGroupId: string) => void | Promise<void>;
   /** Full reconnect: re-establishes the backend connection then remounts the terminal. */
   onReconnectTab?: (tabId: string) => void | Promise<void>;
   /** Open the saved connection profile used by a failed terminal tab. */

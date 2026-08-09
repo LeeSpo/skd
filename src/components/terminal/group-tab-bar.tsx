@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, ArrowDown, MoveRight, FolderSync, Terminal, FileCode } from 'lucide-react';
+import { X, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, ArrowDown, MoveRight, FolderSync, Terminal, FileCode } from 'lucide-react';
 import type { TerminalTab, SplitDirection } from '../../lib/terminal-group-types';
 import { getTabDisplayName } from '../../lib/terminal-group-utils';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
@@ -31,6 +31,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuSubContent,
 } from '../ui/context-menu';
+import { NewTabMenu } from './new-tab-menu';
 
 // ── Component ──
 
@@ -38,7 +39,9 @@ interface GroupTabBarProps {
   groupId: string;
   tabs: TerminalTab[];
   activeTabId: string | null;
-  onNewTab?: () => void;
+  onNewConnection?: () => void;
+  onNewLocalTerminal?: () => void | Promise<void>;
+  onOpenSavedConnection?: (connectionId: string, targetGroupId: string) => void | Promise<void>;
   onDuplicateTab?: (tabId: string) => void;
   onReconnect?: (tabId: string) => void;
 }
@@ -51,7 +54,9 @@ export function GroupTabBar({
   groupId,
   tabs,
   activeTabId,
-  onNewTab,
+  onNewConnection,
+  onNewLocalTerminal,
+  onOpenSavedConnection,
   onDuplicateTab,
   onReconnect,
 }: GroupTabBarProps) {
@@ -452,15 +457,12 @@ export function GroupTabBar({
           )}
         </div>
 
-        {/* Add new tab button */}
-        <Button
-          variant="ghost"
-          size="toolbar"
-          className="mx-1"
-          onClick={onNewTab}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
+        <NewTabMenu
+          groupId={groupId}
+          onOpenSavedConnection={onOpenSavedConnection}
+          onNewConnection={onNewConnection}
+          onNewLocalTerminal={onNewLocalTerminal}
+        />
       </div>
 
       {/* Floating drag ghost — rendered via portal-like fixed positioning */}
