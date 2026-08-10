@@ -1009,7 +1009,7 @@
     "waitingForConnection": "Waiting for connection..."
   },
   "newTabMenu": {
-    "title": "New Tab",
+    "title": "Open New Tab",
     "searchPlaceholder": "Search saved connections...",
     "recentConnections": "Recent Connections",
     "allConnections": "All Connections",

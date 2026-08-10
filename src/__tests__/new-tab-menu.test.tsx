@@ -60,9 +60,11 @@ describe('NewTabMenu', () => {
     const onNewConnection = vi.fn();
     render(<NewTabMenu groupId="group-2" onNewConnection={onNewConnection} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Tab' }));
+    const trigger = screen.getByRole('button', { name: 'Open New Tab' });
+    fireEvent.click(trigger);
 
     expect(onNewConnection).not.toHaveBeenCalled();
+    expect(trigger.className).toContain('bg-accent');
     const search = await screen.findByPlaceholderText('Search saved connections...');
     expect(document.activeElement).toBe(search);
     expect(screen.queryByText('Recent Connections')).not.toBeNull();
@@ -78,7 +80,7 @@ describe('NewTabMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
     const search = await screen.findByPlaceholderText('Search saved connections...');
     fireEvent.change(search, { target: { value: 'files.example.com' } });
 
@@ -103,18 +105,18 @@ describe('NewTabMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
     const search = await screen.findByPlaceholderText('Search saved connections...');
     fireEvent.change(search, { target: { value: 'production' } });
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     fireEvent.keyDown(search, { key: 'Enter' });
     expect(onOpenSavedConnection).toHaveBeenCalledWith('prod', 'group-3');
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
     fireEvent.click(await screen.findByRole('button', { name: 'New Connection...' }));
     expect(onNewConnection).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
     fireEvent.click(await screen.findByRole('button', { name: 'New Local Terminal' }));
     expect(onNewLocalTerminal).toHaveBeenCalledOnce();
   });

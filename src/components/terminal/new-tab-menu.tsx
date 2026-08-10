@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Clock, Plus, Search, Server, Terminal } from 'lucide-react';
+import { Clock, ListPlus, Plus, Search, Server, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ConnectionStorageManager, type ConnectionData } from '@/lib/connection-storage';
 import { filterConnections } from '@/lib/new-tab-menu-utils';
@@ -153,10 +153,13 @@ export function NewTabMenu({
               <Button
                 variant="ghost"
                 size="toolbar"
-                className="mx-1"
+                className={cn(
+                  'mx-1',
+                  open && 'bg-accent text-accent-foreground',
+                )}
                 aria-label={t('newTabMenu.title')}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <ListPlus className="h-3.5 w-3.5" />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
