@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-08-12
+
+### Added
+
+- **New Tab Menu**: Added searchable recent and saved connection lists, plus quick actions for creating a new connection or local terminal.
+- **Local File Moving**: Added native local file and folder drag-and-drop with destination conflict detection and optional overwrite support.
+- **Interactive Toasts**: Added clickable, dismissible notifications and a setting to enable or disable notifications.
+- **Terminal Selection Cleanup**: Excluded trailing empty buffer rows when selecting terminal content.
+
+### Changed
+
+- **Panel and Tab Chrome**: Standardized panel and tab-bar heights and refreshed the new-tab trigger and active-state styling.
+- **File and Connection Browsers**: Improved filename and connection-name truncation so tree items remain within their available width.
+
+### Fixed
+
+- **File Drop Targeting**: Fixed coordinate mapping that could route drops to the wrong panel during cross-panel drag-and-drop.
+
+
 ## [0.2.3] - 2026-07-25
 
 ### Added
