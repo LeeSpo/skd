@@ -353,6 +353,143 @@ describe("useWebviewFileDrop", () => {
     expect(onDropB).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: stacked terminal (top) + file browser (bottom). When Tauri
+  // reports logical/CSS pixels at DPR=2, naively dividing by DPR maps a drop
+  // over the bottom panel into the top panel. The router must not early-return
+  // on that false hit — otherwise paths paste into the terminal instead of
+  // uploading via the file browser.
+  it("prefers the lower file zone when logical coords at DPR=2 would mis-hit the terminal above", async () => {
+    setDpr(2);
+    const onTerminalDrop = vi.fn();
+    const onFileDrop = vi.fn();
+    // Terminal: top half. File browser: bottom half.
+    const terminalRect = makeRect(0, 0, 800, 400);
+    const fileRect = makeRect(0, 400, 800, 400);
+
+    render(
+      <>
+        <DropZone
+          enabled
+          onDrop={onTerminalDrop}
+          rect={terminalRect}
+          priority={0}
+          label="terminal"
+        />
+        <DropZone
+          enabled
+          onDrop={onFileDrop}
+          rect={fileRect}
+          priority={1}
+          label="file"
+        />
+      </>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Position already in CSS/logical pixels — inside file zone only.
+    // Wrong interpretation (÷2) → (50, 250) lands in the terminal.
+    fire({
+      type: "drop",
+      position: { x: 100, y: 500 },
+      paths: ["/Users/me/report.pdf"],
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onFileDrop).toHaveBeenCalledTimes(1);
+    expect(onFileDrop).toHaveBeenCalledWith(["/Users/me/report.pdf"]);
+    expect(onTerminalDrop).not.toHaveBeenCalled();
+  });
+
+  it("still routes physical-pixel drops at DPR=2 to the lower file zone", async () => {
+    setDpr(2);
+    const onTerminalDrop = vi.fn();
+    const onFileDrop = vi.fn();
+    const terminalRect = makeRect(0, 0, 800, 400);
+    const fileRect = makeRect(0, 400, 800, 400);
+
+    render(
+      <>
+        <DropZone
+          enabled
+          onDrop={onTerminalDrop}
+          rect={terminalRect}
+          priority={0}
+          label="terminal"
+        />
+        <DropZone
+          enabled
+          onDrop={onFileDrop}
+          rect={fileRect}
+          priority={1}
+          label="file"
+        />
+      </>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Physical pixels for CSS (100, 500): (200, 1000).
+    fire({
+      type: "drop",
+      position: { x: 200, y: 1000 },
+      paths: ["/Users/me/report.pdf"],
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onFileDrop).toHaveBeenCalledTimes(1);
+    expect(onTerminalDrop).not.toHaveBeenCalled();
+  });
+
+  it("still delivers drops that only hit the terminal zone", async () => {
+    setDpr(2);
+    const onTerminalDrop = vi.fn();
+    const onFileDrop = vi.fn();
+    const terminalRect = makeRect(0, 0, 800, 400);
+    const fileRect = makeRect(0, 400, 800, 400);
+
+    render(
+      <>
+        <DropZone
+          enabled
+          onDrop={onTerminalDrop}
+          rect={terminalRect}
+          priority={0}
+          label="terminal"
+        />
+        <DropZone
+          enabled
+          onDrop={onFileDrop}
+          rect={fileRect}
+          priority={1}
+          label="file"
+        />
+      </>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Logical coords inside terminal only (both interpretations stay upper).
+    fire({
+      type: "drop",
+      position: { x: 100, y: 100 },
+      paths: ["/Users/me/script.sh"],
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onTerminalDrop).toHaveBeenCalledTimes(1);
+    expect(onFileDrop).not.toHaveBeenCalled();
+  });
+
   it("unsubscribes from the Tauri event when the last consumer unmounts", async () => {
     const onDrop = vi.fn();
     const rect = makeRect(0, 0, 100, 100);

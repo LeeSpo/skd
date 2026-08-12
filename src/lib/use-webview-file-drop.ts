@@ -91,6 +91,21 @@ function hitTest(cssX: number, cssY: number): Subscriber | null {
   return winner;
 }
 
+/**
+ * Prefer the higher-priority subscriber; on a tie prefer the higher id
+ * (same ranking as `hitTest`).
+ */
+function preferSubscriber(
+  a: Subscriber | null,
+  b: Subscriber | null,
+): Subscriber | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (b.priority > a.priority) return b;
+  if (b.priority === a.priority && b.id > a.id) return b;
+  return a;
+}
+
 function pickWinner(event: DragDropEvent): Subscriber | null {
   // For `leave` there's no position — no winner.
   if (event.type === "leave") return null;
@@ -101,18 +116,23 @@ function pickWinner(event: DragDropEvent): Subscriber | null {
   // Self-detecting coordinate resolution.
   // `event.position` is typed as `PhysicalPosition`, but on some OS/Tauri
   // builds (especially multi-monitor with mixed DPR) the values may already
-  // be in CSS/logical pixels. We try the DPR conversion first (correct for
-  // true physical pixels, e.g. 1080p at 1×), then fall back to raw values
-  // (correct when Tauri already reports logical pixels, e.g. some 4K setups).
+  // be in CSS/logical pixels.
+  //
+  // We must evaluate BOTH interpretations and merge winners — never
+  // early-return on the first hit. Stacked panels (terminal above, file
+  // browser below) make a false hit catastrophic: at DPR=2, dividing
+  // already-logical coords maps a drop over the bottom panel into the
+  // terminal, which then pastes paths instead of uploading.
+  //
+  // Ranking across both hits uses priority then id, so a higher-priority
+  // file zone wins even when the wrong scale still intersects the terminal.
   const dpr = window.devicePixelRatio || 1;
+  let winner: Subscriber | null = null;
   if (dpr !== 1) {
-    const cssX = rawX / dpr;
-    const cssY = rawY / dpr;
-    const winner = hitTest(cssX, cssY);
-    if (winner) return winner;
+    winner = preferSubscriber(winner, hitTest(rawX / dpr, rawY / dpr));
   }
-  // Fallback: treat raw values as CSS pixels (no conversion).
-  return hitTest(rawX, rawY);
+  winner = preferSubscriber(winner, hitTest(rawX, rawY));
+  return winner;
 }
 
 function setAllDragOver(value: boolean) {

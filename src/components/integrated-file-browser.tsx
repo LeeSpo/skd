@@ -1213,11 +1213,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     }
   }, [adapter.supportsUpload, connectionId, currentPath, isAvailable, loadFiles]);
 
+  // priority 1 matches remote file-panel and beats terminal path-paste (0)
+  // so OS drops over the bottom file browser never fall through to the PTY.
   const { isDragOver: isDraggingOver, clearDragOver } = useWebviewFileDrop({
     enabled: adapter.supportsUpload && isAvailable,
     targetRef: dropZoneRef,
     onDrop: handleOsFilesDropped,
-    priority: 0,
+    priority: 1,
   });
   // Keep the ref in sync with the latest clearDragOver identity.
   clearDragOverRef.current = clearDragOver;
