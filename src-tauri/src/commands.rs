@@ -3077,17 +3077,12 @@ pub async fn get_home_directory() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn delete_local_item(path: String, is_directory: bool) -> Result<(), String> {
-    use std::fs;
+pub async fn delete_local_item(path: String, _is_directory: bool) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
         return Err(format!("Path does not exist: {}", path));
     }
-    if is_directory {
-        fs::remove_dir_all(p).map_err(|e| format!("Failed to delete directory '{}': {}", path, e))
-    } else {
-        fs::remove_file(p).map_err(|e| format!("Failed to delete file '{}': {}", path, e))
-    }
+    trash::delete(p).map_err(|e| format!("Failed to move '{}' to Trash: {}", path, e))
 }
 
 #[tauri::command]
@@ -3580,6 +3575,19 @@ mod local_fs_tests {
         dir
     }
 
+    fn trash_path_for(name: &str) -> std::path::PathBuf {
+        dirs::home_dir().expect("home directory").join(".Trash").join(name)
+    }
+
+    fn remove_from_trash(name: &str) {
+        let path = trash_path_for(name);
+        if path.is_dir() {
+            let _ = fs::remove_dir_all(&path);
+        } else {
+            let _ = fs::remove_file(&path);
+        }
+    }
+
     #[tokio::test]
     async fn test_list_local_files() {
         let dir = create_test_dir();
@@ -3620,6 +3628,7 @@ mod local_fs_tests {
         let result = delete_local_item(file_path.clone(), false).await;
         assert!(result.is_ok());
         assert!(!std::path::Path::new(&file_path).exists());
+        remove_from_trash("file1.txt");
     }
 
     #[tokio::test]
@@ -3630,6 +3639,36 @@ mod local_fs_tests {
         let result = delete_local_item(sub_path.clone(), true).await;
         assert!(result.is_ok());
         assert!(!std::path::Path::new(&sub_path).exists());
+        remove_from_trash("subdir");
+    }
+
+    #[tokio::test]
+    async fn test_delete_local_file_moves_to_trash() {
+        let dir = create_test_dir();
+        let unique_name = format!(
+            "skd-trash-test-{}-{}.txt",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file_path = dir.path().join(&unique_name);
+        fs::write(&file_path, "trash-me").unwrap();
+
+        let result = delete_local_item(file_path.to_string_lossy().to_string(), false).await;
+        assert!(result.is_ok());
+        assert!(!file_path.exists());
+
+        let trash_path = dirs::home_dir()
+            .expect("home directory")
+            .join(".Trash")
+            .join(&unique_name);
+        assert!(
+            trash_path.exists(),
+            "deleted file should be in Trash, not permanently removed"
+        );
+        let _ = fs::remove_file(&trash_path);
     }
 
     #[tokio::test]

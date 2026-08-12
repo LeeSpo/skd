@@ -381,7 +381,10 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       const fullPath = pathJoin(currentPath, name);
       try {
         await onDelete(fullPath, isDirectory);
-        toast.success(t('filePanel.toast.deleted'), { description: name });
+        toast.success(
+          t(mode === "local" ? "filePanel.toast.movedToTrash" : "filePanel.toast.deleted"),
+          { description: name },
+        );
         loadDirectory(currentPath);
       } catch (err) {
         toast.error(t('filePanel.toast.deleteFailed'), {
@@ -849,7 +852,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                               }
                             >
                               <Trash2 className="h-3.5 w-3.5 mr-2" />
-                              {t('filePanel.contextMenu.delete')}
+                              {t(mode === "local" ? "fileBrowser.moveToTrash" : "filePanel.contextMenu.delete")}
                             </ContextMenuItem>
                           </ContextMenuContent>
                         </ContextMenu>

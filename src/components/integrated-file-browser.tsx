@@ -1005,7 +1005,10 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
     const deletedCount = deletingFiles.length - failedNames.size;
     if (deletedCount > 0) {
-      toast.success(t('fileBrowser.toast.deletedCount', { count: deletedCount }));
+      toast.success(t(
+        isLocalMode ? 'fileBrowser.toast.movedToTrashCount' : 'fileBrowser.toast.deletedCount',
+        { count: deletedCount },
+      ));
     }
     if (errors.length > 0) {
       toast.error(t('fileBrowser.toast.deleteFailedCount', { count: errors.length }), {
@@ -1651,7 +1654,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             onClick={() => handleDeleteFiles(operationItems)}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            {t('fileBrowser.contextMenu.delete')}
+            {t(isLocalMode ? 'fileBrowser.moveToTrash' : 'fileBrowser.contextMenu.delete')}
           </ContextMenuItem>,
         ]
       : null;
@@ -2090,27 +2093,27 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {deletingFiles.length > 1
-                ? t('fileBrowser.deleteItemsTitle', { count: deletingFiles.length })
+                ? t(isLocalMode ? 'fileBrowser.trashItemsTitle' : 'fileBrowser.deleteItemsTitle', { count: deletingFiles.length })
                 : deletingFiles[0]?.type === 'directory'
-                  ? t('fileBrowser.deleteFolderTitle')
-                  : t('fileBrowser.deleteFileTitle')}
+                  ? t(isLocalMode ? 'fileBrowser.trashFolderTitle' : 'fileBrowser.deleteFolderTitle')
+                  : t(isLocalMode ? 'fileBrowser.trashFileTitle' : 'fileBrowser.deleteFileTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deletingFiles.length > 1
-                ? t('fileBrowser.deleteItemsConfirm', { count: deletingFiles.length })
-                : t('fileBrowser.deleteConfirm', { name: deletingFiles[0]?.name })}
-              {deletingFiles.some((file) => file.type === 'directory') && (
+                ? t(isLocalMode ? 'fileBrowser.trashItemsConfirm' : 'fileBrowser.deleteItemsConfirm', { count: deletingFiles.length })
+                : t(isLocalMode ? 'fileBrowser.trashConfirm' : 'fileBrowser.deleteConfirm', { name: deletingFiles[0]?.name })}
+              {!isLocalMode && deletingFiles.some((file) => file.type === 'directory') && (
                 <span className="block mt-2 text-destructive font-medium">
                   {t('fileBrowser.deleteFolderWarning')}
                 </span>
               )}
-              {t('fileBrowser.cannotBeUndone')}
+              {!isLocalMode && t('fileBrowser.cannotBeUndone')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelDeleteFile}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive hover:bg-destructive/90">
-              {t('common.delete')}
+              {t(isLocalMode ? 'fileBrowser.moveToTrash' : 'common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

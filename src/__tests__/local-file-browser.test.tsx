@@ -223,7 +223,7 @@ describe('IntegratedFileBrowser local mode', () => {
     fireEvent.keyDown(document, { key: 'Delete' });
 
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.moveToTrash' }));
 
     await waitFor(() => {
       expect(mockedInvoke).toHaveBeenCalledWith('delete_local_item', {
@@ -290,7 +290,7 @@ describe('IntegratedFileBrowser local mode', () => {
     fireEvent.contextMenu(screen.getByText('alpha.txt'));
 
     const menu = await screen.findByRole('menu');
-    expect(menu.textContent).toContain('fileBrowser.contextMenu.delete');
+    expect(menu.textContent).toContain('fileBrowser.moveToTrash');
     expect(menu.textContent).not.toContain('fileBrowser.contextMenu.rename');
     expect(menu.textContent).not.toContain('fileBrowser.contextMenu.copyPath');
     expect(menu.textContent).not.toContain('filePanel.contextMenu.openInOS');
@@ -323,7 +323,7 @@ describe('IntegratedFileBrowser local mode', () => {
     expect(menu.textContent).toContain('fileBrowser.contextMenu.rename');
     expect(menu.textContent).toContain('fileBrowser.contextMenu.copyPath');
     expect(menu.textContent).toContain('fileBrowser.contextMenu.fileInfo');
-    expect(menu.textContent).toContain('fileBrowser.contextMenu.delete');
+    expect(menu.textContent).toContain('fileBrowser.moveToTrash');
 
     const separators = [...menu.querySelectorAll('[data-slot="context-menu-separator"]')];
     expect(separators.length).toBeGreaterThan(0);
