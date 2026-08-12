@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "skd",
+        "title": "",
         "width": 1280,
         "height": 800,
         "visible": false,

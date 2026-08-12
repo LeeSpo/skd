@@ -34,6 +34,12 @@ interface DirectoryTreeProps {
   onSaveScroll?: (scrollTop: number) => void;
   /** Cached scroll top position to restore on connection switch. */
   initialScrollTop?: number;
+  /** Directory currently under an internal file drag. */
+  dropTargetPath?: string | null;
+  /** Cached directory paths that must be reloaded after a move. */
+  invalidatePaths?: readonly string[];
+  /** Increment to apply a new invalidatePaths request. */
+  invalidationVersion?: number;
 }
 
 interface TreeNode {
@@ -87,6 +93,9 @@ export function DirectoryTree({
   onSaveState,
   onSaveScroll,
   initialScrollTop,
+  dropTargetPath = null,
+  invalidatePaths = [],
+  invalidationVersion = 0,
 }: DirectoryTreeProps) {
   const { t } = useTranslation();
   const [nodes, setNodes] = useState<Map<string, TreeNode[]>>(new Map());
@@ -204,6 +213,16 @@ export function DirectoryTree({
     }
   }, [disabled, loadChildren]);
 
+  useEffect(() => {
+    if (disabled || invalidationVersion === 0 || invalidatePaths.length === 0) return;
+    const paths = [...new Set(invalidatePaths.map(normalizePath))];
+    const nextNodes = new Map(nodesRef.current);
+    for (const path of paths) nextNodes.delete(path);
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+    for (const path of paths) void loadChildren(path);
+  }, [disabled, invalidatePaths, invalidationVersion, loadChildren]);
+
   const visibleRows = useMemo<VisibleTreeRow[]>(() => {
     const rows: VisibleTreeRow[] = [];
 
@@ -276,6 +295,16 @@ export function DirectoryTree({
     },
     [loadChildren],
   );
+
+  useEffect(() => {
+    if (!dropTargetPath || disabled) return;
+    const normalized = normalizePath(dropTargetPath);
+    const timer = setTimeout(() => {
+      setExpanded((previous) => new Set(previous).add(normalized));
+      void loadChildren(normalized);
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [disabled, dropTargetPath, loadChildren]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (visibleRows.length === 0) return;
@@ -357,14 +386,21 @@ export function DirectoryTree({
           const isLoading = loading.has(row.path);
           const isSelected = row.path === selectedPath;
           const isFocused = row.path === focusPath;
+          const isDropTarget = row.path === normalizePath(dropTargetPath ?? '');
           const canExpand = row.path === "/" || !hasLoadedChildren || childCount > 0;
 
           return (
             <div key={row.path} role="treeitem" aria-expanded={canExpand ? isExpanded : undefined}>
               <div
-                className={treeRowState({ selected: isSelected, focused: isFocused, className: "group" })}
+                className={treeRowState({
+                  selected: isSelected,
+                  focused: isFocused,
+                  className: `group ${isDropTarget ? 'ring-1 ring-primary bg-accent/70' : ''}`,
+                })}
                 style={treeIndent(row.depth, 4, 14)}
                 data-testid={`tree-row-${row.path}`}
+                data-directory-path={row.path}
+                data-drop-target={isDropTarget ? 'true' : undefined}
                   ref={(element) => {
                     rowRefs.current.set(row.path, element);
                   }}

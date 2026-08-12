@@ -4,7 +4,9 @@ mod connection_manager;
 mod credential_store;
 mod known_hosts;
 mod ftp_client;
+mod file_move;
 mod local_shell;
+mod native_file_drag;
 mod os_detect;
 mod port_forward;
 mod pty_session;
@@ -319,6 +321,8 @@ pub fn run() {
             commands::read_file_content,
             commands::read_remote_file_base64,
             commands::copy_file,
+            commands::move_file_items,
+            commands::start_native_file_drag,
             commands::quit_app,
             commands::detect_gpu,
             commands::get_gpu_stats,

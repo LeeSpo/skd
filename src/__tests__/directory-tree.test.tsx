@@ -87,5 +87,65 @@ describe("DirectoryTree", () => {
     expect(onNavigate).toHaveBeenCalledWith("/home");
   });
 
+  it("marks a directory as the active drop target and expands it after hovering", async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockImplementation(defaultLoader);
+    const view = render(
+      <DirectoryTree
+        loadDirectory={loader}
+        currentPath="/"
+        onNavigate={() => {}}
+        dropTargetPath="/home"
+      />,
+    );
+
+    await vi.runAllTimersAsync();
+    expect(screen.getByTestId("tree-row-/home").getAttribute("data-drop-target")).toBe("true");
+
+    view.rerender(
+      <DirectoryTree
+        loadDirectory={loader}
+        currentPath="/"
+        onNavigate={() => {}}
+        dropTargetPath="/home"
+      />,
+    );
+    await vi.advanceTimersByTimeAsync(700);
+
+    expect(loader).toHaveBeenCalledWith("/home");
+    vi.useRealTimers();
+  });
+
+  it("reloads only directory paths named by an invalidation request", async () => {
+    const loader = vi.fn().mockImplementation(defaultLoader);
+    const view = render(
+      <DirectoryTree
+        loadDirectory={loader}
+        currentPath="/"
+        onNavigate={() => {}}
+        invalidatePaths={[]}
+        invalidationVersion={0}
+      />,
+    );
+    await waitFor(() => expect(loader).toHaveBeenCalledWith("/"));
+    loader.mockClear();
+
+    view.rerender(
+      <DirectoryTree
+        loadDirectory={loader}
+        currentPath="/"
+        onNavigate={() => {}}
+        invalidatePaths={["/", "/home"]}
+        invalidationVersion={1}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(loader).toHaveBeenCalledWith("/");
+      expect(loader).toHaveBeenCalledWith("/home");
+    });
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
   beforeEach(() => vi.clearAllMocks());
 });

@@ -14,6 +14,17 @@ export interface FileBrowserFileItem {
   path: string;
 }
 
+export interface MoveItemResult {
+  name: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface MoveItemsResponse {
+  conflicts: string[];
+  results: MoveItemResult[];
+}
+
 export interface FileBrowserAdapter {
   mode: "local" | "remote";
   sessionKey: string;
@@ -23,6 +34,7 @@ export interface FileBrowserAdapter {
   supportsClipboard: boolean;
   supportsNewFile: boolean;
   supportsEditor: boolean;
+  supportsMove: boolean;
   defaultHomePath: string;
   homePath: () => Promise<string>;
   listDirectory: (
@@ -35,6 +47,11 @@ export interface FileBrowserAdapter {
   createDirectory: (path: string) => Promise<void>;
   createFile: (path: string, content: string) => Promise<void>;
   copyItem: (sourcePath: string, destPath: string) => Promise<void>;
+  moveItems: (
+    items: FileBrowserFileItem[],
+    targetDirectory: string,
+    overwrite: boolean,
+  ) => Promise<MoveItemsResponse>;
   openInOS: (path: string) => Promise<void>;
   joinPath: (base: string, name: string) => string;
   parentPath: (path: string) => string;
@@ -158,6 +175,7 @@ export function createRemoteAdapter(
     supportsClipboard: true,
     supportsNewFile: true,
     supportsEditor: true,
+    supportsMove: true,
     defaultHomePath: "/home",
     homePath: async () => "/home",
     listDirectory: async (targetPath, isCancelled) => {
@@ -208,6 +226,20 @@ export function createRemoteAdapter(
     copyItem: async (sourcePath, destPath) => {
       await invoke<boolean>("copy_file", { connectionId, sourcePath, destPath });
     },
+    moveItems: async (items, targetDirectory, overwrite) =>
+      invoke<MoveItemsResponse>("move_file_items", {
+        request: {
+          mode: "remote",
+          connectionId,
+          targetDirectory,
+          items: items.map((item) => ({
+            name: item.name,
+            path: item.path,
+            isDirectory: item.type === "directory",
+          })),
+          overwrite,
+        },
+      }),
     openInOS: async (path) => {
       await invoke<void>("open_in_os", { path });
     },
@@ -230,6 +262,7 @@ export function createLocalAdapter(): FileBrowserAdapter {
     supportsClipboard: false,
     supportsNewFile: false,
     supportsEditor: false,
+    supportsMove: true,
     defaultHomePath: "/",
     homePath: async () => {
       try {
@@ -276,6 +309,20 @@ export function createLocalAdapter(): FileBrowserAdapter {
     copyItem: async () => {
       throw new Error("copy_file is not supported for local file browser");
     },
+    moveItems: async (items, targetDirectory, overwrite) =>
+      invoke<MoveItemsResponse>("move_file_items", {
+        request: {
+          mode: "local",
+          connectionId: null,
+          targetDirectory,
+          items: items.map((item) => ({
+            name: item.name,
+            path: item.path,
+            isDirectory: item.type === "directory",
+          })),
+          overwrite,
+        },
+      }),
     openInOS: async (path) => {
       await invoke<void>("open_in_os", { path });
     },

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useReducer, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
@@ -135,6 +136,23 @@ const treeScrollCache = new Map<string, number>();
 type SortField = 'name' | 'size' | 'modified' | 'permissions' | 'owner';
 type SortDirection = 'asc' | 'desc';
 
+interface FileDragCandidate {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  items: FileItem[];
+  replaceSelection: boolean;
+  started: boolean;
+  targetPath: string | null;
+  nativeStarted: boolean;
+}
+
+interface PendingMove {
+  items: FileItem[];
+  targetDirectory: string;
+  conflicts: string[];
+}
+
 interface SortableColumnHeaderProps {
   label: string;
   field: SortField;
@@ -212,6 +230,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const [followTerminalCwd, setFollowTerminalCwd] = useState(loadFollowTerminalPreference);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [transfers, dispatchTransfer] = useReducer(transferQueueReducer, []);
   const [queueExpanded, setQueueExpanded] = useState(false);
   const processTransferRef = useRef(false);
@@ -238,7 +257,15 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const [clipboard, setClipboard] = useState<{ files: FileItem[], operation: 'copy' | 'cut' } | null>(null);
   const [renamingFile, setRenamingFile] = useState<FileItem | null>(null);
   const [newFileName, setNewFileName] = useState('');
-  const [deletingFile, setDeletingFile] = useState<FileItem | null>(null);
+  const [deletingFiles, setDeletingFiles] = useState<FileItem[]>([]);
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  const [treeInvalidation, setTreeInvalidation] = useState({
+    version: 0,
+    paths: [] as string[],
+  });
+  const dragCandidateRef = useRef<FileDragCandidate | null>(null);
+  const suppressClickRef = useRef(false);
   
   // Column widths state
   const [columnWidths, setColumnWidths] = useState({
@@ -299,6 +326,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       setCurrentPath(adapter.defaultHomePath);
       setFiles([]);
       setSelectedFiles(new Set());
+      setSelectionAnchor(null);
       setSearchTerm('');
       setNavHistory([adapter.defaultHomePath]);
       setNavIndex(0);
@@ -387,7 +415,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             break;
           case 'a':
             event.preventDefault();
-            setSelectedFiles(new Set(files.map(f => f.name)));
+            setSelectedFiles(new Set(
+              files
+                .filter((file) => file.name !== '..')
+                .filter((file) => file.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                .map((file) => file.name),
+            ));
+            setSelectionAnchor(null);
             break;
           case 'r':
             event.preventDefault();
@@ -397,7 +431,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       } else if (event.key === 'Delete' && selectedFiles.size > 0) {
         event.preventDefault();
         const selectedFileItems = files.filter(f => selectedFiles.has(f.name));
-        selectedFileItems.forEach(handleDeleteFile);
+        handleDeleteFiles(selectedFileItems);
       } else if (event.key === 'F2' && selectedFiles.size === 1) {
         event.preventDefault();
         const selectedFile = files.find(f => selectedFiles.has(f.name));
@@ -406,6 +440,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
         }
       } else if (event.key === 'Escape') {
         setSelectedFiles(new Set());
+        setSelectionAnchor(null);
         if (renamingFile) {
           handleRenameCancel();
         }
@@ -415,7 +450,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles/handlePasteFiles are stable inline fns; adding them would cause infinite re-renders
-  }, [selectedFiles, files, clipboard, renamingFile]);
+  }, [selectedFiles, files, clipboard, renamingFile, searchTerm]);
 
   // Column resize effect
   useEffect(() => {
@@ -617,6 +652,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
         setNavHistory([targetPath]);
         setNavIndex(0);
         setSelectedFiles(new Set());
+        setSelectionAnchor(null);
       }
       lastLoadedSessionKeyRef.current = sessionKey;
       return true;
@@ -675,6 +711,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       setNavHistory((prev) => [...prev.slice(0, navIndex + 1), path]);
       setNavIndex((prev) => prev + 1);
     }
+    setSelectedFiles(new Set());
+    setSelectionAnchor(null);
     setCurrentPath(path);
   };
 
@@ -686,6 +724,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     navInProgress.current = true;
     const newIndex = navIndex - 1;
     setNavIndex(newIndex);
+    setSelectedFiles(new Set());
+    setSelectionAnchor(null);
     setCurrentPath(navHistory[newIndex]);
     // Reset flag after state flush
     setTimeout(() => { navInProgress.current = false; }, 0);
@@ -696,6 +736,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     navInProgress.current = true;
     const newIndex = navIndex + 1;
     setNavIndex(newIndex);
+    setSelectedFiles(new Set());
+    setSelectionAnchor(null);
     setCurrentPath(navHistory[newIndex]);
     setTimeout(() => { navInProgress.current = false; }, 0);
   };
@@ -783,34 +825,6 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       void adapter.openInOS(file.path);
     } else {
       openFileInEditor(file, { readOnly: true });
-    }
-  };
-
-  const handleFileSelect = (fileName: string, event: React.MouseEvent) => {
-    // Only select/deselect if Ctrl (Windows/Linux) or Cmd (Mac) is pressed
-    if (event.ctrlKey || event.metaKey) {
-      event.stopPropagation();
-      const newSelected = new Set(selectedFiles);
-      if (newSelected.has(fileName)) {
-        newSelected.delete(fileName);
-      } else {
-        newSelected.add(fileName);
-      }
-      setSelectedFiles(newSelected);
-    }
-    // If not holding Ctrl/Cmd, do nothing (allow double-click to handle navigation)
-  };
-
-  const handleFileClick = (file: FileItem, event: React.MouseEvent) => {
-    if (event.ctrlKey || event.metaKey) {
-      // Ctrl/Cmd + Click: toggle selection
-      handleFileSelect(file.name, event);
-    } else {
-      // Regular click on directory: navigate into it
-      if (file.type === 'directory') {
-        navigateTo(file.path);
-      }
-      // Regular click on file: do nothing (or optionally preview)
     }
   };
 
@@ -970,32 +984,41 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     }
   };
 
-  function handleDeleteFile(file: FileItem) {
-    setDeletingFile(file);
+  function handleDeleteFiles(items: FileItem[]) {
+    setDeletingFiles(items.filter((item) => item.name !== '..'));
   };
 
   const confirmDeleteFile = async () => {
-    if (!deletingFile) return;
+    if (deletingFiles.length === 0) return;
 
-    try {
-      await adapter.deleteItem(
-        deletingFile.path,
-        deletingFile.type === 'directory',
-      );
+    const failedNames = new Set<string>();
+    const errors: string[] = [];
+    for (const file of deletingFiles) {
+      try {
+        await adapter.deleteItem(file.path, file.type === 'directory');
+      } catch (error) {
+        failedNames.add(file.name);
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
-      toast.success(t('fileBrowser.toast.deleted', { name: deletingFile.name }));
-      setDeletingFile(null);
-      void loadFiles();
-    } catch (error) {
-      console.error('[FileBrowser] Failed to delete file:', error);
-      toast.error(t('fileBrowser.toast.deleteFailed'), {
-        description: error instanceof Error ? error.message : t('fileBrowser.toast.deleteFailedDesc'),
+    const deletedCount = deletingFiles.length - failedNames.size;
+    if (deletedCount > 0) {
+      toast.success(t('fileBrowser.toast.deletedCount', { count: deletedCount }));
+    }
+    if (errors.length > 0) {
+      toast.error(t('fileBrowser.toast.deleteFailedCount', { count: errors.length }), {
+        description: errors.slice(0, 3).join('\n'),
       });
     }
+    setSelectedFiles(failedNames);
+    setSelectionAnchor(null);
+    setDeletingFiles([]);
+    void loadFiles();
   };
 
   const cancelDeleteFile = () => {
-    setDeletingFile(null);
+    setDeletingFiles([]);
   };
 
   function handleCopyFiles(files: FileItem[]) {
@@ -1271,6 +1294,250 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
+  const isLegalMoveTarget = (items: FileItem[], targetPath: string) => {
+    const normalize = (path: string) => path.length > 1 ? path.replace(/\/+$/, '') : path;
+    const target = normalize(targetPath);
+    if (!target || target === normalize(currentPath)) return false;
+
+    return items.every((item) => {
+      if (item.name === '..') return false;
+      if (item.type !== 'directory') return true;
+      const source = normalize(item.path);
+      return target !== source && !target.startsWith(`${source}/`);
+    });
+  };
+
+  const executeMove = async (
+    items: FileItem[],
+    targetDirectory: string,
+    overwrite: boolean,
+  ) => {
+    try {
+      const response = await adapter.moveItems(items, targetDirectory, overwrite);
+      if (response.conflicts.length > 0 && !overwrite) {
+        setPendingMove({ items, targetDirectory, conflicts: response.conflicts });
+        return;
+      }
+
+      const successful = response.results.filter((result) => result.success);
+      const failed = response.results.filter((result) => !result.success);
+      setSelectedFiles(new Set(failed.map((result) => result.name)));
+      setSelectionAnchor(null);
+
+      if (successful.length > 0) {
+        toast.success(t('fileBrowser.toast.movedCount', { count: successful.length }));
+      }
+      if (failed.length > 0) {
+        toast.error(t('fileBrowser.toast.moveFailedCount', { count: failed.length }), {
+          description: failed.slice(0, 3).map((result) => `${result.name}: ${result.error ?? ''}`).join('\n'),
+        });
+      }
+
+      setTreeInvalidation((previous) => ({
+        version: previous.version + 1,
+        paths: [currentPath, targetDirectory],
+      }));
+      void loadFiles();
+    } catch (error) {
+      toast.error(t('fileBrowser.toast.moveFailed'), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const executeMoveRef = useRef(executeMove);
+  executeMoveRef.current = executeMove;
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void listen<{ name: string; error: string }>(
+      'native-file-drag-error',
+      ({ payload }) => {
+        toast.error(t('fileBrowser.toast.nativeDragFailed', { name: payload.name }), {
+          description: payload.error,
+        });
+      },
+    ).then((nextUnsubscribe) => {
+      if (disposed) nextUnsubscribe();
+      else unsubscribe = nextUnsubscribe;
+    }).catch(() => {
+      // Browser-only tests and development do not expose the native event bridge.
+    });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const candidate = dragCandidateRef.current;
+      if (!candidate || candidate.pointerId !== event.pointerId) return;
+
+      if (!candidate.started) {
+        const distance = Math.hypot(
+          event.clientX - candidate.startX,
+          event.clientY - candidate.startY,
+        );
+        if (distance < 4) return;
+        candidate.started = true;
+        suppressClickRef.current = true;
+        if (candidate.replaceSelection) {
+          setSelectedFiles(new Set(candidate.items.map((item) => item.name)));
+          setSelectionAnchor(candidate.items[0]?.name ?? null);
+        }
+      }
+
+      const hit = document.elementFromPoint?.(event.clientX, event.clientY);
+      const treeRow = hit?.closest<HTMLElement>('[data-directory-path]');
+      const targetPath = treeRow?.dataset.directoryPath ?? null;
+      candidate.targetPath =
+        targetPath && isLegalMoveTarget(candidate.items, targetPath) ? targetPath : null;
+      setDropTargetPath(candidate.targetPath);
+    };
+
+    const startNativeDrag = (event: PointerEvent | MouseEvent) => {
+      const candidate = dragCandidateRef.current;
+      if (
+        !candidate
+        || !candidate.started
+        || candidate.nativeStarted
+        || ('pointerId' in event && event.pointerId !== candidate.pointerId)
+        || event.relatedTarget !== null
+      ) {
+        return;
+      }
+
+      const remoteDirectories = candidate.items.filter(
+        (item) => !isLocalMode && item.type === 'directory',
+      );
+      const exportable = candidate.items.filter(
+        (item) => isLocalMode || item.type === 'file',
+      );
+      if (exportable.length === 0) {
+        toast.info(t('fileBrowser.toast.remoteDirectoriesCannotDrag'));
+        dragCandidateRef.current = null;
+        setDropTargetPath(null);
+        return;
+      }
+      if (remoteDirectories.length > 0) {
+        toast.info(t('fileBrowser.toast.remoteDirectoriesSkipped', {
+          count: remoteDirectories.length,
+        }));
+      }
+
+      candidate.nativeStarted = true;
+      candidate.targetPath = null;
+      setDropTargetPath(null);
+      void invoke('start_native_file_drag', {
+        items: exportable.map((item) => ({
+          mode: isLocalMode ? 'local' : 'remote',
+          connectionId: isLocalMode ? null : connectionId,
+          name: item.name,
+          path: item.path,
+          isDirectory: item.type === 'directory',
+        })),
+      }).catch((error) => {
+        toast.error(t('fileBrowser.toast.nativeDragStartFailed'), {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      });
+    };
+
+    const finishPointerGesture = (event: PointerEvent) => {
+      const candidate = dragCandidateRef.current;
+      if (!candidate || candidate.pointerId !== event.pointerId) return;
+      dragCandidateRef.current = null;
+      setDropTargetPath(null);
+
+      if (candidate.started && candidate.targetPath) {
+        void executeMoveRef.current(candidate.items, candidate.targetPath, false);
+      }
+
+      if (candidate.started) {
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      }
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerout', startNativeDrag);
+    document.documentElement.addEventListener('mouseleave', startNativeDrag);
+    document.addEventListener('pointerup', finishPointerGesture);
+    document.addEventListener('pointercancel', finishPointerGesture);
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerout', startNativeDrag);
+      document.documentElement.removeEventListener('mouseleave', startNativeDrag);
+      document.removeEventListener('pointerup', finishPointerGesture);
+      document.removeEventListener('pointercancel', finishPointerGesture);
+    };
+  });
+
+  const handleFilePointerDown = (file: FileItem, event: React.PointerEvent) => {
+    if (file.name === '..' || event.button !== 0) return;
+    const isAlreadySelected = selectedFiles.has(file.name);
+    dragCandidateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      items: isAlreadySelected
+        ? files.filter((candidate) => selectedFiles.has(candidate.name) && candidate.name !== '..')
+        : [file],
+      replaceSelection: !isAlreadySelected,
+      started: false,
+      targetPath: null,
+      nativeStarted: false,
+    };
+  };
+
+  const handleFileClick = (file: FileItem, event: React.MouseEvent) => {
+    if (file.name === '..') return;
+    event.stopPropagation();
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      event.preventDefault();
+      return;
+    }
+
+    const additive = event.ctrlKey || event.metaKey;
+    if (event.shiftKey && selectionAnchor) {
+      const selectableFiles = sortedFiles.filter((candidate) => candidate.name !== '..');
+      const anchorIndex = selectableFiles.findIndex((candidate) => candidate.name === selectionAnchor);
+      const targetIndex = selectableFiles.findIndex((candidate) => candidate.name === file.name);
+      if (anchorIndex >= 0 && targetIndex >= 0) {
+        const start = Math.min(anchorIndex, targetIndex);
+        const end = Math.max(anchorIndex, targetIndex);
+        const range = selectableFiles.slice(start, end + 1).map((candidate) => candidate.name);
+        setSelectedFiles((previous) => new Set(additive ? [...previous, ...range] : range));
+        return;
+      }
+    }
+
+    if (additive) {
+      setSelectedFiles((previous) => {
+        const next = new Set(previous);
+        if (next.has(file.name)) next.delete(file.name);
+        else next.add(file.name);
+        return next;
+      });
+    } else {
+      setSelectedFiles(new Set([file.name]));
+    }
+    setSelectionAnchor(file.name);
+  };
+
+  const operationItemsFor = (file: FileItem) =>
+    selectedFiles.has(file.name)
+      ? files.filter((candidate) => selectedFiles.has(candidate.name) && candidate.name !== '..')
+      : [file];
+
+  const isSingleItemContext = (file: FileItem) =>
+    !selectedFiles.has(file.name) || selectedFiles.size <= 1;
+
   // Count actual files/folders (excluding ".." navigation entry)
   const actualItemCount = filteredFiles.filter(file => file.name !== '..').length;
 
@@ -1452,6 +1719,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               currentPath={currentPath}
               onNavigate={navigateTo}
               disabled={!isAvailable}
+              dropTargetPath={dropTargetPath}
+              invalidatePaths={treeInvalidation.paths}
+              invalidationVersion={treeInvalidation.version}
               initialExpanded={treeInitialExpanded}
               initialNodes={treeInitialNodes}
               initialScrollTop={treeInitialScrollTop}
@@ -1543,27 +1813,38 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]]:[scrollbar-gutter:stable]">
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
-                    <div className="min-h-full p-1.5" data-columns-container>
+                    <div
+                      className="min-h-full p-1.5"
+                      data-columns-container
+                      role="grid"
+                      aria-multiselectable="true"
+                      onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                          setSelectedFiles(new Set());
+                          setSelectionAnchor(null);
+                        }
+                      }}
+                    >
                       {/* File Rows */}
-                      {sortedFiles.map((file, index) => (
-                        <ContextMenu key={index} onOpenChange={(open) => {
-                          // Clear the right-click selection when the context menu closes (loses focus)
-                          if (!open) {
-                            setSelectedFiles(new Set());
-                          }
-                        }}>
+                      {sortedFiles.map((file) => (
+                        <ContextMenu key={file.path}>
                           <ContextMenuTrigger asChild>
                             <div
                               className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer gap-2 px-2 py-px hover:bg-muted/50 ${
                                 selectedFiles.has(file.name) ? 'bg-accent' : ''
                               }`}
+                              role="row"
+                              aria-selected={file.name === '..' ? undefined : selectedFiles.has(file.name)}
+                              onPointerDown={(event) => handleFilePointerDown(file, event)}
                               onClick={(e) => handleFileClick(file, e)}
                               onDoubleClick={() => handleFileDoubleClick(file)}
                               onContextMenu={() => {
+                                if (file.name === '..') return;
                                 // Select the file when right-clicking to show which file the context menu operates on
                                 if (!selectedFiles.has(file.name)) {
                                   setSelectedFiles(new Set([file.name]));
                                 }
+                                setSelectionAnchor(file.name);
                               }}
                             >
                     <div className={`flex min-w-0 items-center gap-1 ${FILE_BROWSER_LIST_ICONS}`} style={{ width: `${columnWidths.name}px` }}>
@@ -1607,7 +1888,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
                           <ContextMenuContent className="w-64">
                   {/* File-specific actions */}
-                  {file.type === 'file' && (
+                  {file.type === 'file' && isSingleItemContext(file) && (
                     <>
                       {isLocalMode ? (
                         <ContextMenuItem onClick={() => void adapter.openInOS(file.path)}>
@@ -1637,7 +1918,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                   )}
                   
                   {/* Directory-specific actions */}
-                  {file.type === 'directory' && file.name !== '..' && (
+                  {file.type === 'directory' && file.name !== '..' && isSingleItemContext(file) && (
                     <>
                       <ContextMenuItem onClick={() => handleFileDoubleClick(file)}>
                         <Folder className="mr-2 h-4 w-4" />
@@ -1652,11 +1933,11 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                     <>
                       {adapter.supportsClipboard && (
                         <>
-                          <ContextMenuItem onClick={() => handleCopyFiles([file])}>
+                          <ContextMenuItem onClick={() => handleCopyFiles(operationItemsFor(file))}>
                             <Copy className="mr-2 h-4 w-4" />
                             {t('fileBrowser.contextMenu.copy')}
                           </ContextMenuItem>
-                          <ContextMenuItem onClick={() => handleCutFiles([file])}>
+                          <ContextMenuItem onClick={() => handleCutFiles(operationItemsFor(file))}>
                             <Scissors className="mr-2 h-4 w-4" />
                             {t('fileBrowser.contextMenu.cut')}
                           </ContextMenuItem>
@@ -1670,46 +1951,54 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         </>
                       )}
 
-                      <ContextMenuItem onClick={() => handleRenameFile(file)}>
-                        <FileEdit className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.rename')}
-                      </ContextMenuItem>
-                      {adapter.supportsClipboard && (
-                        <ContextMenuItem onClick={() => handleDuplicateFile(file)}>
-                          <Layers className="mr-2 h-4 w-4" />
-                          {t('fileBrowser.contextMenu.duplicate')}
-                        </ContextMenuItem>
+                      {isSingleItemContext(file) && (
+                        <>
+                          <ContextMenuItem onClick={() => handleRenameFile(file)}>
+                            <FileEdit className="mr-2 h-4 w-4" />
+                            {t('fileBrowser.contextMenu.rename')}
+                          </ContextMenuItem>
+                          {adapter.supportsClipboard && (
+                            <ContextMenuItem onClick={() => handleDuplicateFile(file)}>
+                              <Layers className="mr-2 h-4 w-4" />
+                              {t('fileBrowser.contextMenu.duplicate')}
+                            </ContextMenuItem>
+                          )}
+                        </>
                       )}
                       <ContextMenuSeparator />
                     </>
                   )}
 
                   {/* Download for files */}
-                  {adapter.supportsTransfer && file.type === 'file' && (
+                  {adapter.supportsTransfer && operationItemsFor(file).some((item) => item.type === 'file') && (
                     <>
-                      <ContextMenuItem onClick={() => handleDownload(file)}>
+                      <ContextMenuItem onClick={() => {
+                        const items = operationItemsFor(file);
+                        if (items.length > 1) void handleDownloadMultiple(items);
+                        else void handleDownload(file);
+                      }}>
                         <Download className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.download')}
+                        {operationItemsFor(file).length > 1
+                          ? t('fileBrowser.downloadSelected', { count: operationItemsFor(file).length })
+                          : t('fileBrowser.contextMenu.download')}
                       </ContextMenuItem>
-                      {selectedFiles.size > 1 && (
-                        <ContextMenuItem onClick={() => handleDownloadMultiple(files.filter(f => selectedFiles.has(f.name)))}>
-                          <Download className="mr-2 h-4 w-4" />
-                          {t('fileBrowser.downloadSelected', { count: selectedFiles.size })}
-                        </ContextMenuItem>
-                      )}
                       <ContextMenuSeparator />
                     </>
                   )}
 
                   {/* Information and sharing */}
-                  <ContextMenuItem onClick={() => handleCopyPath(file)}>
-                    <Link className="mr-2 h-4 w-4" />
-                    {t('fileBrowser.contextMenu.copyPath')}
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={() => handleFileInfo(file)}>
-                    <Info className="mr-2 h-4 w-4" />
-                    {t('fileBrowser.contextMenu.fileInfo')}
-                  </ContextMenuItem>
+                  {isSingleItemContext(file) && (
+                    <>
+                      <ContextMenuItem onClick={() => handleCopyPath(file)}>
+                        <Link className="mr-2 h-4 w-4" />
+                        {t('fileBrowser.contextMenu.copyPath')}
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={() => handleFileInfo(file)}>
+                        <Info className="mr-2 h-4 w-4" />
+                        {t('fileBrowser.contextMenu.fileInfo')}
+                      </ContextMenuItem>
+                    </>
+                  )}
 
                   {/* Destructive actions */}
                   {file.name !== '..' && (
@@ -1717,7 +2006,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                       <ContextMenuSeparator />
                       <ContextMenuItem 
                         className="text-destructive focus:text-destructive"
-                        onClick={() => handleDeleteFile(file)}
+                        onClick={() => handleDeleteFiles(operationItemsFor(file))}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         {t('fileBrowser.contextMenu.delete')}
@@ -1772,7 +2061,10 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               </ContextMenuItem>
               <ContextMenuSeparator />
               
-              <ContextMenuItem onClick={() => setSelectedFiles(new Set())}>
+              <ContextMenuItem onClick={() => {
+                setSelectedFiles(new Set());
+                setSelectionAnchor(null);
+              }}>
                 <X className="mr-2 h-4 w-4" />
                 {t('fileBrowser.clearSelection')}
               </ContextMenuItem>
@@ -1794,13 +2086,21 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       )}
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingFile} onOpenChange={(open) => !open && setDeletingFile(null)}>
+      <AlertDialog open={deletingFiles.length > 0} onOpenChange={(open) => !open && setDeletingFiles([])}>
         <AlertDialogContent position="tauri">
           <AlertDialogHeader>
-            <AlertDialogTitle>{deletingFile?.type === 'directory' ? t('fileBrowser.deleteFolderTitle') : t('fileBrowser.deleteFileTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {deletingFiles.length > 1
+                ? t('fileBrowser.deleteItemsTitle', { count: deletingFiles.length })
+                : deletingFiles[0]?.type === 'directory'
+                  ? t('fileBrowser.deleteFolderTitle')
+                  : t('fileBrowser.deleteFileTitle')}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t('fileBrowser.deleteConfirm', { name: deletingFile?.name })}
-              {deletingFile?.type === 'directory' && (
+              {deletingFiles.length > 1
+                ? t('fileBrowser.deleteItemsConfirm', { count: deletingFiles.length })
+                : t('fileBrowser.deleteConfirm', { name: deletingFiles[0]?.name })}
+              {deletingFiles.some((file) => file.type === 'directory') && (
                 <span className="block mt-2 text-destructive font-medium">
                   {t('fileBrowser.deleteFolderWarning')}
                 </span>
@@ -1812,6 +2112,35 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             <AlertDialogCancel onClick={cancelDeleteFile}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive hover:bg-destructive/90">
               {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pendingMove !== null} onOpenChange={(open) => !open && setPendingMove(null)}>
+        <AlertDialogContent position="tauri">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('fileBrowser.moveConflictTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('fileBrowser.moveConflictDescription', { count: pendingMove?.conflicts.length ?? 0 })}
+              {pendingMove && (
+                <span className="mt-2 block whitespace-pre-wrap font-mono text-xs text-foreground">
+                  {pendingMove.conflicts.slice(0, 5).join('\n')}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingMove(null)}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingMove) return;
+                const move = pendingMove;
+                setPendingMove(null);
+                void executeMove(move.items, move.targetDirectory, true);
+              }}
+            >
+              {t('fileBrowser.overwriteAndMove')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

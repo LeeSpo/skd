@@ -2,6 +2,10 @@ use base64::Engine as _;
 use crate::connection_diagnostics::{classify_connect_error, ConnectErrorKind, ConnectStage};
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
+use crate::file_move::{
+    move_local_items, validate_move_request, MoveItemResult, MoveItemsRequest, MoveItemsResponse,
+};
+use crate::native_file_drag::{NativeDragItem, NativeDragResponse};
 use crate::os_detect::{self, OsInfo};
 use crate::port_forward::LocalForwardInfo;
 use crate::sftp_client::{FileEntry, FileEntryType, SftpAuthMethod, SftpConfig};
@@ -661,6 +665,115 @@ pub async fn sftp_upload_file(
 /// quote, emit the escaped quote, and reopen the quote: `'` → `'\''`.
 fn shell_escape_single_quoted(path: &str) -> String {
     path.replace('\'', "'\\''")
+}
+
+#[tauri::command]
+pub fn start_native_file_drag(
+    items: Vec<NativeDragItem>,
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<NativeDragResponse, String> {
+    crate::native_file_drag::start(window, items, Arc::clone(state.inner()), app)
+}
+
+#[tauri::command]
+pub async fn move_file_items(
+    request: MoveItemsRequest,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<MoveItemsResponse, String> {
+    validate_move_request(&request)?;
+    if request.mode == "local" {
+        return move_local_items(&request);
+    }
+
+    let connection_id = request
+        .connection_id
+        .as_deref()
+        .ok_or("connectionId is required for remote moves")?;
+    let connection = state
+        .get_connection(connection_id)
+        .await
+        .ok_or_else(|| format!("No SSH connection found for '{connection_id}'"))?;
+    let client = connection.read().await;
+
+    let mut conflicts = Vec::new();
+    for item in &request.items {
+        let destination = format!(
+            "{}/{}",
+            request.target_directory.trim_end_matches('/'),
+            item.name
+        );
+        let command = format!(
+            "if [ -e '{}' ] || [ -L '{}' ]; then printf 1; else printf 0; fi",
+            shell_escape_single_quoted(&destination),
+            shell_escape_single_quoted(&destination),
+        );
+        if client
+            .execute_command(&command)
+            .await
+            .map_err(|error| error.to_string())?
+            .trim()
+            == "1"
+        {
+            conflicts.push(item.name.clone());
+        }
+    }
+    if !request.overwrite && !conflicts.is_empty() {
+        return Ok(MoveItemsResponse {
+            conflicts,
+            results: Vec::new(),
+        });
+    }
+
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let mut results = Vec::with_capacity(request.items.len());
+    for (index, item) in request.items.iter().enumerate() {
+        let destination = format!(
+            "{}/{}",
+            request.target_directory.trim_end_matches('/'),
+            item.name
+        );
+        let source = shell_escape_single_quoted(&item.path);
+        let destination = shell_escape_single_quoted(&destination);
+        let command = if request.overwrite {
+            let backup = shell_escape_single_quoted(&format!(
+                "{}/.skd-move-backup-{nonce}-{index}-{}",
+                request.target_directory.trim_end_matches('/'),
+                item.name
+            ));
+            format!(
+                "backup='{backup}'; had_backup=0; \
+                 if [ -e '{destination}' ] || [ -L '{destination}' ]; then mv -- '{destination}' \"$backup\" || exit $?; had_backup=1; fi; \
+                 if mv -- '{source}' '{destination}'; then \
+                   if [ \"$had_backup\" -eq 1 ]; then rm -rf -- \"$backup\"; fi; \
+                 else status=$?; if [ \"$had_backup\" -eq 1 ]; then mv -- \"$backup\" '{destination}'; fi; exit \"$status\"; fi"
+            )
+        } else {
+            format!("mv -- '{source}' '{destination}'")
+        };
+
+        match client.execute_command(&command).await {
+            Ok(_) => results.push(MoveItemResult {
+                name: item.name.clone(),
+                success: true,
+                error: None,
+            }),
+            Err(error) => results.push(MoveItemResult {
+                name: item.name.clone(),
+                success: false,
+                error: Some(error.to_string()),
+            }),
+        }
+    }
+
+    Ok(MoveItemsResponse {
+        conflicts: Vec::new(),
+        results,
+    })
 }
 
 #[tauri::command]
