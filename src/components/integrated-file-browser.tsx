@@ -73,6 +73,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, C
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { toast } from 'sonner';
 import { isEditableTarget } from '@/lib/keyboard-shortcuts';
+import { interleaveContextMenuSections } from '@/lib/context-menu-sections';
 import {
   createLocalAdapter,
   createRemoteAdapter,
@@ -1504,6 +1505,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     }
 
     const additive = event.ctrlKey || event.metaKey;
+    if (event.shiftKey || additive) {
+      event.preventDefault();
+    }
     if (event.shiftKey && selectionAnchor) {
       const selectableFiles = sortedFiles.filter((candidate) => candidate.name !== '..');
       const anchorIndex = selectableFiles.findIndex((candidate) => candidate.name === selectionAnchor);
@@ -1537,6 +1541,126 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   const isSingleItemContext = (file: FileItem) =>
     !selectedFiles.has(file.name) || selectedFiles.size <= 1;
+
+  const fileContextMenuItems = (file: FileItem) => {
+    const operationItems = operationItemsFor(file);
+    const single = isSingleItemContext(file);
+    const openSection = single && file.type === 'file'
+      ? isLocalMode
+        ? [
+            <ContextMenuItem key="open-os" onClick={() => void adapter.openInOS(file.path)}>
+              <Eye className="mr-2 h-4 w-4" />
+              {t('filePanel.contextMenu.openInOS')}
+            </ContextMenuItem>,
+          ]
+        : [
+            <ContextMenuItem key="open" onClick={() => openFileInEditor(file, { readOnly: true })}>
+              <Eye className="mr-2 h-4 w-4" />
+              {t('fileBrowser.contextMenu.open')}
+            </ContextMenuItem>,
+            <ContextMenuItem key="edit" onClick={() => openFileInEditor(file, { readOnly: false })}>
+              <Edit className="mr-2 h-4 w-4" />
+              {t('fileBrowser.contextMenu.edit')}
+            </ContextMenuItem>,
+            ...(onOpenInLogMonitor
+              ? [
+                  <ContextMenuItem key="log" onClick={() => onOpenInLogMonitor(file.path)}>
+                    <ScrollText className="mr-2 h-4 w-4" />
+                    {t('fileBrowser.contextMenu.openInLogMonitor')}
+                  </ContextMenuItem>,
+                ]
+              : []),
+          ]
+      : single && file.type === 'directory' && file.name !== '..'
+        ? [
+            <ContextMenuItem key="open-folder" onClick={() => handleFileDoubleClick(file)}>
+              <Folder className="mr-2 h-4 w-4" />
+              Open Folder
+            </ContextMenuItem>,
+          ]
+        : null;
+    const clipboardSection = file.name !== '..' && adapter.supportsClipboard
+      ? [
+          <ContextMenuItem key="copy" onClick={() => handleCopyFiles(operationItems)}>
+            <Copy className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.copy')}
+          </ContextMenuItem>,
+          <ContextMenuItem key="cut" onClick={() => handleCutFiles(operationItems)}>
+            <Scissors className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.cut')}
+          </ContextMenuItem>,
+          ...(clipboard
+            ? [
+                <ContextMenuItem key="paste" onClick={handlePasteFiles}>
+                  <ClipboardPaste className="mr-2 h-4 w-4" />
+                  {t('fileBrowser.contextMenu.paste')} {clipboard.files.length} item(s)
+                </ContextMenuItem>,
+              ]
+            : []),
+        ]
+      : null;
+    const renameSection = file.name !== '..' && single
+      ? [
+          <ContextMenuItem key="rename" onClick={() => handleRenameFile(file)}>
+            <FileEdit className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.rename')}
+          </ContextMenuItem>,
+          ...(adapter.supportsClipboard
+            ? [
+                <ContextMenuItem key="duplicate" onClick={() => handleDuplicateFile(file)}>
+                  <Layers className="mr-2 h-4 w-4" />
+                  {t('fileBrowser.contextMenu.duplicate')}
+                </ContextMenuItem>,
+              ]
+            : []),
+        ]
+      : null;
+    const downloadSection = adapter.supportsTransfer && operationItems.some((item) => item.type === 'file')
+      ? [
+          <ContextMenuItem
+            key="download"
+            onClick={() => {
+              if (operationItems.length > 1) void handleDownloadMultiple(operationItems);
+              else void handleDownload(file);
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {operationItems.length > 1
+              ? t('fileBrowser.downloadSelected', { count: operationItems.length })
+              : t('fileBrowser.contextMenu.download')}
+          </ContextMenuItem>,
+        ]
+      : null;
+    const infoSection = single
+      ? [
+          <ContextMenuItem key="copy-path" onClick={() => handleCopyPath(file)}>
+            <Link className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.copyPath')}
+          </ContextMenuItem>,
+          <ContextMenuItem key="file-info" onClick={() => handleFileInfo(file)}>
+            <Info className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.fileInfo')}
+          </ContextMenuItem>,
+        ]
+      : null;
+    const deleteSection = file.name !== '..'
+      ? [
+          <ContextMenuItem
+            key="delete"
+            className="text-destructive focus:text-destructive"
+            onClick={() => handleDeleteFiles(operationItems)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('fileBrowser.contextMenu.delete')}
+          </ContextMenuItem>,
+        ]
+      : null;
+
+    return interleaveContextMenuSections(
+      [openSection, clipboardSection, renameSection, downloadSection, infoSection, deleteSection],
+      (key) => <ContextMenuSeparator key={key} />,
+    );
+  };
 
   // Count actual files/folders (excluding ".." navigation entry)
   const actualItemCount = filteredFiles.filter(file => file.name !== '..').length;
@@ -1830,7 +1954,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         <ContextMenu key={file.path}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer gap-2 px-2 py-px hover:bg-muted/50 ${
+                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer select-none gap-2 px-2 py-px hover:bg-muted/50 ${
                                 selectedFiles.has(file.name) ? 'bg-accent' : ''
                               }`}
                               role="row"
@@ -1887,132 +2011,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                           </ContextMenuTrigger>
 
                           <ContextMenuContent className="w-64">
-                  {/* File-specific actions */}
-                  {file.type === 'file' && isSingleItemContext(file) && (
-                    <>
-                      {isLocalMode ? (
-                        <ContextMenuItem onClick={() => void adapter.openInOS(file.path)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          {t('filePanel.contextMenu.openInOS')}
-                        </ContextMenuItem>
-                      ) : (
-                        <>
-                          <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: true })}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            {t('fileBrowser.contextMenu.open')}
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => openFileInEditor(file, { readOnly: false })}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            {t('fileBrowser.contextMenu.edit')}
-                          </ContextMenuItem>
-                          {onOpenInLogMonitor && (
-                            <ContextMenuItem onClick={() => onOpenInLogMonitor(file.path)}>
-                              <ScrollText className="mr-2 h-4 w-4" />
-                              {t('fileBrowser.contextMenu.openInLogMonitor')}
-                            </ContextMenuItem>
-                          )}
-                        </>
-                      )}
-                      <ContextMenuSeparator />
-                    </>
-                  )}
-                  
-                  {/* Directory-specific actions */}
-                  {file.type === 'directory' && file.name !== '..' && isSingleItemContext(file) && (
-                    <>
-                      <ContextMenuItem onClick={() => handleFileDoubleClick(file)}>
-                        <Folder className="mr-2 h-4 w-4" />
-                        Open Folder
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                    </>
-                  )}
-
-                  {/* Common actions */}
-                  {file.name !== '..' && (
-                    <>
-                      {adapter.supportsClipboard && (
-                        <>
-                          <ContextMenuItem onClick={() => handleCopyFiles(operationItemsFor(file))}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            {t('fileBrowser.contextMenu.copy')}
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => handleCutFiles(operationItemsFor(file))}>
-                            <Scissors className="mr-2 h-4 w-4" />
-                            {t('fileBrowser.contextMenu.cut')}
-                          </ContextMenuItem>
-                          {clipboard && (
-                            <ContextMenuItem onClick={handlePasteFiles}>
-                              <ClipboardPaste className="mr-2 h-4 w-4" />
-                              {t('fileBrowser.contextMenu.paste')} {clipboard.files.length} item(s)
-                            </ContextMenuItem>
-                          )}
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-
-                      {isSingleItemContext(file) && (
-                        <>
-                          <ContextMenuItem onClick={() => handleRenameFile(file)}>
-                            <FileEdit className="mr-2 h-4 w-4" />
-                            {t('fileBrowser.contextMenu.rename')}
-                          </ContextMenuItem>
-                          {adapter.supportsClipboard && (
-                            <ContextMenuItem onClick={() => handleDuplicateFile(file)}>
-                              <Layers className="mr-2 h-4 w-4" />
-                              {t('fileBrowser.contextMenu.duplicate')}
-                            </ContextMenuItem>
-                          )}
-                        </>
-                      )}
-                      <ContextMenuSeparator />
-                    </>
-                  )}
-
-                  {/* Download for files */}
-                  {adapter.supportsTransfer && operationItemsFor(file).some((item) => item.type === 'file') && (
-                    <>
-                      <ContextMenuItem onClick={() => {
-                        const items = operationItemsFor(file);
-                        if (items.length > 1) void handleDownloadMultiple(items);
-                        else void handleDownload(file);
-                      }}>
-                        <Download className="mr-2 h-4 w-4" />
-                        {operationItemsFor(file).length > 1
-                          ? t('fileBrowser.downloadSelected', { count: operationItemsFor(file).length })
-                          : t('fileBrowser.contextMenu.download')}
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                    </>
-                  )}
-
-                  {/* Information and sharing */}
-                  {isSingleItemContext(file) && (
-                    <>
-                      <ContextMenuItem onClick={() => handleCopyPath(file)}>
-                        <Link className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.copyPath')}
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => handleFileInfo(file)}>
-                        <Info className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.fileInfo')}
-                      </ContextMenuItem>
-                    </>
-                  )}
-
-                  {/* Destructive actions */}
-                  {file.name !== '..' && (
-                    <>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem 
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => handleDeleteFiles(operationItemsFor(file))}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t('fileBrowser.contextMenu.delete')}
-                      </ContextMenuItem>
-                    </>
-                  )}
+                            {fileContextMenuItems(file)}
                           </ContextMenuContent>
                         </ContextMenu>
                       ))}

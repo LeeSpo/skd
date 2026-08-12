@@ -333,6 +333,10 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       const entry = filteredEntries[index];
       if (!entry) return;
 
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        e.preventDefault();
+      }
+
       if (e.ctrlKey || e.metaKey) {
         setSelectedNames((prev) => {
           const next = new Set(prev);
@@ -729,7 +733,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                         <ContextMenu key={entry.name}>
                           <ContextMenuTrigger asChild>
                             <tr
-                              className={`border-b border-border/40 cursor-pointer transition-colors ${isSelected ? `${selectedBg} font-medium` : "hover:bg-muted/40"}`}
+                              className={`border-b border-border/40 cursor-pointer select-none transition-colors ${isSelected ? `${selectedBg} font-medium` : "hover:bg-muted/40"}`}
                               onClick={(e) => handleRowClick(idx, e)}
                               onDoubleClick={() => handleDoubleClick(entry)}
                               draggable

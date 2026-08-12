@@ -266,6 +266,73 @@ describe('IntegratedFileBrowser local mode', () => {
     expect(screen.getByText('bravo.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('true');
   });
 
+  it('omits leftover separators when right-clicking a local multi-selection', async () => {
+    mockedInvoke.mockImplementation(async (command: string) => {
+      if (command === 'get_home_directory') return '/Users/test';
+      if (command === 'list_local_files') {
+        return ['alpha.txt', 'bravo.txt'].map((name) => ({
+          name,
+          file_type: 'File',
+          size: 1,
+          modified: '2026-01-01T10:00:00',
+          permissions: '-rw-r--r--',
+        }));
+      }
+      throw new Error(`Unexpected invoke: ${command}`);
+    });
+
+    render(<IntegratedFileBrowser mode="local" />);
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/Users/test' });
+    });
+    fireEvent.click(screen.getByText('alpha.txt'));
+    fireEvent.click(screen.getByText('bravo.txt'), { metaKey: true });
+    fireEvent.contextMenu(screen.getByText('alpha.txt'));
+
+    const menu = await screen.findByRole('menu');
+    expect(menu.textContent).toContain('fileBrowser.contextMenu.delete');
+    expect(menu.textContent).not.toContain('fileBrowser.contextMenu.rename');
+    expect(menu.textContent).not.toContain('fileBrowser.contextMenu.copyPath');
+    expect(menu.textContent).not.toContain('filePanel.contextMenu.openInOS');
+    expect(menu.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(0);
+  });
+
+  it('keeps single-file menu sections separated without stacking empty rules', async () => {
+    mockedInvoke.mockImplementation(async (command: string) => {
+      if (command === 'get_home_directory') return '/Users/test';
+      if (command === 'list_local_files') {
+        return ['alpha.txt'].map((name) => ({
+          name,
+          file_type: 'File',
+          size: 1,
+          modified: '2026-01-01T10:00:00',
+          permissions: '-rw-r--r--',
+        }));
+      }
+      throw new Error(`Unexpected invoke: ${command}`);
+    });
+
+    render(<IntegratedFileBrowser mode="local" />);
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/Users/test' });
+    });
+    fireEvent.contextMenu(screen.getByText('alpha.txt'));
+
+    const menu = await screen.findByRole('menu');
+    expect(menu.textContent).toContain('filePanel.contextMenu.openInOS');
+    expect(menu.textContent).toContain('fileBrowser.contextMenu.rename');
+    expect(menu.textContent).toContain('fileBrowser.contextMenu.copyPath');
+    expect(menu.textContent).toContain('fileBrowser.contextMenu.fileInfo');
+    expect(menu.textContent).toContain('fileBrowser.contextMenu.delete');
+
+    const separators = [...menu.querySelectorAll('[data-slot="context-menu-separator"]')];
+    expect(separators.length).toBeGreaterThan(0);
+    for (const separator of separators) {
+      const previous = separator.previousElementSibling;
+      expect(previous?.getAttribute('data-slot')).not.toBe('context-menu-separator');
+    }
+  });
+
   it('moves the selected files when they are dragged onto a directory tree row', async () => {
     mockedInvoke.mockImplementation(async (command: string) => {
       if (command === 'get_home_directory') return '/Users/test';
