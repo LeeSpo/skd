@@ -86,7 +86,8 @@ describe('PortForwardDialog', () => {
     );
 
     expect(await screen.findByText('portForward.section.saved')).not.toBeNull();
-    expect(screen.getByText('portForward.status.listening')).not.toBeNull();
+    // Active-forward badges arrive after setTimeout(0) + listLocalForwards.
+    expect(await screen.findByText('portForward.status.listening')).not.toBeNull();
     expect(screen.getByText('portForward.status.unreachable')).not.toBeNull();
     expect(screen.getByText('portForward.status.autoStart')).not.toBeNull();
 
