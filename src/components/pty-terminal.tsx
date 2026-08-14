@@ -29,6 +29,11 @@ import {
   parseOsc7Cwd,
   publishTerminalCwd,
 } from '../lib/terminal-cwd-store';
+import {
+  applyOsc633CommandEvent,
+  clearTerminalCommandState,
+  parseOsc633CommandEvent,
+} from '../lib/terminal-command-state';
 import { formatPathsForShell } from '../lib/shell-escape';
 import { useWebviewFileDrop } from '../lib/use-webview-file-drop';
 import { cn } from '../lib/utils';
@@ -229,6 +234,7 @@ export function PtyTerminal({
     // output parser. OSC 1337 CurrentDir is supported as a compatibility path
     // for iTerm-style prompt integrations.
     clearTerminalCwd(connectionId);
+    clearTerminalCommandState(connectionId);
     const osc7Disposable = term.parser?.registerOscHandler(7, (payload) => {
       const path = parseOsc7Cwd(payload);
       if (path) publishTerminalCwd(connectionId, path);
@@ -242,8 +248,12 @@ export function PtyTerminal({
     }) ?? { dispose: () => {} };
     const osc633Disposable = term.parser?.registerOscHandler(633, (payload) => {
       const path = parseOsc633Cwd(payload);
-      if (!path) return false;
-      publishTerminalCwd(connectionId, path);
+      if (path) {
+        publishTerminalCwd(connectionId, path);
+        return true;
+      }
+      if (!parseOsc633CommandEvent(payload)) return false;
+      applyOsc633CommandEvent(connectionId, payload);
       return true;
     }) ?? { dispose: () => {} };
     
@@ -857,6 +867,7 @@ export function PtyTerminal({
       osc1337Disposable.dispose();
       osc633Disposable.dispose();
       clearTerminalCwd(connectionId);
+      clearTerminalCommandState(connectionId);
       window.removeEventListener('resize', handleWindowResize);
       resizeObserver.disconnect();
       if (fitTimer) clearTimeout(fitTimer);

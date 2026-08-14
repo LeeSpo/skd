@@ -53,6 +53,13 @@ import {
 } from './lib/keyboard-interactive-context';
 import { useTerminalCwd } from './lib/terminal-cwd-store';
 import { resolveMainWindowCloseAction } from './lib/window-close';
+import { isCommandRunning } from './lib/terminal-command-state';
+import {
+  busySessionIds,
+  shouldConfirmClose,
+  type CloseIntent,
+} from './lib/session-close';
+import { CloseConfirmDialog } from './components/close-confirm-dialog';
 
 import { PanelSurfaceFallback } from './components/ui/panel-chrome';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './components/ui/resizable';
@@ -141,6 +148,10 @@ function AppContent() {
   const hostKeyCancelRef = useRef<(() => void) | null>(null);
   const [hostKeyTrustOpen, setHostKeyTrustOpen] = useState(false);
   const [hostKeyTrustPayload, setHostKeyTrustPayload] = useState<UnknownHostKeyPayload | null>(null);
+  const [pendingClose, setPendingClose] = useState<{
+    intent: CloseIntent;
+    busyCount: number;
+  } | null>(null);
 
   const onHostKeyTrustRequired = useCallback((request: HostKeyTrustRequest, onCancelled?: () => void) => {
     setHostKeyTrustPayload(request.payload);
@@ -270,25 +281,64 @@ function AppContent() {
   const handleTabClose = useCallback(async (tabId: string) => {
     clearAttempt(tabId);
     const tab = allTabs.find((item) => item.id === tabId);
-    if (tab?.protocol === 'Local') {
-      try {
+    if (!tab) return;
+    try {
+      if (tab.protocol === 'Local') {
         await invoke('local_shell_disconnect', { connection_id: tabId });
-      } catch {
-        // PTY cleanup may have already run via WebSocket Close
+      } else if (tab.tabType === 'file-browser') {
+        if (tab.protocol === 'SFTP') {
+          await invoke('sftp_standalone_disconnect', { connection_id: tabId });
+        } else if (tab.protocol === 'FTP') {
+          await invoke('ftp_disconnect', { connection_id: tabId });
+        }
       }
+    } catch {
+      // PTY / file-browser cleanup may have already run
     }
   }, [allTabs, clearAttempt]);
+
+  const performClose = useCallback(async (intent: CloseIntent) => {
+    if (intent.type === 'quit') {
+      try {
+        await invoke('confirm_quit');
+      } catch {
+        await invoke('quit_app');
+      }
+      return;
+    }
+
+    for (const { groupId, tabId } of intent.tabs) {
+      await handleTabClose(tabId);
+      dispatch({ type: 'REMOVE_TAB', groupId, tabId });
+    }
+  }, [dispatch, handleTabClose]);
+
+  const requestClose = useCallback((intent: CloseIntent) => {
+    const candidates = intent.type === 'quit'
+      ? allTabs
+      : intent.tabs
+        .map(({ tabId }) => allTabs.find((tab) => tab.id === tabId))
+        .filter((tab): tab is TerminalTab => tab !== undefined);
+    const busyIds = busySessionIds(candidates, isCommandRunning);
+    if (!shouldConfirmClose(busyIds)) {
+      void performClose(intent);
+      return;
+    }
+    setPendingClose({ intent, busyCount: busyIds.length });
+  }, [allTabs, performClose]);
 
   const handleMainWindowClose = useCallback(() => {
     const action = resolveMainWindowCloseAction(activeGroup);
     if (action.type === 'quit-app') {
-      void invoke('quit_app');
+      requestClose({ type: 'quit' });
       return;
     }
 
-    void handleTabClose(action.tabId);
-    dispatch({ type: 'REMOVE_TAB', groupId: action.groupId, tabId: action.tabId });
-  }, [activeGroup, dispatch, handleTabClose]);
+    requestClose({
+      type: 'close-tabs',
+      tabs: [{ groupId: action.groupId, tabId: action.tabId }],
+    });
+  }, [activeGroup, requestClose]);
 
   const handleNewLocalTab = useCallback(() => {
     const tabId = `local-${Date.now()}`;
@@ -1207,6 +1257,13 @@ function AppContent() {
     return () => { unlistenPromise.then(fn => fn()); };
   }, [activeGroup, activeTab, handleNewTab, handleNewLocalTab, handleMainWindowClose, handleOpenSettings, handleOpenPortForward, handleDuplicateTab, dispatch]);
 
+  useEffect(() => {
+    const unlistenPromise = listen('quit-requested', () => {
+      requestClose({ type: 'quit' });
+    });
+    return () => { unlistenPromise.then(fn => fn()); };
+  }, [requestClose]);
+
   const handleEditConnection = useCallback((connection: ConnectionNode) => {
     if (connection.type === 'connection') {
       const connectionData = ConnectionStorageManager.getConnection(connection.id);
@@ -1428,6 +1485,9 @@ function AppContent() {
     onReconnectTab: handleReconnect,
     onEditConnection: handleEditConnectionForTab,
     onTabClose: handleTabClose,
+    onRequestCloseTabs: (tabs: Array<{ groupId: string; tabId: string }>) => {
+      requestClose({ type: 'close-tabs', tabs });
+    },
     onOpenInEditorForTab: handleOpenInEditorForTab,
   }), [
     handleDuplicateTab,
@@ -1438,6 +1498,7 @@ function AppContent() {
     handleEditConnectionForTab,
     handleTabClose,
     handleOpenInEditorForTab,
+    requestClose,
   ]);
   const monitorActive =
     rightSidebarTab === 'monitor'
@@ -1691,6 +1752,18 @@ function AppContent() {
           />
         )}
       </Suspense>
+
+      <CloseConfirmDialog
+        open={pendingClose !== null}
+        kind={pendingClose?.intent.type ?? null}
+        busyCount={pendingClose?.busyCount ?? 0}
+        onCancel={() => setPendingClose(null)}
+        onConfirm={() => {
+          const intent = pendingClose?.intent;
+          setPendingClose(null);
+          if (intent) void performClose(intent);
+        }}
+      />
 
       <HostKeyTrustDialog
         open={hostKeyTrustOpen}

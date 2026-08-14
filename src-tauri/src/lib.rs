@@ -324,6 +324,7 @@ pub fn run() {
             commands::move_file_items,
             commands::start_native_file_drag,
             commands::quit_app,
+            commands::confirm_quit,
             commands::detect_gpu,
             commands::get_gpu_stats,
             commands::get_websocket_port,
@@ -362,6 +363,21 @@ pub fn run() {
             // Note: PTY terminal I/O now uses WebSocket instead of IPC
             // WebSocket server runs on a dynamically assigned port (9001-9010)
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if commands::quit_is_confirmed() {
+                    return;
+                }
+                if app.get_webview_window("main").is_none() {
+                    return;
+                }
+                api.prevent_exit();
+                if app.emit_to("main", "quit-requested", ()).is_err() {
+                    commands::mark_quit_confirmed();
+                    app.exit(0);
+                }
+            }
+        });
 }

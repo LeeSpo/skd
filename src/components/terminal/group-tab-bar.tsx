@@ -32,6 +32,7 @@ import {
   ContextMenuSubContent,
 } from '../ui/context-menu';
 import { NewTabMenu } from './new-tab-menu';
+import { tabsRemovedByBulkClose } from '../../lib/session-close';
 
 // ── Component ──
 
@@ -287,14 +288,28 @@ export function GroupTabBar({
     e.preventDefault();
   }, []);
 
-  const { onTabClose } = useTerminalCallbacks();
+  const { onRequestCloseTabs } = useTerminalCallbacks();
+
+  const requestCloseTabIds = useCallback(
+    (tabIds: string[]) => {
+      if (tabIds.length === 0) return;
+      onRequestCloseTabs?.(tabIds.map((tabId) => ({ groupId, tabId })));
+    },
+    [groupId, onRequestCloseTabs],
+  );
 
   const handleTabClose = useCallback(
     (tabId: string) => {
-      void onTabClose?.(tabId);
-      dispatch({ type: 'REMOVE_TAB', groupId, tabId });
+      requestCloseTabIds([tabId]);
     },
-    [dispatch, groupId, onTabClose],
+    [requestCloseTabIds],
+  );
+
+  const handleBulkClose = useCallback(
+    (action: 'others' | 'left' | 'right', pivotTabId: string) => {
+      requestCloseTabIds(tabsRemovedByBulkClose(tabs, action, pivotTabId));
+    },
+    [requestCloseTabIds, tabs],
   );
 
   const handleTabSelect = useCallback(
@@ -402,21 +417,21 @@ export function GroupTabBar({
                   </ContextMenuItem>
                   {/* Close Others */}
                   {tabs.length > 1 && (
-                    <ContextMenuItem onClick={() => dispatch({ type: 'CLOSE_OTHER_TABS', groupId, tabId: tab.id })}>
+                    <ContextMenuItem onClick={() => handleBulkClose('others', tab.id)}>
                       <XCircle className="mr-2 h-4 w-4" />
                       {t('contextMenu.closeOtherTabs')}
                     </ContextMenuItem>
                   )}
                   {/* Close to Right */}
                   {index < tabs.length - 1 && (
-                    <ContextMenuItem onClick={() => dispatch({ type: 'CLOSE_TABS_TO_RIGHT', groupId, tabId: tab.id })}>
+                    <ContextMenuItem onClick={() => handleBulkClose('right', tab.id)}>
                       <ArrowRight className="mr-2 h-4 w-4" />
                       {t('contextMenu.closeTabsToRight')}
                     </ContextMenuItem>
                   )}
                   {/* Close to Left */}
                   {index > 0 && (
-                    <ContextMenuItem onClick={() => dispatch({ type: 'CLOSE_TABS_TO_LEFT', groupId, tabId: tab.id })}>
+                    <ContextMenuItem onClick={() => handleBulkClose('left', tab.id)}>
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       {t('contextMenu.closeTabsToLeft')}
                     </ContextMenuItem>

@@ -364,4 +364,50 @@ mod tests {
     async fn zsh_shell_integration_reports_changed_cwd() {
         assert_shell_reports_changed_cwd("/bin/zsh").await;
     }
+
+    async fn assert_shell_reports_command_lifecycle(shell: &str) {
+        if !std::path::Path::new(shell).exists() {
+            return;
+        }
+        let session = create_local_pty_session_with_shell(shell.to_string(), 80, 24)
+            .expect("failed to create integrated local PTY");
+
+        let initial = collect_until(&session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
+        assert!(
+            initial.contains("\x1b]633;P;Cwd="),
+            "expected initial cwd report from {shell}, got: {initial:?}"
+        );
+
+        session
+            .input_tx
+            .send(b"true\n".to_vec())
+            .await
+            .expect("failed to send true command");
+
+        let started = "\x1b]633;C\x07";
+        let mut output = collect_until(&session, started, Duration::from_secs(5)).await;
+        assert!(
+            output.contains(started),
+            "expected command-start OSC 633;C from {shell}, got: {output:?}"
+        );
+
+        if !output.contains("\x1b]633;D") && !output.contains("\x1b]633;A\x07") {
+            output.push_str(&collect_until(&session, "\x1b]633;D", Duration::from_secs(5)).await);
+        }
+        session.cancel.cancel();
+        assert!(
+            output.contains("\x1b]633;D") || output.contains("\x1b]633;A\x07"),
+            "expected command-finish OSC 633;D or 633;A from {shell}, got: {output:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bash_shell_integration_reports_command_lifecycle() {
+        assert_shell_reports_command_lifecycle("/bin/bash").await;
+    }
+
+    #[tokio::test]
+    async fn zsh_shell_integration_reports_command_lifecycle() {
+        assert_shell_reports_command_lifecycle("/bin/zsh").await;
+    }
 }

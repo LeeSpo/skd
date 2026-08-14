@@ -16,6 +16,8 @@ export interface TerminalCallbacks {
   onEditConnection?: (tabId: string) => void;
   /** Called before a tab is removed so backend sessions can be cleaned up. */
   onTabClose?: (tabId: string) => void | Promise<void>;
+  /** Request closing one or more tabs, with a confirm gate if a command is running. */
+  onRequestCloseTabs?: (tabs: Array<{ groupId: string; tabId: string }>) => void;
   /** Open a remote file in a new editor window for a specific tab connection. */
   onOpenInEditorForTab?: (
     tabConnectionId: string,

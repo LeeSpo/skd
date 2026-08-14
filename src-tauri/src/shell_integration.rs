@@ -41,23 +41,55 @@ __skd_escape_cwd() {
   printf '%s' "$out"
 }
 
-__skd_report_cwd() {
-  local last_status=$?
+__skd_precmd_begin() {
+  __skd_last_status=$?
+  __skd_in_prompt=1
+}
+
+__skd_precmd_end() {
+  printf '\033]633;D;%s\007' "${__skd_last_status:-0}"
   printf '\033]633;P;Cwd=%s\007' "$(__skd_escape_cwd "$PWD")"
-  return "$last_status"
+  printf '\033]633;A\007'
+  __skd_in_prompt=0
+  __skd_expect_cmd=1
+  return "${__skd_last_status:-0}"
+}
+
+__skd_preexec() {
+  [ "${__skd_in_prompt:-0}" = 1 ] && return
+  [ "${__skd_expect_cmd:-0}" = 1 ] || return
+  [ -n "${COMP_LINE-}" ] && return
+  case "${BASH_COMMAND-}" in
+    ''|__skd_*) return ;;
+  esac
+  __skd_expect_cmd=0
+  printf '\033]633;C\007'
+}
+
+__skd_debug_hook() {
+  __skd_preexec
+  if [ -n "${__skd_original_debug_trap-}" ]; then
+    eval "${__skd_original_debug_trap}"
+  fi
 }
 
 if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then
   case " ${PROMPT_COMMAND[*]} " in
-    *" __skd_report_cwd "*) ;;
-    *) PROMPT_COMMAND=(__skd_report_cwd "${PROMPT_COMMAND[@]}") ;;
+    *" __skd_precmd_begin "*) ;;
+    *) PROMPT_COMMAND=(__skd_precmd_begin "${PROMPT_COMMAND[@]}" __skd_precmd_end) ;;
   esac
 else
   case ";${PROMPT_COMMAND:-};" in
-    *';__skd_report_cwd;'*) ;;
-    *) PROMPT_COMMAND="__skd_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+    *';__skd_precmd_begin;'*) ;;
+    *) PROMPT_COMMAND="__skd_precmd_begin${PROMPT_COMMAND:+;$PROMPT_COMMAND};__skd_precmd_end" ;;
   esac
 fi
+
+__skd_original_debug_trap=
+if [[ "$(trap -p DEBUG 2>/dev/null)" =~ trap\ --\ \'(.*)\'\ DEBUG ]]; then
+  __skd_original_debug_trap="${BASH_REMATCH[1]}"
+fi
+trap '__skd_debug_hook' DEBUG
 
 rm -rf -- "$SKD_INTEGRATION_DIR"
 unset SKD_INTEGRATION_DIR SKD_USER_HOME
@@ -86,14 +118,28 @@ __skd_escape_cwd() {
   print -rn -- "$out"
 }
 
-__skd_report_cwd() {
+__skd_preexec() {
+  emulate -L zsh
+  if [[ -z "${1//[$' \t']}" ]]; then
+    return
+  fi
+  builtin printf '\033]633;C\007'
+}
+
+__skd_precmd() {
   local last_status=$?
+  builtin printf '\033]633;D;%s\007' "$last_status"
   builtin printf '\033]633;P;Cwd=%s\007' "$(__skd_escape_cwd "$PWD")"
+  builtin printf '\033]633;A\007'
   return "$last_status"
 }
 
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd __skd_report_cwd
+add-zsh-hook -d precmd __skd_report_cwd 2>/dev/null
+add-zsh-hook -d precmd __skd_precmd 2>/dev/null
+add-zsh-hook -d preexec __skd_preexec 2>/dev/null
+add-zsh-hook precmd __skd_precmd
+add-zsh-hook preexec __skd_preexec
 "#;
 
 const ZSH_ENV_WRAPPER: &str = r#"SKD_INTEGRATION_ZDOTDIR="$ZDOTDIR"
@@ -444,6 +490,9 @@ mod tests {
         assert!(command.contains("umask 077"));
         assert!(command.contains("chmod 600"));
         assert!(command.contains("633;P;Cwd="));
+        assert!(command.contains("633;C"));
+        assert!(command.contains("633;D;"));
+        assert!(command.contains("633;A"));
         assert!(!command.contains(".bashrc <<"));
     }
 

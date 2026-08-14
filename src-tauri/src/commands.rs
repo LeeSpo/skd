@@ -11,6 +11,7 @@ use crate::port_forward::LocalForwardInfo;
 use crate::sftp_client::{FileEntry, FileEntryType, SftpAuthMethod, SftpConfig};
 use crate::ssh::{AuthMethod, SshConfig};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
@@ -3534,9 +3535,27 @@ pub fn delete_connection_secrets(connection_id: String) -> Result<(), String> {
 
 // ========== Native Menu i18n ==========
 
+static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
+
+pub fn mark_quit_confirmed() {
+    QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+}
+
+pub fn quit_is_confirmed() -> bool {
+    QUIT_CONFIRMED.load(Ordering::SeqCst)
+}
+
 /// Exit the entire application, including auxiliary windows.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
+    mark_quit_confirmed();
+    app.exit(0);
+}
+
+/// Confirm a previously intercepted quit (Cmd+Q / app exit).
+#[tauri::command]
+pub fn confirm_quit(app: AppHandle) {
+    mark_quit_confirmed();
     app.exit(0);
 }
 

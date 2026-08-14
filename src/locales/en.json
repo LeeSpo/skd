@@ -73,6 +73,16 @@
     "quickConnectedDesc": "Connected to {{name}}",
     "quickConnectFailedDesc": "Unable to connect. Please try again."
   },
+  "closeConfirm": {
+    "title": "Command still running",
+    "closeDescription_one": "This session still has a command running. Close it anyway?",
+    "closeDescription_other": "{{count}} sessions still have a command running. Close them anyway?",
+    "quitTitle": "Quit skd?",
+    "quitDescription_one": "{{count}} session still has a command running. Quit anyway?",
+    "quitDescription_other": "{{count}} sessions still have a command running. Quit anyway?",
+    "closeAnyway": "Close Anyway",
+    "quitAnyway": "Quit Anyway"
+  },
   "localTerminal": {
     "tabName": "Local",
     "connectFailed": "Failed to open local terminal",
