@@ -743,7 +743,9 @@
     "clearTerminal": "Clear Terminal",
     "clearScrollback": "Clear Scrollback",
     "saveOutputToFile": "Save Output to File",
-    "closeTabsToLeft": "Close Tabs to Left"
+    "closeTabsToLeft": "Close Tabs to Left",
+    "openLink": "Open Link",
+    "copyLink": "Copy Link"
   },
   "updateChecker": {
     "checkForUpdates": "Check for Updates",
@@ -1070,6 +1072,7 @@
     "failedToReadClipboard": "Failed to read from clipboard",
     "copiedToClipboard": "Copied to clipboard",
     "failedToCopyClipboard": "Failed to copy to clipboard",
+    "failedToOpenUrl": "Failed to open link",
     "reconnectingTerminal": "Reconnecting terminal…",
     "outputSaved": "Terminal output saved",
     "failedToSaveOutput": "Failed to save output"

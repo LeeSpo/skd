@@ -3108,13 +3108,42 @@ pub async fn open_in_os(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| format!("Failed to open '{}': {}", path, e))
 }
 
-/// Open an https URL in the user's default browser (used by Check for Updates).
+fn is_safe_external_url(url: &str) -> bool {
+    if url.bytes().any(|b| b == b'\n' || b == b'\r' || b == 0) {
+        return false;
+    }
+    let lower = url.to_ascii_lowercase();
+    lower.starts_with("https://") || lower.starts_with("http://")
+}
+
+/// Open an http(s) URL in the user's default browser.
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://") {
-        return Err("Only https URLs can be opened".to_string());
+    if !is_safe_external_url(&url) {
+        return Err("Only http(s) URLs can be opened".to_string());
     }
     open::that(&url).map_err(|e| format!("Failed to open URL '{}': {}", url, e))
+}
+
+#[cfg(test)]
+mod open_url_tests {
+    use super::is_safe_external_url;
+
+    #[test]
+    fn accepts_http_and_https() {
+        assert!(is_safe_external_url("https://github.com/LeeSpo/skd"));
+        assert!(is_safe_external_url("http://localhost:3000/status"));
+        assert!(is_safe_external_url("HTTPS://Example.COM/a"));
+    }
+
+    #[test]
+    fn rejects_other_schemes_and_control_chars() {
+        assert!(!is_safe_external_url("javascript:alert(1)"));
+        assert!(!is_safe_external_url("file:///etc/passwd"));
+        assert!(!is_safe_external_url("data:text/html,hi"));
+        assert!(!is_safe_external_url("https://example.com/\nhttps://evil"));
+        assert!(!is_safe_external_url("not a url"));
+    }
 }
 
 /// Metadata for a local path. Returned by `stat_local_path` so the frontend can

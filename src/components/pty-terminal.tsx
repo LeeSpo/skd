@@ -36,6 +36,7 @@ import {
 } from '../lib/terminal-command-state';
 import { formatPathsForShell } from '../lib/shell-escape';
 import { useWebviewFileDrop } from '../lib/use-webview-file-drop';
+import { openExternalUrl } from '../lib/open-external-url';
 import { cn } from '../lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
@@ -109,6 +110,8 @@ export function PtyTerminal({
   const [searchVisible, setSearchVisible] = React.useState(false);
   const [searchFocusTrigger, setSearchFocusTrigger] = React.useState(0);
   const [hasSelection, setHasSelection] = React.useState(false);
+  const hoveredLinkRef = React.useRef<string | null>(null);
+  const [contextLinkUrl, setContextLinkUrl] = React.useState<string | null>(null);
 
   // Scrollbar visibility — only show when buffer overflows the visible rows
   const [hasScrollableContent, setHasScrollableContent] = React.useState(false);
@@ -213,7 +216,21 @@ export function PtyTerminal({
     const term = new XTerm(termOptions);
 
     const fitAddon = new FitAddon();
-    const webLinks = new WebLinksAddon();
+    const webLinks = new WebLinksAddon(
+      (_event, uri) => {
+        void openExternalUrl(uri).catch(() => {
+          toast.error(t('ptyTerminal.failedToOpenUrl'));
+        });
+      },
+      {
+        hover: (_event, uri) => {
+          hoveredLinkRef.current = uri;
+        },
+        leave: () => {
+          hoveredLinkRef.current = null;
+        },
+      },
+    );
     const searchAddon = new SearchAddon();
     
     term.loadAddon(fitAddon);
@@ -950,6 +967,22 @@ export function PtyTerminal({
     }
   }, []);
 
+  const handleOpenLink = React.useCallback(() => {
+    if (!contextLinkUrl) return;
+    void openExternalUrl(contextLinkUrl).catch(() => {
+      toast.error(t('ptyTerminal.failedToOpenUrl'));
+    });
+  }, [contextLinkUrl]);
+
+  const handleCopyLink = React.useCallback(() => {
+    if (!contextLinkUrl) return;
+    navigator.clipboard.writeText(contextLinkUrl).then(() => {
+      toast.success(t('ptyTerminal.copiedToClipboard'));
+    }).catch(() => {
+      toast.error(t('ptyTerminal.failedToCopyClipboard'));
+    });
+  }, [contextLinkUrl]);
+
   const handlePaste = React.useCallback(async () => {
     await pasteClipboardIntoPty();
   }, [pasteClipboardIntoPty]);
@@ -1086,6 +1119,9 @@ export function PtyTerminal({
       onReconnect={handleReconnect}
       hasSelection={hasSelection}
       searchActive={searchVisible}
+      linkUrl={contextLinkUrl}
+      onOpenLink={handleOpenLink}
+      onCopyLink={handleCopyLink}
     >
     <div 
       ref={containerRef}
@@ -1093,6 +1129,9 @@ export function PtyTerminal({
         `relative h-full w-full pty-terminal-container pty-term-${scopeId} overflow-hidden`,
         isOsFileDragOver && 'ring-1 ring-inset ring-primary/40',
       )}
+      onContextMenu={() => {
+        setContextLinkUrl(hoveredLinkRef.current);
+      }}
       onClick={(e) => {
         // Don't refocus terminal if clicking on search bar or other interactive elements
         const target = e.target as HTMLElement;

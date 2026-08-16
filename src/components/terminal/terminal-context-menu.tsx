@@ -15,6 +15,7 @@ import {
   Trash2,
   FileText,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 
 interface TerminalContextMenuProps {
@@ -31,6 +32,9 @@ interface TerminalContextMenuProps {
   onReconnect?: () => void;
   hasSelection: boolean;
   searchActive?: boolean;
+  linkUrl?: string | null;
+  onOpenLink?: () => void;
+  onCopyLink?: () => void;
 }
 
 const modKey = '⌘';
@@ -49,6 +53,9 @@ export function TerminalContextMenu({
   onReconnect,
   hasSelection,
   searchActive = false,
+  linkUrl,
+  onOpenLink,
+  onCopyLink,
 }: TerminalContextMenuProps) {
   const { t } = useTranslation();
   return (
@@ -57,6 +64,19 @@ export function TerminalContextMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">
+        {linkUrl && (
+          <>
+            <ContextMenuItem onClick={onOpenLink}>
+              <ExternalLink className="mr-2 h-4 w-4" />
+              <span>{t('contextMenu.openLink')}</span>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={onCopyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              <span>{t('contextMenu.copyLink')}</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onClick={onCopy} disabled={!hasSelection}>
           <Copy className="mr-2 h-4 w-4" />
           <span>{t('contextMenu.copy')}</span>
