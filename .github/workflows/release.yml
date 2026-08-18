@@ -79,14 +79,8 @@ jobs:
           ref: ${{ needs.resolve.outputs.tag }}
           persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: pnpm
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Validate version matches tag
         env:
@@ -94,8 +88,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TAURI_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          PKG_VERSION=$(bun -e "console.log(require('./package.json').version)")
+          TAURI_VERSION=$(bun -e "console.log(require('./src-tauri/tauri.conf.json').version)")
           CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
 
           echo "Expected (from tag): $EXPECTED_VERSION"
@@ -130,13 +124,13 @@ jobs:
           shared-key: release-${{ matrix.target }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build Tauri DMG (ad-hoc signed)
         env:
           APPLE_SIGNING_IDENTITY: "-"
         run: >
-          pnpm tauri build
+          bun run tauri build
           --target ${{ matrix.target }}
           --bundles dmg
           --config '{"bundle":{"createUpdaterArtifacts":false}}'

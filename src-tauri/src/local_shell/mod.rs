@@ -75,7 +75,7 @@ fn create_local_pty_session_with_shell(shell: String, cols: u32, rows: u32) -> R
     // zsh-autosuggestions to write suggestion text at wrong offsets, producing
     // duplicated/swallowed characters (e.g. `cdcd …`, `grok` → `ok`).
     //
-    // When launched from a terminal (`pnpm tauri dev`), LANG is inherited and
+    // When launched from a terminal (`bun run tauri dev`), LANG is inherited and
     // everything works — this bug only manifests in production app bundles.
     if std::env::var("LANG").is_err() {
         let posix_locale = sys_locale::get_locale()

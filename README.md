@@ -66,33 +66,33 @@ Download the appropriate DMG from the [latest GitHub Release](https://github.com
 
 - macOS (Apple Silicon or Intel)
 - Node.js 22+
-- pnpm 9 (the repository pins `9.15.4`)
+- Bun
 - Rust stable with Rust 1.85 or newer
 - Tauri 2 dependencies for macOS
 
 ```bash
 git clone https://github.com/LeeSpo/skd.git
 cd skd
-pnpm install --frozen-lockfile
-pnpm tauri dev
+bun install --frozen-lockfile
+bun run tauri dev
 ```
 
-`pnpm tauri dev` runs the complete desktop application. `pnpm dev` starts only the Vite frontend at `http://localhost:1420`; it does not provide Tauri commands, the macOS menu bar, Keychain access, local PTYs, or SSH/SFTP connections.
+`bun run tauri dev` runs the complete desktop application. `bun run dev` starts only the Vite frontend at `http://localhost:1420`; it does not provide Tauri commands, the macOS menu bar, Keychain access, local PTYs, or SSH/SFTP connections.
 
 ### Validate and build
 
 ```bash
 # Frontend
-pnpm lint
-pnpm exec tsc --noEmit
-pnpm test
-pnpm build
+bun run lint
+bunx tsc --noEmit
+bun run test
+bun run build
 
 # Rust backend
 cd src-tauri && cargo test
 
 # macOS .app and .dmg bundle
-pnpm tauri build
+bun run tauri build
 ```
 
 GitHub Actions builds release DMGs for both Apple Silicon and Intel and publishes their checksums when a `v*` tag is pushed. See the [changelog](CHANGELOG.md) for release history.

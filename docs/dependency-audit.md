@@ -37,7 +37,7 @@ Almost every declared dependency is imported. The tree is not full of dead packa
 
 **Do not remove:** `@xterm/*`, `@radix-ui/*` (every primitive is mounted), `russh` + `rsa` + `ring`, `lucide-react` (tree-shaken), `react-resizable-panels`, `sonner`, `i18next` (string catalog, not leftover locales), the test stack.
 
-Install size (`node_modules` 294 MB, pnpm content-addressed) is dominated by `lucide-react` source (45 MB of unused icons on disk) and tooling (`jsdom`, `vitest`, `typescript`). The **shipped** frontend is ~3.0 MB of `dist/`, already code-split. The release Rust binary is 10.0 MB.
+Install size (`node_modules` 294 MB) is dominated by `lucide-react` source (45 MB of unused icons on disk) and tooling (`jsdom`, `vitest`, `typescript`). The **shipped** frontend is ~3.0 MB of `dist/`, already code-split. The release Rust binary is 10.0 MB.
 
 ---
 
@@ -147,14 +147,14 @@ Source: [package.json](../package.json) `devDependencies`.
 | Package | Used? | Used by | Verdict |
 |---------|-------|---------|---------|
 | `@eslint/js` | yes | `eslint.config.js:1` | keep |
-| `@tauri-apps/cli` | yes | `pnpm tauri` | keep |
+| `@tauri-apps/cli` | yes | `bun run tauri` | keep |
 | `@testing-library/jest-dom` | **no** | Not imported. Not in `vitest.config.ts` `setupFiles` (only `src/__tests__/i18n-setup.ts`). No `toBeInTheDocument` / `toHaveClass` matchers in the suite | **remove** |
 | `@testing-library/react` | yes | 20+ `src/__tests__/*.tsx` files | keep |
 | `@types/node` | yes | Vite / `tsconfig.node.json` | keep |
 | `@types/react` / `@types/react-dom` | yes | TypeScript | keep |
 | `@vitejs/plugin-react` | yes | `vite.config.ts` | keep |
 | `autoprefixer` | yes | `postcss.config.js:4` | keep (optional slim: WKWebView-only target) |
-| `eslint` | yes | `pnpm lint` | keep |
+| `eslint` | yes | `bun run lint` | keep |
 | `eslint-plugin-react-hooks` | yes | `eslint.config.js:3` | keep |
 | `eslint-plugin-react-refresh` | yes | `eslint.config.js:4` | keep |
 | `fast-check` | yes | 13 `*.property.test.ts` files | keep |
@@ -162,10 +162,10 @@ Source: [package.json](../package.json) `devDependencies`.
 | `jsdom` | yes | `vitest.config.ts:11` | keep |
 | `postcss` | yes | Tailwind pipeline | keep |
 | `tailwindcss` | yes | `tailwind.config.js`, `src/styles/globals.css` | keep |
-| `typescript` | yes | `pnpm build` (`tsc && vite build`) | keep |
+| `typescript` | yes | `bun run build` (`tsc && vite build`) | keep |
 | `typescript-eslint` | yes | `eslint.config.js:2` | keep |
-| `vite` | yes | `pnpm dev` / build | keep |
-| `vitest` | yes | `pnpm test` | keep |
+| `vite` | yes | `bun run dev` / build | keep |
+| `vitest` | yes | `bun run test` | keep |
 
 ---
 

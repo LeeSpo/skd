@@ -10,7 +10,7 @@ This project is a fork of [R-Shell](https://github.com/GOODBOY008/r-shell) (MIT 
 - **Bundle identifier**: `com.spo.skd`
 - **Package name**: `skd` (npm / Cargo)
 - **Version source of truth**: `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`
-- **Package Manager**: pnpm (v9.15.4)
+- **Package Manager**: bun
 - **Node Target**: ES2020
 - **Rust Edition**: 2021
 
@@ -59,27 +59,27 @@ The WebSocket protocol uses a tagged `WsMessage` enum:
 
 ## Build & Run
 
-**Platform**: macOS only. `pnpm tauri build` produces `.app` + `.dmg` bundles. Use `pnpm tauri dev` for development; `pnpm dev` (browser-only) lacks the native menu bar and Keychain bridge.
+**Platform**: macOS only. `bun run tauri build` produces `.app` + `.dmg` bundles. Use `bun run tauri dev` for development; `bun run dev` (browser-only) lacks the native menu bar and Keychain bridge.
 
 ```bash
 # Install dependencies
-pnpm install
+bun install
 
 # Frontend dev server only (port 1420)
-pnpm dev
+bun run dev
 
 # Full desktop app with hot reload
-pnpm tauri dev
+bun run tauri dev
 
 # Production build (macOS .app + .dmg)
-pnpm build && pnpm tauri build
+bun run build && bun run tauri build
 ```
 
 ### Testing
 
 ```bash
 # Frontend unit tests (Vitest + jsdom)
-pnpm test
+bun run test
 
 # Rust unit tests
 cd src-tauri && cargo test
@@ -90,10 +90,10 @@ cd src-tauri && cargo test
 
 ```bash
 # Check for lint errors
-pnpm lint
+bun run lint
 
 # Auto-fix fixable issues
-pnpm lint:fix
+bun run lint:fix
 ```
 
 - Config: `eslint.config.js` — ESLint v10 flat config with `typescript-eslint` (type-aware)
@@ -111,9 +111,9 @@ pnpm lint:fix
 ### Version Bumping
 
 ```bash
-pnpm run version:patch   # X.Y.Z → X.Y.(Z+1)
-pnpm run version:minor   # X.Y.Z → X.(Y+1).0
-pnpm run version:major   # X.Y.Z → (X+1).0.0
+bun run version:patch   # X.Y.Z → X.Y.(Z+1)
+bun run version:minor   # X.Y.Z → X.(Y+1).0
+bun run version:major   # X.Y.Z → (X+1).0.0
 ```
 
 Updates `package.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `CHANGELOG.md` and creates a git commit.
@@ -252,7 +252,7 @@ VS Code-like resizable panel layout with presets:
 3. **Connection cancellation**: Pending connections can be cancelled via `CancellationToken`. Always clean up pending state.
 4. **Path alias**: Use `@/` imports in TypeScript (resolves to `src/`). Configured in both `tsconfig.json` and `vite.config.ts`.
 5. **Server key verification**: Currently accepts all server keys (`check_server_key` returns `Ok(true)`). Not for production SSH security.
-6. **ESLint configured (v10 flat config)**: `eslint.config.js` uses `typescript-eslint` with type-aware checking, `react-hooks` v7, and `react-refresh`. Run `pnpm lint` to check, `pnpm lint:fix` to auto-fix. Test files and `src/components/ui/` are excluded or relaxed. Warnings are intentional for `no-unsafe-*` (Tauri invoke), `no-floating-promises` (fire-and-forget), and new react-hooks v7 rules (`set-state-in-effect`, `refs`, `purity`). When adding unused function parameters, prefix with `_`. When renaming destructured props to suppress unused warnings, use `{ propName: _propName }` syntax to keep the interface key intact.
+6. **ESLint configured (v10 flat config)**: `eslint.config.js` uses `typescript-eslint` with type-aware checking, `react-hooks` v7, and `react-refresh`. Run `bun run lint` to check, `bun run lint:fix` to auto-fix. Test files and `src/components/ui/` are excluded or relaxed. Warnings are intentional for `no-unsafe-*` (Tauri invoke), `no-floating-promises` (fire-and-forget), and new react-hooks v7 rules (`set-state-in-effect`, `refs`, `purity`). When adding unused function parameters, prefix with `_`. When renaming destructured props to suppress unused warnings, use `{ propName: _propName }` syntax to keep the interface key intact.
 7. **`editor/` directory is empty**: `src-tauri/src/editor/` exists but contains no files — reserved for future use.
 8. **Update check uses GitHub Releases**: `UpdateChecker` calls the public GitHub API (`LeeSpo/skd` `/releases/latest`), compares the tag to `getVersion()`, and opens the release page in the browser via `open_url`. There is no in-app download/install (Tauri updater plugin is not used).
 9. **localStorage keys use `skd-` prefix**: e.g. `skd-connections`, `skd-terminal-groups`, `skd-layout-config`. No migration from old `r-shell-*` keys.

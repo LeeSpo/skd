@@ -7,9 +7,9 @@
 Use the package scripts:
 
 ```bash
-pnpm run version:patch
-pnpm run version:minor
-pnpm run version:major
+bun run version:patch
+bun run version:minor
+bun run version:major
 ```
 
 Or invoke it directly when options are needed:

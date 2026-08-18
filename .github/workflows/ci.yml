@@ -24,30 +24,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: pnpm
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Lint
-        run: pnpm lint
+        run: bun run lint
 
       - name: Typecheck
-        run: pnpm exec tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Unit tests
-        run: pnpm test
+        run: bun run test
 
       - name: Build frontend
-        # TypeScript was checked above; avoid running tsc a second time via pnpm build.
-        run: pnpm exec vite build
+        # TypeScript was checked above; avoid running tsc a second time via bun run build.
+        run: bunx vite build
 
   rust:
     name: Rust

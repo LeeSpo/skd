@@ -10,7 +10,7 @@ Thank you for your interest in contributing to **skd**! skd is a macOS-only ligh
 
 - **macOS** (Apple Silicon `aarch64` or Intel `x86_64`)
 - **Node.js** 22 or newer
-- **pnpm** 9 (`v9.15.4` or matching version specified in `package.json`)
+- **Bun**
 - **Rust** stable toolchain (2021 edition)
 - **Tauri 2** platform dependencies for macOS
 
@@ -24,16 +24,16 @@ Thank you for your interest in contributing to **skd**! skd is a macOS-only ligh
 
 2. Install dependencies:
    ```bash
-   pnpm install
+   bun install
    ```
 
 3. Launch the desktop application in development mode (with Hot Module Replacement):
    ```bash
-   pnpm tauri dev
+   bun run tauri dev
    ```
 
 > [!NOTE]
-> Running `pnpm dev` launches the Vite dev server for the browser frontend only on port `1420`. It lacks Tauri IPC commands, native macOS menu bar integration, and macOS Keychain bridge. Use `pnpm tauri dev` for full application development.
+> Running `bun run dev` launches the Vite dev server for the browser frontend only on port `1420`. It lacks Tauri IPC commands, native macOS menu bar integration, and macOS Keychain bridge. Use `bun run tauri dev` for full application development.
 
 ---
 
@@ -45,19 +45,19 @@ Before submitting a pull request, ensure all linting, type-checking, formatting,
 
 ```bash
 # Check code style and rules
-pnpm lint
+bun run lint
 
 # Auto-fix fixable ESLint issues
-pnpm lint:fix
+bun run lint:fix
 
 # Run TypeScript type check without emitting code
-pnpm exec tsc --noEmit
+bunx tsc --noEmit
 
 # Run unit tests (Vitest)
-pnpm test
+bun run test
 
 # Build production frontend bundle
-pnpm build
+bun run build
 ```
 
 ### Rust Backend Validation
@@ -126,13 +126,13 @@ Use the automated script to bump versions:
 
 ```bash
 # Bump patch version: 0.2.0 -> 0.2.1
-pnpm run version:patch
+bun run version:patch
 
 # Bump minor version: 0.2.0 -> 0.3.0
-pnpm run version:minor
+bun run version:minor
 
 # Bump major version: 0.2.0 -> 1.0.0
-pnpm run version:major
+bun run version:major
 ```
 
 This script automatically:
