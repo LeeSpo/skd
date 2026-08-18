@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteConnectionSecrets,
   isSavePasswordsEnabled,
+  loadConnectionSecrets,
   storeConnectionSecrets,
   updateConnectionSecrets,
   KEYCHAIN_MIGRATION_FLAG,
@@ -13,6 +14,7 @@ import {
   cleanupKeyboardInteractiveCredentials,
   connectionHasStoredCredentials,
   ConnectionStorageManager,
+  duplicateConnectionWithCredentials,
   getConnectionWithCredentials,
   migratePlaintextCredentialsToKeychain,
 } from '../connection-storage';
@@ -82,8 +84,8 @@ describe('credential storage', () => {
 
     expect(invokeMock).toHaveBeenCalledWith('store_connection_secret', {
       connectionId: 'conn-switch',
-      secretType: 'private_key',
-      secret: 'pem-content',
+      secretType: 'public_key_credentials',
+      secret: JSON.stringify({ version: 1, privateKey: 'pem-content' }),
     });
     expect(invokeMock).toHaveBeenCalledWith('delete_connection_secret', {
       connectionId: 'conn-switch',
@@ -93,6 +95,7 @@ describe('credential storage', () => {
       hasStoredPassword: false,
       hasStoredPassphrase: false,
       hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: true,
     });
   });
 
@@ -101,11 +104,20 @@ describe('credential storage', () => {
 
     const flags = await updateConnectionSecrets(
       'conn-switch-2',
-      { password: 'pw' },
-      { hasStoredPassword: false, hasStoredPassphrase: true, hasStoredPrivateKey: true },
+      { password: 'pw', passphrase: undefined, privateKey: undefined },
+      {
+        hasStoredPassword: false,
+        hasStoredPassphrase: true,
+        hasStoredPrivateKey: true,
+        hasStoredPublicKeyCredentials: true,
+      },
       { rememberPassword: true, authMethod: 'password' },
     );
 
+    expect(invokeMock).toHaveBeenCalledWith('delete_connection_secret', {
+      connectionId: 'conn-switch-2',
+      secretType: 'public_key_credentials',
+    });
     expect(invokeMock).toHaveBeenCalledWith('delete_connection_secret', {
       connectionId: 'conn-switch-2',
       secretType: 'private_key',
@@ -118,6 +130,42 @@ describe('credential storage', () => {
       hasStoredPassword: true,
       hasStoredPassphrase: false,
       hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
+    });
+  });
+
+  it('preserves the stored passphrase when only the private key is updated', async () => {
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_connection_secret' && args?.secretType === 'public_key_credentials') {
+        return JSON.stringify({
+          version: 1,
+          privateKey: 'old-key',
+          passphrase: 'stored-passphrase',
+        });
+      }
+      return null;
+    });
+
+    await updateConnectionSecrets(
+      'conn-partial-key-update',
+      { privateKey: 'new-key' },
+      {
+        hasStoredPassword: false,
+        hasStoredPassphrase: true,
+        hasStoredPrivateKey: true,
+        hasStoredPublicKeyCredentials: true,
+      },
+      { rememberPassword: true, authMethod: 'publickey' },
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith('store_connection_secret', {
+      connectionId: 'conn-partial-key-update',
+      secretType: 'public_key_credentials',
+      secret: JSON.stringify({
+        version: 1,
+        privateKey: 'new-key',
+        passphrase: 'stored-passphrase',
+      }),
     });
   });
 
@@ -177,7 +225,7 @@ describe('credential storage', () => {
 
     expect(invokeMock).toHaveBeenCalledWith('store_connection_secret', {
       connectionId: 'legacy-key',
-      secretType: 'private_key',
+      secretType: 'public_key_credentials',
       secret: expect.stringContaining('BEGIN OPENSSH PRIVATE KEY'),
     });
 
@@ -211,6 +259,136 @@ describe('credential storage', () => {
     expect(hydrated?.password).toBe('keychain-password');
   });
 
+  it('lazily migrates legacy public-key entries and reads the bundle thereafter', async () => {
+    const keychain = new Map<string, string>([
+      ['passphrase', 'legacy-passphrase'],
+      ['private_key', 'legacy-private-key'],
+    ]);
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      const secretType = args?.secretType as string | undefined;
+      if (command === 'get_connection_secret' && secretType) {
+        return keychain.get(secretType) ?? null;
+      }
+      if (command === 'store_connection_secret' && secretType) {
+        keychain.set(secretType, args?.secret as string);
+        return null;
+      }
+      if (command === 'delete_connection_secret' && secretType) {
+        keychain.delete(secretType);
+        return null;
+      }
+      return null;
+    });
+
+    ConnectionStorageManager.saveConnectionWithId('legacy-public-key', {
+      name: 'Legacy public key',
+      host: '1.1.1.1',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'publickey',
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: false,
+    });
+
+    const migrated = await getConnectionWithCredentials('legacy-public-key');
+    expect(migrated).toMatchObject({
+      passphrase: 'legacy-passphrase',
+      privateKeyContent: 'legacy-private-key',
+      hasStoredPublicKeyCredentials: true,
+    });
+    expect(keychain.get('public_key_credentials')).toBe(JSON.stringify({
+      version: 1,
+      privateKey: 'legacy-private-key',
+      passphrase: 'legacy-passphrase',
+    }));
+    expect(keychain.has('passphrase')).toBe(false);
+    expect(keychain.has('private_key')).toBe(false);
+
+    invokeMock.mockClear();
+    await getConnectionWithCredentials('legacy-public-key');
+    expect(invokeMock.mock.calls.filter(([command]) => command === 'get_connection_secret'))
+      .toEqual([[
+        'get_connection_secret',
+        { connectionId: 'legacy-public-key', secretType: 'public_key_credentials' },
+      ]]);
+  });
+
+  it('keeps legacy public-key metadata when bundle migration cannot be stored', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_connection_secret' && args?.secretType === 'passphrase') {
+        return 'legacy-passphrase';
+      }
+      if (command === 'get_connection_secret' && args?.secretType === 'private_key') {
+        return 'legacy-private-key';
+      }
+      if (command === 'store_connection_secret' && args?.secretType === 'public_key_credentials') {
+        throw new Error('Keychain write failed');
+      }
+      return null;
+    });
+
+    ConnectionStorageManager.saveConnectionWithId('legacy-write-failure', {
+      name: 'Legacy write failure',
+      host: '1.1.1.1',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'publickey',
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: false,
+    });
+
+    const hydrated = await getConnectionWithCredentials('legacy-write-failure');
+    expect(hydrated).toMatchObject({
+      passphrase: 'legacy-passphrase',
+      privateKeyContent: 'legacy-private-key',
+      hasStoredPublicKeyCredentials: false,
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('delete_connection_secret', expect.anything());
+    expect(ConnectionStorageManager.getConnection('legacy-write-failure'))
+      .toMatchObject({ hasStoredPublicKeyCredentials: false });
+    warn.mockRestore();
+  });
+
+  it('migrates a legacy path-based key that only stored a passphrase', async () => {
+    let bundle: string | undefined;
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_connection_secret' && args?.secretType === 'passphrase') {
+        return 'legacy-passphrase';
+      }
+      if (command === 'store_connection_secret' && args?.secretType === 'public_key_credentials') {
+        bundle = args?.secret as string;
+      }
+      return null;
+    });
+    ConnectionStorageManager.saveConnectionWithId('legacy-path-key', {
+      name: 'Legacy path key',
+      host: 'example.com',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'publickey',
+      privateKeySource: 'path',
+      privateKeyPath: '/Users/example/.ssh/id_ed25519',
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
+    });
+
+    const hydrated = await getConnectionWithCredentials('legacy-path-key');
+    expect(hydrated).toMatchObject({
+      passphrase: 'legacy-passphrase',
+      privateKeyPath: '/Users/example/.ssh/id_ed25519',
+      hasStoredPublicKeyCredentials: true,
+      hasStoredPrivateKey: false,
+    });
+    expect(bundle).toBe(JSON.stringify({ version: 1, passphrase: 'legacy-passphrase' }));
+  });
+
   it('deleteConnectionSecrets invokes backend delete command', async () => {
     await deleteConnectionSecrets('conn-3');
 
@@ -219,14 +397,111 @@ describe('credential storage', () => {
     });
   });
 
-  it('stores private_key in Keychain when provided', async () => {
-    await storeConnectionSecrets('conn-4', { privateKey: 'pem-content' }, { force: true });
+  it('stores public-key authentication material in one Keychain entry', async () => {
+    const flags = await storeConnectionSecrets(
+      'conn-4',
+      { privateKey: 'pem-content', passphrase: 'key-passphrase' },
+      { force: true },
+    );
 
-    expect(invokeMock).toHaveBeenCalledWith('store_connection_secret', {
-      connectionId: 'conn-4',
-      secretType: 'private_key',
-      secret: 'pem-content',
+    const stores = invokeMock.mock.calls.filter(([command]) => command === 'store_connection_secret');
+    expect(stores).toEqual([[
+      'store_connection_secret',
+      {
+        connectionId: 'conn-4',
+        secretType: 'public_key_credentials',
+        secret: JSON.stringify({
+          version: 1,
+          privateKey: 'pem-content',
+          passphrase: 'key-passphrase',
+        }),
+      },
+    ]]);
+    expect(flags).toEqual({
+      hasStoredPassword: false,
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: true,
     });
+  });
+
+  it('loads a public-key credential bundle with one Keychain read', async () => {
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_connection_secret' && args?.secretType === 'public_key_credentials') {
+        return JSON.stringify({
+          version: 1,
+          privateKey: 'pem-content',
+          passphrase: 'key-passphrase',
+        });
+      }
+      return null;
+    });
+
+    const secrets = await loadConnectionSecrets('conn-bundled-key', {
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: true,
+    });
+
+    expect(secrets).toEqual({
+      privateKey: 'pem-content',
+      passphrase: 'key-passphrase',
+    });
+    expect(invokeMock.mock.calls.filter(([command]) => command === 'get_connection_secret'))
+      .toHaveLength(1);
+  });
+
+  it.each([
+    ['invalid JSON', 'not-json', 'Stored public-key credentials are invalid.'],
+    ['unsupported version', JSON.stringify({ version: 2, privateKey: 'key' }), 'Stored public-key credentials use an unsupported version.'],
+  ])('rejects %s in a public-key credential bundle', async (_caseName, stored, message) => {
+    invokeMock.mockResolvedValue(stored);
+
+    await expect(loadConnectionSecrets('conn-invalid-bundle', {
+      hasStoredPublicKeyCredentials: true,
+    })).rejects.toThrow(message);
+  });
+
+  it('duplicates a public-key connection through one bundled read and write', async () => {
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_connection_secret' && args?.secretType === 'public_key_credentials') {
+        return JSON.stringify({ version: 1, privateKey: 'key', passphrase: 'phrase' });
+      }
+      return null;
+    });
+    ConnectionStorageManager.saveConnectionWithId('duplicate-source', {
+      name: 'Source',
+      host: 'example.com',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'publickey',
+      hasStoredPassphrase: true,
+      hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: true,
+    });
+
+    const duplicated = await duplicateConnectionWithCredentials('duplicate-source', {
+      name: 'Copy',
+      host: 'example.com',
+      port: 22,
+      username: 'user',
+      protocol: 'SSH',
+      authMethod: 'publickey',
+    });
+
+    expect(duplicated).toMatchObject({
+      name: 'Copy',
+      hasStoredPublicKeyCredentials: true,
+    });
+    expect(invokeMock.mock.calls.filter(
+      ([command, args]) => command === 'get_connection_secret'
+        && (args as Record<string, unknown>).secretType === 'public_key_credentials',
+    )).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(
+      ([command, args]) => command === 'store_connection_secret'
+        && (args as Record<string, unknown>).secretType === 'public_key_credentials',
+    )).toHaveLength(1);
   });
 
   it('export strips secrets and hasStored flags', () => {
@@ -240,6 +515,7 @@ describe('credential storage', () => {
       hasStoredPassword: true,
       hasStoredPassphrase: true,
       hasStoredPrivateKey: true,
+      hasStoredPublicKeyCredentials: true,
     });
 
     const exported = JSON.parse(ConnectionStorageManager.exportConnections()) as {
@@ -253,6 +529,7 @@ describe('credential storage', () => {
     expect(conn?.hasStoredPassword).toBe(false);
     expect(conn?.hasStoredPassphrase).toBe(false);
     expect(conn?.hasStoredPrivateKey).toBe(false);
+    expect(conn?.hasStoredPublicKeyCredentials).toBe(false);
     expect(conn?.password).toBeUndefined();
   });
 
@@ -268,6 +545,7 @@ describe('credential storage', () => {
           protocol: 'SSH',
           authMethod: 'password',
           hasStoredPassword: true,
+          hasStoredPublicKeyCredentials: true,
           password: 'should-not-persist',
           createdAt: new Date().toISOString(),
           folder: 'All Connections',
@@ -284,6 +562,7 @@ describe('credential storage', () => {
     expect(imported).toBeDefined();
     expect(imported?.id).not.toBe('old-id');
     expect(imported?.hasStoredPassword).toBe(false);
+    expect(imported?.hasStoredPublicKeyCredentials).toBe(false);
     expect(imported?.password).toBeUndefined();
   });
 
@@ -367,6 +646,7 @@ describe('credential storage', () => {
       hasStoredPassword: false,
       hasStoredPassphrase: false,
       hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
     });
   });
 

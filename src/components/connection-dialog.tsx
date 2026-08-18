@@ -16,10 +16,10 @@ import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
 import {
   ConnectionStorageManager,
+  getConnectionWithCredentials,
   saveConnectionWithCredentials,
   updateConnectionWithCredentials,
 } from '../lib/connection-storage';
-import { loadConnectionSecrets } from '../lib/credential-storage';
 import {
   isValidPrivateKeyPem,
   resolvePrivateKeyContent,
@@ -311,7 +311,8 @@ export function ConnectionDialog({
         setRememberPassword(
           !!storedConnection?.hasStoredPassword
             || !!storedConnection?.hasStoredPassphrase
-            || !!storedConnection?.hasStoredPrivateKey,
+            || !!storedConnection?.hasStoredPrivateKey
+            || !!storedConnection?.hasStoredPublicKeyCredentials,
         );
       } else {
         // Reset to defaults for new connection
@@ -382,16 +383,20 @@ export function ConnectionDialog({
     const connectionId = sessionIdOverride || editingConnection?.id || `connection-${Date.now()}`;
     connectionIdRef.current = connectionId;
 
-    const storedConnection = editingConnection?.id
+    let storedConnection = editingConnection?.id
       ? ConnectionStorageManager.getConnection(editingConnection.id)
       : undefined;
-    const storedSecrets = editingConnection?.id
-      ? await loadConnectionSecrets(editingConnection.id, {
-          hasStoredPassword: storedConnection?.hasStoredPassword,
-          hasStoredPassphrase: storedConnection?.hasStoredPassphrase,
-          hasStoredPrivateKey: storedConnection?.hasStoredPrivateKey,
-        })
-      : {};
+    const storedConnectionWithCredentials = editingConnection?.id
+      ? await getConnectionWithCredentials(editingConnection.id)
+      : undefined;
+    if (editingConnection?.id) {
+      storedConnection = ConnectionStorageManager.getConnection(editingConnection.id);
+    }
+    const storedSecrets = {
+      password: storedConnectionWithCredentials?.password,
+      passphrase: storedConnectionWithCredentials?.passphrase,
+      privateKey: storedConnectionWithCredentials?.privateKeyContent,
+    };
     const resolvedPassword = config.password || storedSecrets.password || '';
     const resolvedPassphrase = config.passphrase || storedSecrets.passphrase || '';
     const privateKeySource = config.privateKeySource ?? 'path';
@@ -525,7 +530,7 @@ export function ConnectionDialog({
 
     const credentialSecrets = {
       password: config.authMethod === 'password' ? config.password || undefined : undefined,
-      passphrase: config.authMethod === 'publickey' ? config.passphrase || undefined : undefined,
+      passphrase: config.authMethod === 'publickey' ? resolvedPassphrase || undefined : undefined,
       privateKey: config.authMethod === 'publickey' ? privateKeyForStorage : undefined,
     };
 

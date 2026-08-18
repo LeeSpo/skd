@@ -9,6 +9,7 @@ export interface PrivateKeyInput {
   privateKeyPath?: string;
   privateKeyContent?: string;
   hasStoredPrivateKey?: boolean;
+  hasStoredPublicKeyCredentials?: boolean;
   storedPrivateKey?: string;
   /** When set, Keychain can be loaded for this connection id */
   connectionId?: string;
@@ -30,9 +31,10 @@ export async function resolvePrivateKeyContent(input: PrivateKeyInput): Promise<
     return input.storedPrivateKey.trim();
   }
 
-  if (input.hasStoredPrivateKey && input.connectionId) {
+  if ((input.hasStoredPrivateKey || input.hasStoredPublicKeyCredentials) && input.connectionId) {
     const secrets = await loadConnectionSecrets(input.connectionId, {
-      hasStoredPrivateKey: true,
+      hasStoredPrivateKey: input.hasStoredPrivateKey,
+      hasStoredPublicKeyCredentials: input.hasStoredPublicKeyCredentials,
     });
     if (secrets.privateKey?.trim()) {
       return secrets.privateKey.trim();
@@ -70,9 +72,10 @@ export async function resolvePrivateKeyForStorage(
     return input.privateKeyContent.trim();
   }
 
-  if (input.hasStoredPrivateKey && input.connectionId) {
+  if ((input.hasStoredPrivateKey || input.hasStoredPublicKeyCredentials) && input.connectionId) {
     const secrets = await loadConnectionSecrets(input.connectionId, {
-      hasStoredPrivateKey: true,
+      hasStoredPrivateKey: input.hasStoredPrivateKey,
+      hasStoredPublicKeyCredentials: input.hasStoredPublicKeyCredentials,
     });
     return secrets.privateKey?.trim();
   }
@@ -83,13 +86,19 @@ export async function resolvePrivateKeyForStorage(
 export async function getPrivateKeyContentForConnection(
   connection: Pick<
     ConnectionData,
-    'id' | 'privateKeyContent' | 'privateKeyPath' | 'hasStoredPrivateKey' | 'privateKeySource'
+    | 'id'
+    | 'privateKeyContent'
+    | 'privateKeyPath'
+    | 'hasStoredPrivateKey'
+    | 'hasStoredPublicKeyCredentials'
+    | 'privateKeySource'
   >,
 ): Promise<string | null> {
   const content = await resolvePrivateKeyContent({
     privateKeyContent: connection.privateKeyContent,
     privateKeyPath: connection.privateKeyPath,
     hasStoredPrivateKey: connection.hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials: connection.hasStoredPublicKeyCredentials,
     storedPrivateKey: connection.privateKeyContent,
     privateKeySource: connection.privateKeySource,
     connectionId: connection.id,

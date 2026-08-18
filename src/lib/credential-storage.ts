@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { APP_SETTINGS_STORAGE_KEY } from './keyboard-shortcuts';
 
-export type ConnectionSecretType = 'password' | 'passphrase' | 'private_key';
+export type ConnectionSecretType =
+  | 'password'
+  | 'public_key_credentials';
+
+type LegacyConnectionSecretType = 'passphrase' | 'private_key';
+type ReadableConnectionSecretType = ConnectionSecretType | LegacyConnectionSecretType;
 
 export type CredentialAuthMethod =
   | 'password'
@@ -16,21 +21,69 @@ export interface ConnectionSecrets {
 }
 
 export interface ConnectionSecretUpdate {
-  password?: string;
-  passphrase?: string;
-  privateKey?: string;
+  password?: string | null;
+  passphrase?: string | null;
+  privateKey?: string | null;
 }
 
 export interface StoredCredentialFlags {
   hasStoredPassword: boolean;
   hasStoredPassphrase: boolean;
   hasStoredPrivateKey: boolean;
+  hasStoredPublicKeyCredentials: boolean;
 }
 
 export interface CredentialStoreOptions {
   force?: boolean;
   rememberPassword?: boolean;
   authMethod?: CredentialAuthMethod;
+}
+
+interface PublicKeyCredentialsV1 {
+  version: 1;
+  privateKey?: string;
+  passphrase?: string;
+}
+
+function serializePublicKeyCredentials(secrets: ConnectionSecrets): string {
+  const credentials: PublicKeyCredentialsV1 = {
+    version: 1,
+    ...(secrets.privateKey ? { privateKey: secrets.privateKey } : {}),
+    ...(secrets.passphrase ? { passphrase: secrets.passphrase } : {}),
+  };
+  return JSON.stringify(credentials);
+}
+
+function parsePublicKeyCredentials(raw: string): ConnectionSecrets {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('Stored public-key credentials are invalid.');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || !('version' in parsed) || parsed.version !== 1) {
+    throw new Error('Stored public-key credentials use an unsupported version.');
+  }
+
+  const credentials = parsed as Record<string, unknown>;
+  const privateKey = credentials.privateKey;
+  const passphrase = credentials.passphrase;
+  if (
+    (privateKey !== undefined && typeof privateKey !== 'string')
+    || (passphrase !== undefined && typeof passphrase !== 'string')
+  ) {
+    throw new Error('Stored public-key credentials are invalid.');
+  }
+
+  if (!privateKey && !passphrase) {
+    throw new Error('Stored public-key credentials are empty.');
+  }
+
+  return {
+    ...(privateKey ? { privateKey } : {}),
+    ...(passphrase ? { passphrase } : {}),
+  };
 }
 
 /**
@@ -68,7 +121,7 @@ export async function storeConnectionSecret(
 
 export async function getConnectionSecret(
   connectionId: string,
-  secretType: ConnectionSecretType,
+  secretType: ReadableConnectionSecretType,
 ): Promise<string | undefined> {
   const secret = await invoke<string | null>('get_connection_secret', {
     connectionId,
@@ -80,7 +133,7 @@ export async function getConnectionSecret(
 
 export async function deleteConnectionSecret(
   connectionId: string,
-  secretType: ConnectionSecretType,
+  secretType: ReadableConnectionSecretType,
 ): Promise<void> {
   await invoke('delete_connection_secret', {
     connectionId,
@@ -99,23 +152,30 @@ async function writeProvidedSecrets(
   let hasStoredPassword = false;
   let hasStoredPassphrase = false;
   let hasStoredPrivateKey = false;
+  let hasStoredPublicKeyCredentials = false;
 
   if (secrets.password) {
     await storeConnectionSecret(connectionId, 'password', secrets.password);
     hasStoredPassword = true;
   }
 
-  if (secrets.passphrase) {
-    await storeConnectionSecret(connectionId, 'passphrase', secrets.passphrase);
-    hasStoredPassphrase = true;
+  if (secrets.passphrase || secrets.privateKey) {
+    await storeConnectionSecret(
+      connectionId,
+      'public_key_credentials',
+      serializePublicKeyCredentials(secrets),
+    );
+    hasStoredPassphrase = !!secrets.passphrase;
+    hasStoredPrivateKey = !!secrets.privateKey;
+    hasStoredPublicKeyCredentials = true;
   }
 
-  if (secrets.privateKey) {
-    await storeConnectionSecret(connectionId, 'private_key', secrets.privateKey);
-    hasStoredPrivateKey = true;
-  }
-
-  return { hasStoredPassword, hasStoredPassphrase, hasStoredPrivateKey };
+  return {
+    hasStoredPassword,
+    hasStoredPassphrase,
+    hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials,
+  };
 }
 
 /**
@@ -129,7 +189,12 @@ export async function storeConnectionSecrets(
 ): Promise<StoredCredentialFlags> {
   if (!shouldStoreSecrets(options)) {
     await deleteConnectionSecrets(connectionId);
-    return { hasStoredPassword: false, hasStoredPassphrase: false, hasStoredPrivateKey: false };
+    return {
+      hasStoredPassword: false,
+      hasStoredPassphrase: false,
+      hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
+    };
   }
 
   // Delete first so reused connection IDs cannot leave orphan secret types.
@@ -137,11 +202,7 @@ export async function storeConnectionSecrets(
   return writeProvidedSecrets(connectionId, secrets);
 }
 
-/**
- * Merge store: write provided secrets without clearing other types.
- * Used by plaintext→Keychain migration so partial legacy fields do not wipe
- * already-migrated Keychain entries.
- */
+/** Write migration material without clearing unrelated authentication entries. */
 export async function mergeConnectionSecrets(
   connectionId: string,
   secrets: ConnectionSecrets,
@@ -160,9 +221,14 @@ export async function pruneSecretsForAuthMethod(
   let hasStoredPassword = flags.hasStoredPassword;
   let hasStoredPassphrase = flags.hasStoredPassphrase;
   let hasStoredPrivateKey = flags.hasStoredPrivateKey;
+  let hasStoredPublicKeyCredentials = flags.hasStoredPublicKeyCredentials;
 
   switch (authMethod) {
     case 'password':
+      if (hasStoredPublicKeyCredentials) {
+        await deleteConnectionSecret(connectionId, 'public_key_credentials');
+        hasStoredPublicKeyCredentials = false;
+      }
       if (hasStoredPrivateKey) {
         await deleteConnectionSecret(connectionId, 'private_key');
         hasStoredPrivateKey = false;
@@ -177,6 +243,7 @@ export async function pruneSecretsForAuthMethod(
       hasStoredPassword = false;
       hasStoredPassphrase = false;
       hasStoredPrivateKey = false;
+      hasStoredPublicKeyCredentials = false;
       break;
     case 'publickey':
       if (hasStoredPassword) {
@@ -189,12 +256,18 @@ export async function pruneSecretsForAuthMethod(
       hasStoredPassword = false;
       hasStoredPassphrase = false;
       hasStoredPrivateKey = false;
+      hasStoredPublicKeyCredentials = false;
       break;
     default:
       break;
   }
 
-  return { hasStoredPassword, hasStoredPassphrase, hasStoredPrivateKey };
+  return {
+    hasStoredPassword,
+    hasStoredPassphrase,
+    hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials,
+  };
 }
 
 /**
@@ -210,31 +283,74 @@ export async function updateConnectionSecrets(
     hasStoredPassword?: boolean;
     hasStoredPassphrase?: boolean;
     hasStoredPrivateKey?: boolean;
+    hasStoredPublicKeyCredentials?: boolean;
   },
   options?: CredentialStoreOptions,
 ): Promise<StoredCredentialFlags> {
   if (!shouldStoreSecrets(options)) {
     await deleteConnectionSecrets(connectionId);
-    return { hasStoredPassword: false, hasStoredPassphrase: false, hasStoredPrivateKey: false };
+    return {
+      hasStoredPassword: false,
+      hasStoredPassphrase: false,
+      hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
+    };
   }
 
   let hasStoredPassword = existing.hasStoredPassword ?? false;
   let hasStoredPassphrase = existing.hasStoredPassphrase ?? false;
   let hasStoredPrivateKey = existing.hasStoredPrivateKey ?? false;
+  let hasStoredPublicKeyCredentials = existing.hasStoredPublicKeyCredentials ?? false;
 
   if (secrets.password) {
     await storeConnectionSecret(connectionId, 'password', secrets.password);
     hasStoredPassword = true;
   }
 
-  if (secrets.passphrase) {
-    await storeConnectionSecret(connectionId, 'passphrase', secrets.passphrase);
-    hasStoredPassphrase = true;
-  }
+  const hasPassphraseUpdate = Object.prototype.hasOwnProperty.call(secrets, 'passphrase');
+  const hasPrivateKeyUpdate = Object.prototype.hasOwnProperty.call(secrets, 'privateKey');
+  if (hasPassphraseUpdate || hasPrivateKeyUpdate) {
+    let storedSecrets: ConnectionSecrets = {};
+    if (
+      (!hasPassphraseUpdate || !hasPrivateKeyUpdate)
+      && (hasStoredPublicKeyCredentials || hasStoredPassphrase || hasStoredPrivateKey)
+    ) {
+      storedSecrets = await loadConnectionSecrets(connectionId, {
+        hasStoredPassphrase,
+        hasStoredPrivateKey,
+        hasStoredPublicKeyCredentials,
+      });
+    }
+    const mergedSecrets: ConnectionSecrets = {
+      privateKey: hasPrivateKeyUpdate
+        ? secrets.privateKey || undefined
+        : storedSecrets.privateKey,
+      passphrase: hasPassphraseUpdate
+        ? secrets.passphrase || undefined
+        : storedSecrets.passphrase,
+    };
 
-  if (secrets.privateKey) {
-    await storeConnectionSecret(connectionId, 'private_key', secrets.privateKey);
-    hasStoredPrivateKey = true;
+    if (!mergedSecrets.passphrase && !mergedSecrets.privateKey) {
+      await deleteConnectionSecret(connectionId, 'public_key_credentials');
+      if (existing.hasStoredPrivateKey) {
+        await deleteConnectionSecret(connectionId, 'private_key');
+      }
+      if (existing.hasStoredPassphrase) {
+        await deleteConnectionSecret(connectionId, 'passphrase');
+      }
+      hasStoredPassphrase = false;
+      hasStoredPrivateKey = false;
+      hasStoredPublicKeyCredentials = false;
+    } else {
+      await storeConnectionSecret(
+        connectionId,
+        'public_key_credentials',
+        serializePublicKeyCredentials(mergedSecrets),
+      );
+      hasStoredPassphrase = !!mergedSecrets.passphrase;
+      hasStoredPrivateKey = !!mergedSecrets.privateKey;
+      hasStoredPublicKeyCredentials = true;
+    }
   }
 
   if (options?.authMethod) {
@@ -242,10 +358,16 @@ export async function updateConnectionSecrets(
       hasStoredPassword,
       hasStoredPassphrase,
       hasStoredPrivateKey,
+      hasStoredPublicKeyCredentials,
     });
   }
 
-  return { hasStoredPassword, hasStoredPassphrase, hasStoredPrivateKey };
+  return {
+    hasStoredPassword,
+    hasStoredPassphrase,
+    hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials,
+  };
 }
 
 export async function loadConnectionSecrets(
@@ -254,6 +376,7 @@ export async function loadConnectionSecrets(
     hasStoredPassword?: boolean;
     hasStoredPassphrase?: boolean;
     hasStoredPrivateKey?: boolean;
+    hasStoredPublicKeyCredentials?: boolean;
   },
 ): Promise<ConnectionSecrets> {
   const secrets: ConnectionSecrets = {};
@@ -262,29 +385,22 @@ export async function loadConnectionSecrets(
     secrets.password = await getConnectionSecret(connectionId, 'password');
   }
 
-  if (flags?.hasStoredPassphrase) {
+  if (flags?.hasStoredPublicKeyCredentials) {
+    const raw = await getConnectionSecret(connectionId, 'public_key_credentials');
+    if (!raw) {
+      throw new Error('Stored public-key credentials are missing.');
+    }
+    Object.assign(secrets, parsePublicKeyCredentials(raw));
+  } else if (flags?.hasStoredPassphrase) {
     secrets.passphrase = await getConnectionSecret(connectionId, 'passphrase');
-  }
-
-  if (flags?.hasStoredPrivateKey) {
+    if (flags?.hasStoredPrivateKey) {
+      secrets.privateKey = await getConnectionSecret(connectionId, 'private_key');
+    }
+  } else if (flags?.hasStoredPrivateKey) {
     secrets.privateKey = await getConnectionSecret(connectionId, 'private_key');
   }
 
   return secrets;
-}
-
-export async function copyConnectionSecrets(fromId: string, toId: string): Promise<StoredCredentialFlags> {
-  if (!isSavePasswordsEnabled()) {
-    return { hasStoredPassword: false, hasStoredPassphrase: false, hasStoredPrivateKey: false };
-  }
-
-  const [password, passphrase, privateKey] = await Promise.all([
-    getConnectionSecret(fromId, 'password'),
-    getConnectionSecret(fromId, 'passphrase'),
-    getConnectionSecret(fromId, 'private_key'),
-  ]);
-
-  return storeConnectionSecrets(toId, { password, passphrase, privateKey }, { force: true });
 }
 
 /** v1 migrated password/passphrase only; v2 also migrates privateKeyContent. */

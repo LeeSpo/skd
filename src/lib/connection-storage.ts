@@ -4,6 +4,7 @@
  */
 
 import {
+  deleteConnectionSecret,
   deleteConnectionSecrets,
   KEYCHAIN_MIGRATION_FLAG,
   KEYCHAIN_MIGRATION_FLAG_V1,
@@ -15,7 +16,6 @@ import {
   type ConnectionSecrets,
   type ConnectionSecretUpdate,
   type CredentialStoreOptions,
-  copyConnectionSecrets,
 } from './credential-storage';
 import {
   clearPortForwardBookmarks,
@@ -56,6 +56,7 @@ export interface ConnectionData {
   hasStoredPassword?: boolean;
   hasStoredPassphrase?: boolean;
   hasStoredPrivateKey?: boolean;
+  hasStoredPublicKeyCredentials?: boolean;
   // FTP-specific
   ftpsEnabled?: boolean;
 }
@@ -78,6 +79,7 @@ function stripCredentialMetadata(connection: ConnectionData): ConnectionData {
     hasStoredPassword: _hasStoredPassword,
     hasStoredPassphrase: _hasStoredPassphrase,
     hasStoredPrivateKey: _hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials: _hasStoredPublicKeyCredentials,
     ...withoutFlags
   } = sanitized;
 
@@ -86,6 +88,7 @@ function stripCredentialMetadata(connection: ConnectionData): ConnectionData {
     hasStoredPassword: false,
     hasStoredPassphrase: false,
     hasStoredPrivateKey: false,
+    hasStoredPublicKeyCredentials: false,
   };
 }
 
@@ -109,6 +112,7 @@ export function connectionHasStoredCredentials(connection: ConnectionData): bool
   return !!(
     connection.privateKeyContent ||
     connection.hasStoredPrivateKey ||
+    connection.hasStoredPublicKeyCredentials ||
     connection.privateKeyPath
   );
 }
@@ -610,10 +614,44 @@ export async function getConnectionWithCredentials(id: string): Promise<Connecti
     hasStoredPassword: connection.hasStoredPassword,
     hasStoredPassphrase: connection.hasStoredPassphrase,
     hasStoredPrivateKey: connection.hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials: connection.hasStoredPublicKeyCredentials,
   });
 
+  let hydratedConnection = connection;
+  const needsPublicKeyMigration = connection.authMethod === 'publickey'
+    && !connection.hasStoredPublicKeyCredentials
+    && !!(connection.hasStoredPassphrase || connection.hasStoredPrivateKey);
+
+  if (needsPublicKeyMigration && (secrets.passphrase || secrets.privateKey)) {
+    try {
+      const migratedFlags = await mergeConnectionSecrets(id, {
+        passphrase: secrets.passphrase,
+        privateKey: secrets.privateKey,
+      });
+      hydratedConnection = ConnectionStorageManager.updateConnection(id, {
+        hasStoredPassphrase: migratedFlags.hasStoredPassphrase,
+        hasStoredPrivateKey: migratedFlags.hasStoredPrivateKey,
+        hasStoredPublicKeyCredentials: migratedFlags.hasStoredPublicKeyCredentials,
+      }) ?? connection;
+
+      const legacyKinds = [
+        ...(connection.hasStoredPassphrase ? ['passphrase'] as const : []),
+        ...(connection.hasStoredPrivateKey ? ['private_key'] as const : []),
+      ];
+      await Promise.all(legacyKinds.map(async (secretType) => {
+        try {
+          await deleteConnectionSecret(id, secretType);
+        } catch (error) {
+          console.warn(`Failed to remove legacy ${secretType} credential:`, error);
+        }
+      }));
+    } catch (error) {
+      console.warn('Failed to migrate legacy public-key credentials:', error);
+    }
+  }
+
   return {
-    ...connection,
+    ...hydratedConnection,
     password: secrets.password,
     passphrase: secrets.passphrase,
     privateKeyContent: secrets.privateKey,
@@ -629,7 +667,12 @@ export async function saveConnectionWithCredentials(
   const authMethod = options?.authMethod ?? connection.authMethod;
   let credentialFlags = await storeConnectionSecrets(id, secrets ?? {}, options);
 
-  if (authMethod && (credentialFlags.hasStoredPassword || credentialFlags.hasStoredPassphrase || credentialFlags.hasStoredPrivateKey)) {
+  if (authMethod && (
+    credentialFlags.hasStoredPassword
+    || credentialFlags.hasStoredPassphrase
+    || credentialFlags.hasStoredPrivateKey
+    || credentialFlags.hasStoredPublicKeyCredentials
+  )) {
     credentialFlags = await pruneSecretsForAuthMethod(id, authMethod, credentialFlags);
   }
 
@@ -638,6 +681,7 @@ export async function saveConnectionWithCredentials(
     hasStoredPassword: credentialFlags.hasStoredPassword,
     hasStoredPassphrase: credentialFlags.hasStoredPassphrase,
     hasStoredPrivateKey: credentialFlags.hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials: credentialFlags.hasStoredPublicKeyCredentials,
   });
 }
 
@@ -661,6 +705,7 @@ export async function updateConnectionWithCredentials(
     hasStoredPassword: credentialFlags.hasStoredPassword,
     hasStoredPassphrase: credentialFlags.hasStoredPassphrase,
     hasStoredPrivateKey: credentialFlags.hasStoredPrivateKey,
+    hasStoredPublicKeyCredentials: credentialFlags.hasStoredPublicKeyCredentials,
   });
 }
 
@@ -682,8 +727,19 @@ export async function duplicateConnectionWithCredentials(
   sourceId: string,
   connection: Omit<ConnectionData, 'id' | 'createdAt'>,
 ): Promise<ConnectionData | null> {
+  const source = await getConnectionWithCredentials(sourceId);
+  if (!source) return null;
+
   const saved = ConnectionStorageManager.saveConnection(connection);
-  const credentialFlags = await copyConnectionSecrets(sourceId, saved.id);
+  const credentialFlags = await storeConnectionSecrets(
+    saved.id,
+    {
+      password: source.password,
+      passphrase: source.passphrase,
+      privateKey: source.privateKeyContent,
+    },
+    { force: true, authMethod: source.authMethod },
+  );
 
   return ConnectionStorageManager.updateConnection(saved.id, credentialFlags);
 }
@@ -722,6 +778,8 @@ export async function migratePlaintextCredentialsToKeychain(): Promise<number> {
           flags.hasStoredPassphrase || !!connection.hasStoredPassphrase || !!legacyPassphrase,
         hasStoredPrivateKey:
           flags.hasStoredPrivateKey || !!connection.hasStoredPrivateKey || !!legacyPrivateKey,
+        hasStoredPublicKeyCredentials:
+          flags.hasStoredPublicKeyCredentials || !!connection.hasStoredPublicKeyCredentials,
       });
     }),
   );
@@ -753,6 +811,7 @@ export async function cleanupKeyboardInteractiveCredentials(): Promise<number> {
       hasStoredPassword: false,
       hasStoredPassphrase: false,
       hasStoredPrivateKey: false,
+      hasStoredPublicKeyCredentials: false,
     };
   }));
 
