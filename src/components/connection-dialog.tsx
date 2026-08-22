@@ -49,13 +49,13 @@ import { HostKeyTrustDialog } from './host-key-trust-dialog';
 import { toast } from 'sonner';
 import {
   Server,
-  Shield,
   FolderOpen,
   Network,
   Terminal as TerminalIcon,
 } from 'lucide-react';
 import { getDefaultPort, getAuthMethods, getHiddenFields } from '@/lib/protocol-config';
 import { connectionNameUpdateForHostChange } from '@/lib/connection-name-sync';
+import { cn } from '@/lib/utils';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -727,14 +727,23 @@ export function ConnectionDialog({
     onOpenChange(newOpen);
   };
 
-  const tabContentClassName = 'px-6 py-4 space-y-4 mt-0 overflow-y-auto';
+  const isTallAuth = config.authMethod === 'publickey';
+  const tabContentClassName = cn(
+    'px-6 py-4 space-y-4 mt-0 overflow-y-auto',
+    isTallAuth && 'flex-1 min-h-0',
+  );
+  const showRememberPassword = (editingConnection || saveAsConnection)
+    && (config.authMethod === 'password' || config.authMethod === 'publickey');
 
   return (
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         position="tauri"
-        className="w-full overflow-hidden p-0 gap-0 min-w-0 h-fit sm:max-w-4xl"
+        className={cn(
+          'w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl',
+          isTallAuth ? '!h-[85vh]' : 'h-fit',
+        )}
       >
         <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
@@ -753,7 +762,7 @@ export function ConnectionDialog({
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="flex flex-col overflow-hidden shrink-0"
+          className={cn('flex flex-col overflow-hidden', isTallAuth && 'min-h-0 flex-1')}
         >
           <TabsList
             variant="underline"
@@ -766,14 +775,6 @@ export function ConnectionDialog({
             >
               <Server className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.connection')}</span>
-            </TabsTrigger>
-            <TabsTrigger
-              variant="underline"
-              value="authentication"
-              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
-            >
-              <Shield className="h-3.5 w-3.5" />
-              <span>{t('connectionDialog.tab.auth')}</span>
             </TabsTrigger>
             <TabsTrigger
               variant="underline"
@@ -807,6 +808,46 @@ export function ConnectionDialog({
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-2 space-y-2">
+                    <Label htmlFor="connection-name">{t('connectionDialog.label.connectionName')}</Label>
+                    <Input
+                      id="connection-name"
+                      placeholder={t('connectionDialog.placeholder.connectionName')}
+                      value={config.name}
+                      onChange={(e) => {
+                        nameManuallyEditedRef.current = true;
+                        updateConfig({ name: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="protocol">{t('connectionDialog.label.protocol')}</Label>
+                    <Select
+                      value={config.protocol}
+                      onValueChange={(value: ConnectionConfig['protocol']) => {
+                        const validAuthMethods = getAuthMethods(value);
+                        const currentAuthValid = validAuthMethods.includes(config.authMethod);
+                        updateConfig({
+                          protocol: value,
+                          port: getDefaultPort(value),
+                          ...(!currentAuthValid && { authMethod: validAuthMethods[0] }),
+                          ...(value !== 'FTP' && { ftpsEnabled: undefined }),
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="protocol">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SSH">SSH</SelectItem>
+                        <SelectItem value="SFTP">SFTP</SelectItem>
+                        <SelectItem value="FTP">FTP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2 space-y-2">
                     <Label htmlFor="host">{t('connectionDialog.label.host')}</Label>
                     <Input
                       id="host"
@@ -835,91 +876,52 @@ export function ConnectionDialog({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="connection-name">{t('connectionDialog.label.connectionName')}</Label>
+                {config.protocol === 'FTP' && (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>{t('connectionDialog.ftp.enableFtps')}</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {t('connectionDialog.ftp.enableFtpsDesc')}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={config.ftpsEnabled ?? false}
+                      onCheckedChange={(checked) => updateConfig({ ftpsEnabled: checked })}
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="username">{t('connectionDialog.label.username')}</Label>
                     <Input
-                      id="connection-name"
-                      placeholder={t('connectionDialog.placeholder.connectionName')}
-                      value={config.name}
-                      onChange={(e) => {
-                        nameManuallyEditedRef.current = true;
-                        updateConfig({ name: e.target.value });
-                      }}
+                      id="username"
+                      placeholder={t('connectionDialog.placeholder.username')}
+                      value={config.username}
+                      onChange={(e) => updateConfig({ username: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="protocol">{t('connectionDialog.label.protocol')}</Label>
+                    <Label htmlFor="auth-method">{t('connectionDialog.label.authMethod')}</Label>
                     <Select
-                      value={config.protocol}
-                      onValueChange={(value: ConnectionConfig['protocol']) => {
-                        const validAuthMethods = getAuthMethods(value);
-                        const currentAuthValid = validAuthMethods.includes(config.authMethod);
-                        updateConfig({
-                          protocol: value,
-                          port: getDefaultPort(value),
-                          ...(!currentAuthValid && { authMethod: validAuthMethods[0] }),
-                          ...(value !== 'FTP' && { ftpsEnabled: undefined }),
-                        });
-                      }}
+                      value={config.authMethod}
+                      onValueChange={(value: ConnectionConfig['authMethod']) => updateConfig({ authMethod: value })}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="auth-method">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="SSH">SSH</SelectItem>
-                        <SelectItem value="SFTP">SFTP</SelectItem>
-                        <SelectItem value="FTP">FTP</SelectItem>
+                        {getAuthMethods(config.protocol).map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {method === 'password' ? t('connectionDialog.authMethod.password') :
+                             method === 'publickey' ? t('connectionDialog.authMethod.publicKey') :
+                             method === 'keyboard-interactive' ? t('connectionDialog.authMethod.keyboardInteractive') :
+                             method === 'anonymous' ? t('connectionDialog.authMethod.anonymous') : method}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="username">{t('connectionDialog.label.username')}</Label>
-                  <Input
-                    id="username"
-                    placeholder={t('connectionDialog.placeholder.username')}
-                    value={config.username}
-                    onChange={(e) => updateConfig({ username: e.target.value })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="authentication" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  {t('connectionDialog.section.authentication')}
-                </CardTitle>
-                <CardDescription>
-                  {t('connectionDialog.section.authenticationDesc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{t('connectionDialog.section.authentication')}</Label>
-                  <Select
-                    value={config.authMethod}
-                    onValueChange={(value: ConnectionConfig['authMethod']) => updateConfig({ authMethod: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAuthMethods(config.protocol).map((method) => (
-                        <SelectItem key={method} value={method}>
-                          {method === 'password' ? t('connectionDialog.authMethod.password') :
-                           method === 'publickey' ? t('connectionDialog.authMethod.publicKey') :
-                           method === 'keyboard-interactive' ? t('connectionDialog.authMethod.keyboardInteractive') :
-                           method === 'anonymous' ? t('connectionDialog.authMethod.anonymous') : method}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 {config.authMethod === 'password' && (
@@ -1005,25 +1007,18 @@ export function ConnectionDialog({
                   </div>
                 )}
 
-                {config.protocol === 'FTP' && (
-                  <>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>{t('connectionDialog.ftp.enableFtps')}</Label>
-                        <p className="text-sm text-muted-foreground">
-                          {t('connectionDialog.ftp.enableFtpsDesc')}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={config.ftpsEnabled ?? false}
-                        onCheckedChange={(checked) => updateConfig({ ftpsEnabled: checked })}
-                      />
-                    </div>
-                  </>
+                {showRememberPassword && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="remember-password"
+                      checked={rememberPassword}
+                      onCheckedChange={setRememberPassword}
+                    />
+                    <Label htmlFor="remember-password" className="text-sm cursor-pointer">
+                      {t('connectionDialog.rememberPassword')}
+                    </Label>
+                  </div>
                 )}
-
-
               </CardContent>
             </Card>
           </TabsContent>
@@ -1242,22 +1237,6 @@ export function ConnectionDialog({
                     </SelectContent>
                   </Select>
                 )}
-              </div>
-            )}
-
-            {/* Remember Password Option */}
-            {(editingConnection || saveAsConnection) && (config.authMethod === 'password' || config.authMethod === 'publickey') && (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="remember-password"
-                    checked={rememberPassword}
-                    onCheckedChange={setRememberPassword}
-                  />
-                  <Label htmlFor="remember-password" className="text-sm cursor-pointer">
-                    {t('connectionDialog.rememberPassword')}
-                  </Label>
-                </div>
               </div>
             )}
 

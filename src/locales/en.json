@@ -118,6 +118,7 @@
       "host": "Host",
       "port": "Port",
       "username": "Username",
+      "authMethod": "Auth Method",
       "password": "Password",
       "privateKey": "Private Key File",
       "passphrase": "Passphrase (optional)",
