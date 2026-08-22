@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-08-22
+
+### Added
+
+- **Move to Trash**: Added native macOS Trash support for local file deletions via the `trash` crate with confirmation dialogs and UI integration.
+- **Session Close Confirmation**: Added confirmation prompts when closing terminal tabs, split panes, or the application window while active processes or commands are running.
+- **Terminal URL Links**: Added support for detecting and opening URLs directly in the default system browser via click or terminal context menu.
+- **Modularized File Context Menu**: Reorganized the file browser context menu into interleaved sections with improved selection handling on right-click.
+
+### Changed
+
+- **Package Manager Migration**: Migrated project package management, CI workflows, and developer scripts from pnpm to Bun.
+
+### Fixed
+
+- **Zsh History Persistence**: Prevented shell integration from overriding the user's `$HISTFILE`, ensuring interactive command history properly persists to the host history file.
+- **Public Key & Credential Handling**: Fixed public key store resolution, keychain credential retrieval, and authentication state handling during SSH connection flows.
+
+
 ## [0.2.4] - 2026-08-12
 
 ### Added
