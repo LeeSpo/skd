@@ -20,6 +20,15 @@ pub fn create_local_pty_session(cols: u32, rows: u32) -> Result<PtySession> {
 }
 
 fn create_local_pty_session_with_shell(shell: String, cols: u32, rows: u32) -> Result<PtySession> {
+    spawn_local_pty_session(shell, cols, rows, &[])
+}
+
+fn spawn_local_pty_session(
+    shell: String,
+    cols: u32,
+    rows: u32,
+    extra_env: &[(String, String)],
+) -> Result<PtySession> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: rows as u16,
@@ -100,6 +109,9 @@ fn create_local_pty_session_with_shell(shell: String, cols: u32, rows: u32) -> R
 
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    for (name, value) in extra_env {
+        cmd.env(name, value);
+    }
 
     let child = pair.slave.spawn_command(cmd)?;
     drop(pair.slave);
@@ -246,6 +258,35 @@ fn create_local_pty_session_with_shell(shell: String, cols: u32, rows: u32) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    struct IsolatedPty {
+        session: PtySession,
+        histfile: PathBuf,
+        _dir: tempfile::TempDir,
+    }
+
+    fn isolated_local_pty(shell: &str) -> IsolatedPty {
+        let dir = tempfile::tempdir().expect("isolated hist dir");
+        let histfile = dir.path().join(".zsh_history");
+        std::fs::write(&histfile, "").expect("isolated histfile");
+        let hist = histfile.to_string_lossy().to_string();
+        let session = spawn_local_pty_session(
+            shell.to_string(),
+            80,
+            24,
+            &[
+                ("HISTFILE".to_string(), hist.clone()),
+                ("SKD_USER_HISTFILE".to_string(), hist),
+            ],
+        )
+        .expect("failed to create isolated local PTY");
+        IsolatedPty {
+            session,
+            histfile,
+            _dir: dir,
+        }
+    }
 
     async fn collect_until(session: &PtySession, expected: &str, timeout: Duration) -> String {
         let deadline = tokio::time::Instant::now() + timeout;
@@ -277,7 +318,8 @@ mod tests {
 
     #[tokio::test]
     async fn create_local_pty_session_produces_output() {
-        let session = create_local_pty_session(80, 24).expect("failed to create local PTY");
+        let isolated = isolated_local_pty(&default_shell());
+        let session = &isolated.session;
 
         // Give the shell a moment to start
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -321,10 +363,10 @@ mod tests {
         let target_path = target.path().to_string_lossy().to_string();
         let escaped_target = target_path.replace('\\', "\\\\").replace(';', "\\x3b");
         let expected = format!("\x1b]633;P;Cwd={escaped_target}\x07");
-        let session = create_local_pty_session_with_shell(shell.to_string(), 80, 24)
-            .expect("failed to create integrated local PTY");
+        let isolated = isolated_local_pty(shell);
+        let session = &isolated.session;
 
-        let initial = collect_until(&session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
+        let initial = collect_until(session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
         assert!(
             initial.contains("\x1b]633;P;Cwd="),
             "expected initial cwd report from {shell}, got: {initial:?}"
@@ -336,7 +378,7 @@ mod tests {
             .send(format!("cd -- '{quoted}'\n").into_bytes())
             .await
             .expect("failed to send cd command");
-        let output = collect_until(&session, &expected, Duration::from_secs(5)).await;
+        let output = collect_until(session, &expected, Duration::from_secs(5)).await;
         assert!(
             output.contains(&expected),
             "expected cwd report {expected:?} from {shell}, got: {output:?}"
@@ -347,7 +389,7 @@ mod tests {
             .send(b"cd -- '/definitely/missing/skd-cwd-test'\n".to_vec())
             .await
             .expect("failed to send failing cd command");
-        let failed_cd_output = collect_until(&session, &expected, Duration::from_secs(5)).await;
+        let failed_cd_output = collect_until(session, &expected, Duration::from_secs(5)).await;
         session.cancel.cancel();
         assert!(
             failed_cd_output.contains(&expected),
@@ -369,10 +411,10 @@ mod tests {
         if !std::path::Path::new(shell).exists() {
             return;
         }
-        let session = create_local_pty_session_with_shell(shell.to_string(), 80, 24)
-            .expect("failed to create integrated local PTY");
+        let isolated = isolated_local_pty(shell);
+        let session = &isolated.session;
 
-        let initial = collect_until(&session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
+        let initial = collect_until(session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
         assert!(
             initial.contains("\x1b]633;P;Cwd="),
             "expected initial cwd report from {shell}, got: {initial:?}"
@@ -385,14 +427,14 @@ mod tests {
             .expect("failed to send true command");
 
         let started = "\x1b]633;C\x07";
-        let mut output = collect_until(&session, started, Duration::from_secs(5)).await;
+        let mut output = collect_until(session, started, Duration::from_secs(5)).await;
         assert!(
             output.contains(started),
             "expected command-start OSC 633;C from {shell}, got: {output:?}"
         );
 
         if !output.contains("\x1b]633;D") && !output.contains("\x1b]633;A\x07") {
-            output.push_str(&collect_until(&session, "\x1b]633;D", Duration::from_secs(5)).await);
+            output.push_str(&collect_until(session, "\x1b]633;D", Duration::from_secs(5)).await);
         }
         session.cancel.cancel();
         assert!(
@@ -409,5 +451,31 @@ mod tests {
     #[tokio::test]
     async fn zsh_shell_integration_reports_command_lifecycle() {
         assert_shell_reports_command_lifecycle("/bin/zsh").await;
+    }
+
+    #[tokio::test]
+    async fn zsh_pty_histfile_is_not_integration_dir() {
+        if !std::path::Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let isolated = isolated_local_pty("/bin/zsh");
+        let expected_histfile = isolated.histfile.to_string_lossy().to_string();
+        let session = &isolated.session;
+        let _ = collect_until(session, "\x1b]633;P;Cwd=", Duration::from_secs(5)).await;
+        session
+            .input_tx
+            .send(b"print -r -- \"$HISTFILE\"\n".to_vec())
+            .await
+            .unwrap();
+        let output = collect_until(session, ".zsh_history", Duration::from_secs(5)).await;
+        session.cancel.cancel();
+        assert!(
+            output.contains(&expected_histfile),
+            "expected HISTFILE {expected_histfile}, got: {output:?}"
+        );
+        assert!(
+            !output.contains("skd-shell."),
+            "HISTFILE must not be inside the integration temp dir, got: {output:?}"
+        );
     }
 }

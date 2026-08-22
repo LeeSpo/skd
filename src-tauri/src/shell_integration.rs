@@ -148,6 +148,12 @@ if [[ -o RCS && -r "$ZDOTDIR/.zshenv" ]]; then
   source "$ZDOTDIR/.zshenv"
 fi
 SKD_USER_ZDOTDIR="${ZDOTDIR:-$SKD_USER_HOME}"
+# Remember a user-set HISTFILE that is not inside the integration dir.
+# macOS /etc/zshrc later overwrites HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
+# while ZDOTDIR still points at the temp integration directory.
+if [[ -n "${HISTFILE:-}" && "$HISTFILE" != "$SKD_INTEGRATION_ZDOTDIR/"* && "$HISTFILE" != "$SKD_INTEGRATION_DIR/"* ]]; then
+  SKD_USER_HISTFILE="$HISTFILE"
+fi
 ZDOTDIR="$SKD_INTEGRATION_ZDOTDIR"
 source "$SKD_INTEGRATION_ZDOTDIR/skd-zsh-integration.zsh"
 "#;
@@ -161,8 +167,21 @@ ZDOTDIR="$SKD_INTEGRATION_ZDOTDIR"
 "#;
 
 const ZSH_RC_WRAPPER: &str = r#"ZDOTDIR="$SKD_USER_ZDOTDIR"
+# /etc/zshrc on macOS sets HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history while ZDOTDIR
+# is still the integration temp dir. Restore the user's history file before
+# ~/.zshrc so plugins and Up/Down (up-line-or-search) see host-terminal commands.
+if [[ -n "${SKD_USER_HISTFILE:-}" ]]; then
+  HISTFILE="$SKD_USER_HISTFILE"
+else
+  HISTFILE="${SKD_USER_ZDOTDIR:-$SKD_USER_HOME}/.zsh_history"
+fi
 if [[ -o RCS && -r "$ZDOTDIR/.zshrc" ]]; then
   source "$ZDOTDIR/.zshrc"
+fi
+# User/plugin code may have reset HISTFILE from ZDOTDIR. Clamp if it still
+# points at the integration directory.
+if [[ "${HISTFILE:-}" == "$SKD_INTEGRATION_ZDOTDIR/"* || "${HISTFILE:-}" == "$SKD_INTEGRATION_DIR/"* ]]; then
+  HISTFILE="${SKD_USER_HISTFILE:-${SKD_USER_ZDOTDIR:-$SKD_USER_HOME}/.zsh_history}"
 fi
 SKD_USER_ZDOTDIR="${ZDOTDIR:-$SKD_USER_HOME}"
 ZDOTDIR="$SKD_INTEGRATION_ZDOTDIR"
@@ -176,7 +195,7 @@ fi
 source "$SKD_INTEGRATION_ZDOTDIR/skd-zsh-integration.zsh"
 ZDOTDIR="$SKD_USER_ZDOTDIR"
 rm -rf -- "$SKD_INTEGRATION_ZDOTDIR"
-unset SKD_INTEGRATION_ZDOTDIR SKD_INTEGRATION_DIR SKD_USER_HOME SKD_USER_ZDOTDIR
+unset SKD_INTEGRATION_ZDOTDIR SKD_INTEGRATION_DIR SKD_USER_HOME SKD_USER_ZDOTDIR SKD_USER_HISTFILE
 "#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -527,5 +546,100 @@ mod tests {
             );
             fs::remove_dir_all(path).unwrap();
         }
+    }
+
+    #[test]
+    fn zsh_histfile_uses_user_history_not_integration_dir() {
+        if !Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let fake_home = tempfile::tempdir().expect("fake home");
+        let user_zdot = fake_home.path();
+        fs::write(user_zdot.join(".zshrc"), "").unwrap();
+        fs::write(user_zdot.join(".zsh_history"), "echo from-host-history\n").unwrap();
+
+        let integration = tempfile::Builder::new()
+            .prefix("skd-shell.")
+            .tempdir()
+            .unwrap();
+        write_startup_files(integration.path(), ShellKind::Zsh).unwrap();
+
+        let output = Command::new("/bin/zsh")
+            .args([
+                "-lic",
+                r#"print -r -- "$HISTFILE"; print -r -- "__FC__"; fc -R "$HISTFILE"; fc -l 1 20"#,
+            ])
+            .env("HOME", fake_home.path())
+            .env("USER", "skd-test")
+            .env("TERM", "xterm-256color")
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("ZDOTDIR", integration.path())
+            .env("SKD_INTEGRATION_DIR", integration.path())
+            .env("SKD_USER_HOME", fake_home.path())
+            .env("SKD_USER_ZDOTDIR", user_zdot)
+            .output()
+            .expect("zsh -lic");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let histfile = format!("{}/.zsh_history", user_zdot.display());
+        assert!(
+            stdout.contains(&histfile),
+            "HISTFILE should be the user file, got: {stdout:?}\nstderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            !stdout.contains("skd-shell."),
+            "HISTFILE must not point at the integration dir, got: {stdout:?}"
+        );
+        assert!(
+            stdout.contains("from-host-history"),
+            "fc should list the host history entry, got: {stdout:?}\nstderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn zsh_histfile_preserves_custom_histfile_from_zshenv() {
+        if !Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let fake_home = tempfile::tempdir().expect("fake home");
+        let user_zdot = fake_home.path();
+        let custom = user_zdot.join(".custom_history");
+        fs::write(
+            user_zdot.join(".zshenv"),
+            format!("HISTFILE={}\n", custom.display()),
+        )
+        .unwrap();
+        fs::write(user_zdot.join(".zshrc"), "").unwrap();
+        fs::write(&custom, "echo from-custom-histfile\n").unwrap();
+
+        let integration = tempfile::Builder::new()
+            .prefix("skd-shell.")
+            .tempdir()
+            .unwrap();
+        write_startup_files(integration.path(), ShellKind::Zsh).unwrap();
+
+        let output = Command::new("/bin/zsh")
+            .args(["-lic", r#"print -r -- "$HISTFILE""#])
+            .env("HOME", fake_home.path())
+            .env("USER", "skd-test")
+            .env("TERM", "xterm-256color")
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("ZDOTDIR", integration.path())
+            .env("SKD_INTEGRATION_DIR", integration.path())
+            .env("SKD_USER_HOME", fake_home.path())
+            .env("SKD_USER_ZDOTDIR", user_zdot)
+            .output()
+            .expect("zsh -lic");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&custom.display().to_string()),
+            "custom HISTFILE from .zshenv must survive /etc/zshrc, got: {stdout:?}\nstderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
