@@ -37,6 +37,7 @@ async-std = "1"
 dirs = "6"
 open = "5"
 portable-pty = "0.8"
+libc = "0.2"
 base64 = "0.22"
 sys-locale = "0.3"
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }

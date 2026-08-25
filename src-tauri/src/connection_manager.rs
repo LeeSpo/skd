@@ -495,33 +495,20 @@ impl ConnectionManager {
         }
     }
 
-    /// Read data from PTY (output for display)
-    /// OPTIMIZED: Use try_recv first for immediate data, then short timeout
+    /// Wait until PTY output is available. Does not hold `pty_sessions` while waiting.
+    /// Idle means the future stays pending — never returns an empty vec as a poll result.
     pub async fn read_from_pty(&self, connection_id: &str) -> Result<Vec<u8>> {
-        let pty_sessions = self.pty_sessions.read().await;
-        let pty = pty_sessions
-            .get(connection_id)
-            .ok_or_else(|| anyhow::anyhow!("PTY connection not found"))?;
-
-        let mut rx = pty.output_rx.lock().await;
-
-        // Try immediate read first (non-blocking)
-        match rx.try_recv() {
-            Ok(data) => return Ok(data),
-            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
-                // No immediate data, use short timeout
-            }
-            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                return Err(anyhow::anyhow!("PTY connection closed"));
-            }
-        }
-
-        // Fall back to short timeout wait (1ms for ultra-low latency)
-        match tokio::time::timeout(tokio::time::Duration::from_millis(1), rx.recv()).await {
-            Ok(Some(data)) => Ok(data),
-            Ok(None) => Err(anyhow::anyhow!("PTY connection closed")),
-            Err(_) => Ok(Vec::new()), // Timeout - no data available
-        }
+        let output_rx = {
+            let pty_sessions = self.pty_sessions.read().await;
+            let pty = pty_sessions
+                .get(connection_id)
+                .ok_or_else(|| anyhow::anyhow!("PTY connection not found"))?;
+            pty.output_rx.clone()
+        };
+        let mut rx = output_rx.lock().await;
+        rx.recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("PTY connection closed"))
     }
 
     /// Close PTY connection, but only if the generation matches.
@@ -906,5 +893,76 @@ mod tests {
 
         // Unknown connection returns None
         assert!(mgr.get_connection_type("conn-unknown").await.is_none());
+    }
+
+    fn dummy_pty_session() -> (PtySession, tokio::sync::mpsc::Sender<Vec<u8>>) {
+        let (input_tx, _input_rx) = tokio::sync::mpsc::channel(8);
+        let (output_tx, output_rx) = tokio::sync::mpsc::channel(8);
+        let (resize_tx, _resize_rx) = tokio::sync::mpsc::channel(8);
+        (
+            PtySession {
+                input_tx,
+                output_rx: Arc::new(tokio::sync::Mutex::new(output_rx)),
+                resize_tx,
+                cancel: CancellationToken::new(),
+                _shell_integration_dir: None,
+            },
+            output_tx,
+        )
+    }
+
+    async fn insert_pty(mgr: &ConnectionManager, id: &str, session: PtySession) {
+        let mut sessions = mgr.pty_sessions.write().await;
+        sessions.insert(id.to_string(), Arc::new(session));
+    }
+
+    #[tokio::test]
+    async fn read_from_pty_stays_pending_when_idle() {
+        let mgr = ConnectionManager::new();
+        let (session, _keep_alive) = dummy_pty_session();
+        insert_pty(&mgr, "idle-pty", session).await;
+
+        let result =
+            tokio::time::timeout(Duration::from_millis(20), mgr.read_from_pty("idle-pty")).await;
+
+        assert!(
+            result.is_err(),
+            "idle PTY wait must stay pending, not return empty after a 1ms poll; got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn read_from_pty_returns_data_when_produced() {
+        let mgr = ConnectionManager::new();
+        let (session, output_tx) = dummy_pty_session();
+        insert_pty(&mgr, "data-pty", session).await;
+
+        output_tx.send(b"hello".to_vec()).await.unwrap();
+        let data = mgr.read_from_pty("data-pty").await.unwrap();
+        assert_eq!(data, b"hello");
+    }
+
+    #[tokio::test]
+    async fn close_pty_completes_while_idle_read_is_pending() {
+        let mgr = Arc::new(ConnectionManager::new());
+        let (session, _keep_alive) = dummy_pty_session();
+        insert_pty(&mgr, "close-pty", session).await;
+
+        let mgr_for_read = mgr.clone();
+        let read_task = tokio::spawn(async move { mgr_for_read.read_from_pty("close-pty").await });
+
+        // Give the reader time to enter recv() while holding (or not holding) the map lock.
+        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            mgr.close_pty_connection("close-pty", None),
+        )
+        .await
+        .expect("close_pty_connection deadlocked on an idle read holding pty_sessions")
+        .expect("close_pty_connection failed");
+
+        read_task.abort();
     }
 }

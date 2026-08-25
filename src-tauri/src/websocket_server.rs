@@ -194,6 +194,20 @@ async fn flush_output(
     }
 }
 
+async fn flush_pty_output_batch(
+    tx: &WsTx,
+    connection_id: &str,
+    accumulated: &mut Vec<u8>,
+    cancel: &CancellationToken,
+    last_flush: &mut tokio::time::Instant,
+) -> SendOutcome {
+    let outcome = flush_output(tx, connection_id, accumulated, cancel).await;
+    if outcome != SendOutcome::Closed {
+        *last_flush = tokio::time::Instant::now();
+    }
+    outcome
+}
+
 fn should_remove_pty_state(active_gen: Option<u64>, closed_gen: Option<u64>) -> bool {
     match (active_gen, closed_gen) {
         (Some(a), Some(c)) => a == c,
@@ -455,6 +469,7 @@ impl WebSocketServer {
                 // Spawn the PTY reader task.
                 // `flush_output` blocks when the WS channel is full — this
                 // propagates back-pressure through output_tx to the SSH window.
+                // Wait on the output channel (native-style: sleep until data).
                 let connection_manager = self.connection_manager.clone();
                 let connection_id_clone = connection_id.clone();
                 let tx_clone = tx.clone();
@@ -462,84 +477,69 @@ impl WebSocketServer {
                 tokio::spawn(async move {
                     let mut accumulated = Vec::with_capacity(OUTPUT_FLUSH_BYTES);
                     let mut last_flush = tokio::time::Instant::now();
+                    let flush_interval = Duration::from_millis(OUTPUT_FLUSH_INTERVAL_MS as u64);
 
                     loop {
-                        // --- Read from PTY (1 ms poll) ---
-                        let read_result = tokio::select! {
+                        tokio::select! {
                             biased;
                             _ = cancel_token.cancelled() => {
                                 tracing::info!(
                                     "PTY reader task cancelled for {}",
                                     connection_id_clone
                                 );
-                                // Flush any remaining data before exiting.
-                                let _ = flush_output(
+                                return;
+                            }
+                            result = connection_manager.read_from_pty(&connection_id_clone) => {
+                                match result {
+                                    Ok(data) => {
+                                        accumulated.extend_from_slice(&data);
+                                        if should_flush_pty_output(
+                                            accumulated.len(),
+                                            last_flush.elapsed().as_millis(),
+                                        ) && flush_pty_output_batch(
+                                                &tx_clone,
+                                                &connection_id_clone,
+                                                &mut accumulated,
+                                                &cancel_token,
+                                                &mut last_flush,
+                                            )
+                                            .await
+                                                == SendOutcome::Closed
+                                        {
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Error reading from PTY {}: {}",
+                                            connection_id_clone,
+                                            e
+                                        );
+                                        let error_msg = WsMessage::Error {
+                                            message: format!("Connection lost: {}", e),
+                                            error_kind: None,
+                                            failed_stage: None,
+                                        };
+                                        let _ = send_control(&tx_clone, &error_msg).await;
+                                        break;
+                                    }
+                                }
+                            }
+                            _ = tokio::time::sleep_until(last_flush + flush_interval),
+                                if !accumulated.is_empty() =>
+                            {
+                                if flush_pty_output_batch(
                                     &tx_clone,
                                     &connection_id_clone,
                                     &mut accumulated,
                                     &cancel_token,
-                                ).await;
-                                return;
-                            }
-                            result = connection_manager.read_from_pty(&connection_id_clone) => result,
-                        };
-
-                        match read_result {
-                            Ok(data) if data.is_empty() => {
-                                // 1 ms poll returned nothing — flush if interval elapsed.
-                                if !accumulated.is_empty()
-                                    && should_flush_pty_output(
-                                        accumulated.len(),
-                                        last_flush.elapsed().as_millis(),
-                                    )
+                                    &mut last_flush,
+                                )
+                                .await
+                                    == SendOutcome::Closed
                                 {
-                                    if flush_output(
-                                        &tx_clone,
-                                        &connection_id_clone,
-                                        &mut accumulated,
-                                        &cancel_token,
-                                    )
-                                    .await
-                                        == SendOutcome::Closed
-                                    {
-                                        break;
-                                    }
-                                    last_flush = tokio::time::Instant::now();
+                                    break;
                                 }
-                            }
-                            Ok(data) => {
-                                accumulated.extend_from_slice(&data);
-                                if should_flush_pty_output(
-                                    accumulated.len(),
-                                    last_flush.elapsed().as_millis(),
-                                ) {
-                                    if flush_output(
-                                        &tx_clone,
-                                        &connection_id_clone,
-                                        &mut accumulated,
-                                        &cancel_token,
-                                    )
-                                    .await
-                                        == SendOutcome::Closed
-                                    {
-                                        break;
-                                    }
-                                    last_flush = tokio::time::Instant::now();
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Error reading from PTY {}: {}",
-                                    connection_id_clone,
-                                    e
-                                );
-                                let error_msg = WsMessage::Error {
-                                    message: format!("Connection lost: {}", e),
-                                    error_kind: None,
-                                    failed_stage: None,
-                                };
-                                let _ = send_control(&tx_clone, &error_msg).await;
-                                break;
                             }
                         }
                     }

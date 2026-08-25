@@ -2,11 +2,162 @@ use crate::pty_session::PtySession;
 use crate::shell_integration;
 use anyhow::Result;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
+use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
+use std::os::unix::net::UnixStream;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
+use std::thread::JoinHandle;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
+
+const LOCAL_PTY_READ_BUFFER_BYTES: usize = 16 * 1024;
+
+struct LocalPtyReader {
+    quit_writer: UnixStream,
+    finished: oneshot::Receiver<()>,
+    join_handle: JoinHandle<()>,
+}
+
+impl LocalPtyReader {
+    fn spawn(
+        mut reader: Box<dyn Read + Send>,
+        readiness_fd: OwnedFd,
+        output_tx: mpsc::Sender<Vec<u8>>,
+    ) -> Result<Self> {
+        let (quit_reader, quit_writer) = UnixStream::pair()?;
+        quit_writer.set_nonblocking(true)?;
+        let (finished_tx, finished) = oneshot::channel();
+
+        let join_handle = std::thread::Builder::new()
+            .name("skd-local-pty-reader".to_string())
+            .spawn(move || {
+                let mut buffer = vec![0; LOCAL_PTY_READ_BUFFER_BYTES];
+
+                loop {
+                    let mut poll_fds = [
+                        libc::pollfd {
+                            fd: readiness_fd.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                        libc::pollfd {
+                            fd: quit_reader.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                    ];
+
+                    // SAFETY: both descriptors are owned by this thread and remain alive
+                    // for the complete poll call; poll_fds points to a valid fixed array.
+                    let poll_result = unsafe {
+                        libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as libc::nfds_t, -1)
+                    };
+
+                    if poll_result < 0 {
+                        let error = std::io::Error::last_os_error();
+                        if error.kind() == ErrorKind::Interrupted {
+                            continue;
+                        }
+                        tracing::warn!("Local PTY readiness wait failed: {error}");
+                        break;
+                    }
+
+                    let quit_events = poll_fds[1].revents;
+                    if quit_events & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                        break;
+                    }
+
+                    let pty_events = poll_fds[0].revents;
+                    let mut delivered_data = false;
+                    if pty_events & libc::POLLIN != 0 {
+                        match reader.read(&mut buffer) {
+                            Ok(0) => break,
+                            Ok(size) => {
+                                delivered_data = true;
+                                if output_tx.blocking_send(buffer[..size].to_vec()).is_err() {
+                                    break;
+                                }
+                            }
+                            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                            Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+                            Err(error) => {
+                                tracing::debug!("Local PTY reader stopped: {error}");
+                                break;
+                            }
+                        }
+                    }
+
+                    if !delivered_data
+                        && pty_events & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0
+                    {
+                        break;
+                    }
+                }
+
+                let _ = finished_tx.send(());
+            })?;
+
+        Ok(Self {
+            quit_writer,
+            finished,
+            join_handle,
+        })
+    }
+
+    async fn supervise(
+        self,
+        session_cancel: CancellationToken,
+        local_io_cancel: CancellationToken,
+        child: Arc<std::sync::Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
+        output_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<Vec<u8>>>>,
+    ) {
+        let Self {
+            mut quit_writer,
+            mut finished,
+            join_handle,
+        } = self;
+
+        let cancelled = tokio::select! {
+            _ = session_cancel.cancelled() => true,
+            _ = &mut finished => false,
+        };
+
+        // EOF/read failure and explicit close both stop the local implementation.
+        // Keep session_cancel distinct so channel EOF remains observable upstream.
+        local_io_cancel.cancel();
+
+        if cancelled {
+            match quit_writer.write(&[1]) {
+                Ok(_) => {}
+                Err(error) if error.kind() == ErrorKind::BrokenPipe => {}
+                Err(error) => tracing::warn!("Failed to wake local PTY reader: {error}"),
+            }
+        }
+        // A bounded channel can have the reader blocked in blocking_send.
+        // Closing the receiver releases that backpressure during shutdown.
+        output_rx.lock().await.close();
+        drop(quit_writer);
+
+        let join_result = tokio::task::spawn_blocking(move || {
+            if let Ok(mut child) = child.lock() {
+                let child_is_running = child.try_wait().map_or(true, |status| status.is_none());
+                if child_is_running {
+                    if let Err(error) = child.kill() {
+                        tracing::warn!("Failed to stop local PTY child: {error}");
+                    }
+                }
+            }
+            join_handle.join()
+        })
+        .await;
+
+        match join_result {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => tracing::warn!("Local PTY reader thread panicked"),
+            Err(error) => tracing::warn!("Local PTY reader join task failed: {error}"),
+        }
+    }
+}
 
 /// Resolve the user's default shell on macOS.
 pub fn default_shell() -> String {
@@ -128,17 +279,23 @@ fn spawn_local_pty_session(
 
     let (input_tx, mut input_rx) = mpsc::channel::<Vec<u8>>(1000);
     let (output_tx, output_rx) = mpsc::channel::<Vec<u8>>(128);
+    let output_rx = Arc::new(tokio::sync::Mutex::new(output_rx));
     let (resize_tx, mut resize_rx) = mpsc::channel::<(u32, u32)>(16);
     let cancel = CancellationToken::new();
+    let local_io_cancel = CancellationToken::new();
 
     // Input: frontend → local PTY
     let writer_input = writer.clone();
-    let cancel_input = cancel.clone();
+    let cancel_input = local_io_cancel.clone();
     tokio::spawn(async move {
-        while let Some(data) = input_rx.recv().await {
-            if cancel_input.is_cancelled() {
-                break;
-            }
+        loop {
+            let data = tokio::select! {
+                _ = cancel_input.cancelled() => break,
+                data = input_rx.recv() => match data {
+                    Some(data) => data,
+                    None => break,
+                },
+            };
             let writer_input = writer_input.clone();
             let write_result = tokio::task::spawn_blocking(move || {
                 let mut w = writer_input
@@ -166,61 +323,39 @@ fn spawn_local_pty_session(
     //      which prevented `resize()` from executing until the next read
     //      returned. Stale dimensions caused zsh to miscalculate cursor
     //      positions for autosuggestion text.
-    let reader = {
+    let (reader, readiness_fd) = {
         let m = master
             .lock()
             .map_err(|e| anyhow::anyhow!("PTY lock poisoned: {}", e))?;
-        m.try_clone_reader().map_err(|e| anyhow::anyhow!("{}", e))?
+        let reader = m.try_clone_reader().map_err(|e| anyhow::anyhow!("{}", e))?;
+        let raw_fd = m.as_raw_fd().ok_or_else(|| {
+            anyhow::anyhow!("Local PTY does not expose a readable file descriptor")
+        })?;
+        // SAFETY: the master PTY owns raw_fd while the lock is held. The duplicated
+        // descriptor returned here has an independent owned lifetime.
+        let readiness_fd = unsafe { BorrowedFd::borrow_raw(raw_fd) }.try_clone_to_owned()?;
+        (reader, readiness_fd)
     };
-    let reader = Arc::new(std::sync::Mutex::new(reader));
+    let local_reader = LocalPtyReader::spawn(reader, readiness_fd, output_tx)?;
 
-    let cancel_read = cancel.clone();
-    tokio::spawn(async move {
-        while !cancel_read.is_cancelled() {
-            let reader = reader.clone();
-            let read_result = tokio::task::spawn_blocking(move || {
-                let mut reader = reader
-                    .lock()
-                    .map_err(|e| std::io::Error::other(e.to_string()))?;
-                let mut buf = vec![0u8; 4096];
-                match reader.read(&mut buf) {
-                    Ok(0) => Ok(None),
-                    Ok(n) => {
-                        buf.truncate(n);
-                        Ok(Some(buf))
-                    }
-                    Err(e) => Err(e),
-                }
-            })
-            .await;
-
-            match read_result {
-                Ok(Ok(Some(data))) if !data.is_empty() => {
-                    if output_tx.send(data).await.is_err() {
-                        break;
-                    }
-                }
-                Ok(Ok(None)) => break,
-                Ok(Ok(Some(_))) => {}
-                Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-                Ok(Err(_)) | Err(_) => break,
-            }
-        }
-    });
+    let cancel_reader = cancel.clone();
+    let cancel_local_io = local_io_cancel.clone();
+    let child_reader = child.clone();
+    let output_rx_reader = output_rx.clone();
+    tokio::spawn(local_reader.supervise(
+        cancel_reader,
+        cancel_local_io,
+        child_reader,
+        output_rx_reader,
+    ));
 
     // Resize + cancellation
     let master_resize = master.clone();
-    let child_kill = child.clone();
-    let cancel_resize = cancel.clone();
+    let cancel_resize = local_io_cancel;
     tokio::spawn(async move {
         loop {
             tokio::select! {
                 _ = cancel_resize.cancelled() => {
-                    if let Ok(mut c) = child_kill.lock() {
-                        let _ = c.kill();
-                    }
                     break;
                 }
                 resize = resize_rx.recv() => {
@@ -248,7 +383,7 @@ fn spawn_local_pty_session(
 
     Ok(PtySession {
         input_tx,
-        output_rx: Arc::new(tokio::sync::Mutex::new(output_rx)),
+        output_rx,
         resize_tx,
         cancel,
         _shell_integration_dir: shell_integration.map(|integration| integration.temp_dir),
@@ -259,6 +394,7 @@ fn spawn_local_pty_session(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::time::Duration;
 
     struct IsolatedPty {
         session: PtySession,
@@ -350,6 +486,110 @@ mod tests {
 
         session.cancel.cancel();
         panic!("expected shell to echo LOCAL_PTY_TEST, got: {output}");
+    }
+
+    #[tokio::test]
+    async fn cancelling_local_pty_session_closes_output_channel() {
+        let isolated = isolated_local_pty(&default_shell());
+        let session = &isolated.session;
+
+        session.cancel.cancel();
+        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+            let mut output_rx = session.output_rx.lock().await;
+            while output_rx.recv().await.is_some() {}
+        })
+        .await;
+
+        assert!(
+            closed.is_ok(),
+            "local PTY reader did not exit after session cancellation"
+        );
+    }
+
+    #[tokio::test]
+    async fn local_pty_reader_recovers_from_output_backpressure() {
+        const OUTPUT_BYTES: usize = 3 * 1024 * 1024;
+
+        let isolated = isolated_local_pty(&default_shell());
+        let session = &isolated.session;
+        session
+            .input_tx
+            .send(format!("yes x | head -c {OUTPUT_BYTES}\n").into_bytes())
+            .await
+            .expect("failed to start bulk-output command");
+
+        // Let the bounded output channel fill before consuming it. The reader
+        // must resume once capacity becomes available instead of losing bytes.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let received = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut received = 0;
+            let mut output_rx = session.output_rx.lock().await;
+            while received < OUTPUT_BYTES {
+                let data = output_rx
+                    .recv()
+                    .await
+                    .expect("local PTY output closed early");
+                received += data.len();
+            }
+            received
+        })
+        .await
+        .expect("local PTY reader stalled after bounded-channel backpressure");
+
+        session.cancel.cancel();
+        assert!(received >= OUTPUT_BYTES);
+    }
+
+    #[tokio::test]
+    async fn cancelling_local_pty_reader_releases_output_backpressure() {
+        const OUTPUT_BYTES: usize = 3 * 1024 * 1024;
+
+        let isolated = isolated_local_pty(&default_shell());
+        let session = &isolated.session;
+        session
+            .input_tx
+            .send(format!("yes x | head -c {OUTPUT_BYTES}\n").into_bytes())
+            .await
+            .expect("failed to start bulk-output command");
+
+        // The 128 × 16 KiB queue fills before this command completes, leaving
+        // the reader blocked in blocking_send until cancellation closes it.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        session.cancel.cancel();
+
+        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+            let mut output_rx = session.output_rx.lock().await;
+            while output_rx.recv().await.is_some() {}
+        })
+        .await;
+
+        assert!(
+            closed.is_ok(),
+            "local PTY reader remained blocked by a full output channel"
+        );
+    }
+
+    #[tokio::test]
+    async fn exiting_local_shell_closes_output_without_masking_eof() {
+        let isolated = isolated_local_pty(&default_shell());
+        let session = &isolated.session;
+        session
+            .input_tx
+            .send(b"exit\n".to_vec())
+            .await
+            .expect("failed to exit local shell");
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            let mut output_rx = session.output_rx.lock().await;
+            while output_rx.recv().await.is_some() {}
+        })
+        .await
+        .expect("local shell exit did not close its output channel");
+
+        assert!(
+            !session.cancel.is_cancelled(),
+            "natural EOF must remain distinguishable from an explicit session close"
+        );
     }
 
     async fn assert_shell_reports_changed_cwd(shell: &str) {
