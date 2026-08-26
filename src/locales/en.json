@@ -1057,7 +1057,7 @@
     "searchResults": "Search Results",
     "noResults": "No matching connections",
     "noSavedConnections": "No saved connections",
-    "newConnection": "New Connection...",
+    "newConnection": "New Connection",
     "newLocalTerminal": "New Local Terminal"
   },
   "terminalSearchBar": {

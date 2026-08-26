@@ -175,6 +175,28 @@ export function NewTabMenu({
           inputRef.current?.focus();
         }}
       >
+        <div className="p-1">
+          {onNewLocalTerminal && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              onClick={() => closeAndRun(onNewLocalTerminal)}
+            >
+              <Terminal className="h-4 w-4 text-muted-foreground" />
+              {t('newTabMenu.newLocalTerminal')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+            onClick={() => closeAndRun(onNewConnection)}
+          >
+            <Plus className="h-4 w-4 text-muted-foreground" />
+            {t('newTabMenu.newConnection')}
+          </button>
+        </div>
+        <Separator />
+
         <div className="border-b p-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -227,28 +249,6 @@ export function NewTabMenu({
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               {t('newTabMenu.noSavedConnections')}
             </div>
-          )}
-        </div>
-
-        <Separator />
-        <div className="p-1">
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-            onClick={() => closeAndRun(onNewConnection)}
-          >
-            <Plus className="h-4 w-4 text-muted-foreground" />
-            {t('newTabMenu.newConnection')}
-          </button>
-          {onNewLocalTerminal && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-              onClick={() => closeAndRun(onNewLocalTerminal)}
-            >
-              <Terminal className="h-4 w-4 text-muted-foreground" />
-              {t('newTabMenu.newLocalTerminal')}
-            </button>
           )}
         </div>
       </PopoverContent>

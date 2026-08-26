@@ -113,7 +113,17 @@ describe('NewTabMenu', () => {
     expect(onOpenSavedConnection).toHaveBeenCalledWith('prod', 'group-3');
 
     fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'New Connection...' }));
+    const localTerminal = await screen.findByRole('button', { name: 'New Local Terminal' });
+    const newConnection = screen.getByRole('button', { name: 'New Connection' });
+    const searchInput = await screen.findByPlaceholderText('Search saved connections...');
+    expect(
+      localTerminal.compareDocumentPosition(newConnection) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      newConnection.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(newConnection);
     expect(onNewConnection).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole('button', { name: 'Open New Tab' }));
