@@ -623,7 +623,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                 };
                 return (
                   <SelectGroup key={type}>
-                    <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                    <SelectLabel className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
                       {meta.icon}
                       {meta.label}
                     </SelectLabel>
@@ -636,7 +636,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                         <div className="flex items-center justify-between gap-2 w-full">
                           <span className="truncate">{src.name}</span>
                           {src.size_human && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">
+                            <span className="text-xs text-muted-foreground shrink-0">
                               {src.size_human}
                             </span>
                           )}
@@ -650,7 +650,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
               {/* Custom sources */}
               {sources.some((s) => s.category === "custom") && (
                 <SelectGroup>
-                  <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
                     <FolderOpen className="h-3 w-3 inline mr-1" />
                     {t('logMonitor.customPaths')}
                   </SelectLabel>
@@ -735,7 +735,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-1.5 text-[10px] shrink-0 gap-0.5"
+                  className="h-7 px-1.5 text-xs shrink-0 gap-0.5"
                 >
                   {refreshInterval}s
                   <ChevronDown className="h-2.5 w-2.5" />
@@ -835,7 +835,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                 size="sm"
                 pressed={isRegex}
                 onPressedChange={setIsRegex}
-                className="h-7 w-7 shrink-0 text-[10px] font-mono data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                className="h-7 w-7 shrink-0 text-xs font-mono data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
               >
                 .*
               </Toggle>
@@ -855,8 +855,8 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                 <TooltipTrigger asChild>
                   <button
                     className={cn(
-                      "h-6 min-w-6 px-1.5 rounded text-[10px] font-semibold border transition-all shrink-0",
-                      active ? colors.badge : "border-transparent text-muted-foreground/50 hover:text-muted-foreground"
+                      "h-6 min-w-6 px-1.5 rounded-md text-xs font-semibold border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0",
+                      active ? colors.badge : "border-transparent text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => toggleLevel(level)}
                   >
@@ -880,7 +880,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
             value={String(lineCount)}
             onValueChange={(v) => setLineCount(Number(v))}
           >
-            <SelectTrigger className="h-7 w-[70px] text-[10px] shrink-0">
+            <SelectTrigger className="h-7 w-[90px] text-xs shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -915,7 +915,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
         {/* ── Log content area ── */}
         <div
           ref={scrollRef}
-          className="flex-1 min-h-0 overflow-auto font-mono text-[11px] leading-[18px]"
+          className="flex-1 min-h-0 overflow-auto font-mono text-xs leading-5"
           onScroll={handleScroll}
         >
           {!selectedSourceId ? (
@@ -959,13 +959,13 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                   )}
                 >
                   {/* Line number */}
-                  <span className="w-9 text-right text-[10px] text-muted-foreground/40 select-none shrink-0 pr-2 pt-px">
+                  <span className="w-10 text-right text-xs text-muted-foreground select-none shrink-0 pr-2 pt-px">
                     {line.lineNumber}
                   </span>
 
                   {/* Timestamp */}
                   {line.timestamp && (
-                    <span className="text-muted-foreground shrink-0 mr-1.5 whitespace-nowrap text-[10px] pt-px">
+                    <span className="text-muted-foreground shrink-0 mr-1.5 whitespace-nowrap text-xs pt-px">
                       {line.timestamp}
                     </span>
                   )}
@@ -974,7 +974,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
                   {line.level !== "unknown" && (
                     <span
                       className={cn(
-                        "inline-block w-[3ch] text-center text-[10px] font-bold shrink-0 mr-1.5 pt-px",
+                        "inline-block w-[3ch] text-center text-xs font-bold shrink-0 mr-1.5 pt-px",
                         LEVEL_COLORS[line.level].text
                       )}
                     >
@@ -998,7 +998,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
         </div>
 
         {/* ── Status bar ── */}
-        <div className="flex items-center justify-between px-2 py-0.5 text-[10px] text-muted-foreground border-t bg-muted/30 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-1 px-2 py-1 text-xs text-muted-foreground border-t border-panel-border bg-panel-toolbar shrink-0">
           {/* Line counts */}
           <span>
             {filteredLines.length === parsedLines.length

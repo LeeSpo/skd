@@ -52,7 +52,7 @@ export function SystemMonitor({ connectionId, active = true }: SystemMonitorProp
         <MonitorPanelPicker enabled={enabledPanels} onChange={handlePanelsChange} />
 
         {enabledPanels.size === 0 && (
-          <p className="text-[10px] text-muted-foreground text-center py-6 px-2">
+          <p className="text-xs text-muted-foreground text-center py-6 px-2">
             {t('systemMonitor.panelPicker.noneEnabled')}
           </p>
         )}

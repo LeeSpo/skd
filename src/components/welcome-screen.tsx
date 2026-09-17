@@ -1,9 +1,6 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Terminal, Plus, FolderTree, Zap, Settings } from 'lucide-react';
-import { Badge } from './ui/badge';
+import { Terminal, Plus, Settings } from 'lucide-react';
 
 interface WelcomeScreenProps {
   onNewConnection: () => void;
@@ -12,100 +9,42 @@ interface WelcomeScreenProps {
 
 export function WelcomeScreen({ onNewConnection, onOpenSettings }: WelcomeScreenProps) {
   const { t } = useTranslation();
-  const quickActions = [
-    {
-      icon: Plus,
-      title: t('welcome.newConnection'),
-      description: t('welcome.newConnectionDesc'),
-      action: onNewConnection,
-      variant: 'default' as const,
-      shortcut: '⌘N'
-    },
-    {
-      icon: FolderTree,
-      title: t('welcome.connectionManager'),
-      description: t('welcome.connectionManagerDesc'),
-      action: () => {},
-      variant: 'outline' as const,
-      highlight: 'Left sidebar ⌘B'
-    },
-    {
-      icon: Settings,
-      title: t('welcome.preferences'),
-      description: t('welcome.preferencesDesc'),
-      action: onOpenSettings,
-      variant: 'outline' as const,
-      shortcut: '⌘,'
-    }
-  ];
 
   return (
-    <div className="flex h-full items-center overflow-auto bg-gradient-to-br from-workspace via-workspace to-surface-raised">
-      <div className="max-w-3xl w-full mx-auto p-6 space-y-8 animate-in fade-in duration-500">
-        {/* Hero Section */}
-        <div className="flex items-center justify-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
-            <Terminal className="h-8 w-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">{t('app.title')}</h1>
+    <div className="flex h-full overflow-auto bg-workspace">
+      <div className="m-auto w-full max-w-xl px-6 py-10">
+        <div className="mb-8 flex items-center gap-3">
+          <Terminal className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+          <h1 className="text-xl font-semibold tracking-tight">{t('app.title')}</h1>
         </div>
 
-        {/* Quick Actions */}
-        <Card className="border-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Zap className="h-4 w-4" />
-              {t('welcome.getStarted')}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {t('welcome.getStartedDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
-            {quickActions.map((action, index) => (
-              <Card 
-                key={index}
-                className="relative overflow-hidden hover:shadow-md transition-all cursor-pointer group border-2 hover:border-primary/50"
-                onClick={action.action}
-              >
-                <CardContent className="p-4">
-                  <div className="flex flex-col items-center text-center space-y-2">
-                    <div className="p-2.5 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
-                      <action.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-sm mb-0.5">{action.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {action.description}
-                      </p>
-                    </div>
-                    {action.shortcut && (
-                      <Badge variant="secondary" className="text-xs font-mono">
-                        {action.shortcut}
-                      </Badge>
-                    )}
-                    {action.highlight && (
-                      <span className="text-xs text-primary font-medium">
-                        {action.highlight}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </CardContent>
-        </Card>
+        <h2 className="text-base font-medium">{t('welcome.getStarted')}</h2>
+        <p className="mt-2 text-[13px] text-muted-foreground">{t('welcome.getStartedDesc')}</p>
 
-        {/* Call to Action */}
-        <div className="text-center">
-          <Button size="lg" onClick={onNewConnection} className="gap-2 shadow-lg">
-            <Plus className="h-5 w-5" />
-            {t('welcome.newConnection')}
+        <div className="mt-5 space-y-2">
+          <Button
+            onClick={onNewConnection}
+            className="h-auto w-full justify-start gap-3 whitespace-normal px-4 py-3 text-left"
+          >
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">{t('welcome.newConnection')}</span>
+            <kbd className="text-xs font-normal">⌘N</kbd>
           </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            {t('welcome.orPickFromSidebar')}
-          </p>
+          <p className="px-4 pb-3 text-xs text-muted-foreground">{t('welcome.newConnectionDesc')}</p>
+          <Button
+            variant="outline"
+            onClick={onOpenSettings}
+            className="h-auto w-full justify-start gap-3 whitespace-normal px-4 py-3 text-left"
+          >
+            <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">{t('welcome.preferences')}</span>
+            <kbd className="text-xs font-normal text-muted-foreground">⌘,</kbd>
+          </Button>
+          <p className="px-4 text-xs text-muted-foreground">{t('welcome.preferencesDesc')}</p>
         </div>
+        <p className="mt-8 border-t border-panel-border pt-4 text-xs text-muted-foreground">
+          {t('welcome.orPickFromSidebar')}
+        </p>
       </div>
     </div>
   );

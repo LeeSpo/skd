@@ -346,7 +346,7 @@
       "desc": "Customize the application interface and panels.",
       "appTheme": "Application Theme",
       "colorPalette": "Workspace Color Palette",
-      "colorPaletteDesc": "Choose a deep workspace palette. Selecting one also suggests a matching terminal theme.",
+      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Selecting one also suggests a matching terminal theme.",
       "panelVisibility": "Panel Visibility",
       "connectionManager": "Connection Manager",
       "systemMonitor": "System Monitor",
@@ -394,6 +394,10 @@
       "nordic": {
         "name": "Nordic",
         "description": "Soft slate with calm arctic cyan"
+      },
+      "cupertino": {
+        "name": "Cupertino",
+        "description": "macOS-inspired neutrals with adaptive blue accents"
       }
     },
     "cursor": {
@@ -474,6 +478,7 @@
     "toggleMonitorPanel": "Toggle Monitor Panel",
     "toggleZenMode": "Toggle Zen Mode",
     "closeTab": "Close Tab",
+    "closeTabNamed": "Close {{name}}",
     "window": "Window"
   },
   "composePane": {
@@ -578,6 +583,15 @@
     "disconnected": "Connection lost to {{name}}",
     "notConnected": "Not Connected",
     "searchFiles": "Search files...",
+    "search": {
+      "label": "Filter files in this folder",
+      "placeholder": "Filter this folder…",
+      "scope": "Matches names in this folder only, not subfolders or file contents.",
+      "toggle": "Show or hide filter",
+      "button": "Filter",
+      "clear": "Clear filter",
+      "noResults": "No matching files"
+    },
     "items": "{{count}} item(s)",
     "local": "Local",
     "remote": "Remote",
@@ -675,9 +689,11 @@
     "toolbar": {
       "back": "Back",
       "forward": "Forward",
+      "toggleDirectoryTree": "Toggle directory tree",
       "parentDir": "Parent directory",
       "home": "Home",
       "refresh": "Refresh",
+      "editPath": "Edit path",
       "newFolder": "New Folder",
       "newFile": "New File",
       "upload": "Upload",
@@ -986,6 +1002,7 @@
     }
   },
   "statusBar": {
+    "pending": "Waiting to connect",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "connecting": "Connecting...",
@@ -1018,6 +1035,8 @@
     "transfers": "Transfers",
     "active": "{{count}} active",
     "done": "{{count}} done",
+    "failedCount_one": "{{count}} failed",
+    "failedCount_other": "{{count}} failed",
     "noTransfers": "No transfers",
     "clear": "Clear",
     "openFile": "Open file",

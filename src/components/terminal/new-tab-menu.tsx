@@ -44,7 +44,7 @@ function ConnectionItem({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{connection.name}</span>
-          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
+          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-xs leading-none text-muted-foreground">
             {connection.protocol}
           </span>
         </span>

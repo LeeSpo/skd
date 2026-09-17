@@ -19,12 +19,15 @@ import {
 const arbitraryTerminalTab: fc.Arbitrary<TerminalTab> = fc.record({
   id: fc.uuid(),
   name: fc.string({ minLength: 1, maxLength: 20 }),
+  tabType: fc.constantFrom('terminal', 'file-browser', 'editor', undefined),
   protocol: fc.constantFrom('SSH', 'SFTP', 'FTP', undefined),
   host: fc.option(fc.ipV4(), { nil: undefined }),
   username: fc.option(fc.string({ minLength: 1, maxLength: 10 }), { nil: undefined }),
   originalConnectionId: fc.option(fc.uuid(), { nil: undefined }),
-  connectionStatus: fc.constantFrom('connected', 'connecting', 'disconnected'),
+  connectionStatus: fc.constantFrom('connected', 'connecting', 'disconnected', 'pending'),
   reconnectCount: fc.nat({ max: 5 }),
+  editorFilePath: fc.option(fc.string({ minLength: 1, maxLength: 100 }), { nil: undefined }),
+  editorConnectionId: fc.option(fc.uuid(), { nil: undefined }),
 });
 
 const arbitraryTerminalGroup: fc.Arbitrary<TerminalGroup> = fc

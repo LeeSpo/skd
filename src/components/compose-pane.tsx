@@ -49,6 +49,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
   const [draft, setDraft] = useState(() => loadComposeDraft(connectionId));
   const [clearAfterSend, setClearAfterSend] = useState(loadClearAfterSendPreference);
   const draftRef = useRef(draft);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -70,6 +71,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
 
   const handleSend = useCallback(() => {
     if (!isConnected) {
+      setSendError(t('composePane.toast.notConnected'));
       toast.error(t('composePane.toast.notConnected'));
       return;
     }
@@ -81,10 +83,12 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
 
     const sent = sendToTerminal(connectionId, draft, COMPOSE_PANE_SEND_OPTIONS);
     if (!sent) {
+      setSendError(t('composePane.toast.sendFailed'));
       toast.error(t('composePane.toast.sendFailed'));
       return;
     }
 
+    setSendError(null);
     toast.success(t('composePane.toast.sent'));
 
     if (clearAfterSend) {
@@ -100,6 +104,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         handleSend();
@@ -116,13 +121,12 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
   const canSend = isConnected && draft.trim().length > 0;
 
   return (
-    <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 shrink-0 bg-muted/10">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-panel-border bg-panel-toolbar px-3 py-1.5">
         <Button
           type="button"
           size="sm"
-          variant="default"
-          className="h-8 gap-1.5 px-3 shadow-sm transition-all hover:shadow hover:-translate-y-[0.5px]"
+          className="h-7 gap-1.5 px-3"
           disabled={!canSend}
           onClick={handleSend}
         >
@@ -134,7 +138,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
           type="button"
           size="sm"
           variant="secondary"
-          className="h-8 gap-1.5 px-3 transition-colors bg-secondary/60 hover:bg-secondary"
+          className="h-7 gap-1.5 px-3"
           disabled={draft.length === 0}
           onClick={handleClear}
         >
@@ -157,6 +161,12 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
         </div>
       </div>
 
+      {sendError && (
+        <p role="alert" className="shrink-0 border-b border-panel-border px-3 py-2 text-xs text-destructive">
+          {sendError}
+        </p>
+      )}
+
       <div className="relative flex-1 min-h-0">
         <Textarea
           value={draft}
@@ -169,7 +179,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
         />
       </div>
 
-      <div className="px-4 py-1.5 text-[11px] font-medium text-muted-foreground/60 border-t border-border/40 shrink-0 bg-muted/5 flex justify-end tracking-wide">
+      <div className="flex items-center justify-end border-t border-panel-border px-4 py-1.5 text-xs text-muted-foreground">
         {t('composePane.hint.sendShortcut')}
       </div>
     </div>

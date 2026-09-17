@@ -31,7 +31,7 @@ export function treeRowState(opts: {
     "flex items-center rounded-sm",
     className,
     variant === "sidebar"
-      ? cn("hover:bg-sidebar-accent", selected && "bg-sidebar-accent")
+      ? cn(selected ? "bg-surface-selected text-sidebar-foreground" : "hover:bg-sidebar-accent")
       : cn(
           selected && "bg-accent",
           focused && !selected && "bg-muted",

@@ -998,6 +998,8 @@ function AppContent() {
         title: fileName,
         width: WIN_W,
         height: WIN_H,
+        minWidth: 640,
+        minHeight: 420,
         ...(position ? position : { center: true }),
         resizable: true,
         decorations: true,
@@ -1668,15 +1670,17 @@ function AppContent() {
                 maxSize={30}
                 onResize={(size) => setRightSidebarSize(size)}
               >
-                <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="h-full flex flex-col">
-                  <TabsList variant="underline" className="w-full">
-                    <TabsTrigger variant="underline" value="monitor">{t('app.monitor')}</TabsTrigger>
-                    <TabsTrigger variant="underline" value="logs">{t('app.logs')}</TabsTrigger>
-                  </TabsList>
+                <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="flex h-full min-h-0 flex-col gap-0 bg-sidebar">
+                  <div className="flex h-11 shrink-0 items-center border-b border-sidebar-border px-3">
+                    <TabsList aria-label={t('app.systemMonitor')} className="h-7 w-full rounded-md bg-muted p-0.5">
+                      <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="monitor">{t('app.monitor')}</TabsTrigger>
+                      <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="logs">{t('app.logs')}</TabsTrigger>
+                    </TabsList>
+                  </div>
 
                   <div className={tabContentWrapper("flex-1")}>
                     <TabsContent value="monitor" forceMount className={tabContentPanel()}>
-                      <div className="h-full overflow-hidden px-1 py-2">
+                      <div className="h-full overflow-hidden px-3 py-3">
                         {activeConnection ? (
                           <ErrorBoundary label={t('app.systemMonitor')}>
                             <Suspense fallback={<PanelSurfaceFallback />}>

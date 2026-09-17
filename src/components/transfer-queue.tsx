@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { useTranslation } from 'react-i18next';
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "./ui/button";
@@ -90,15 +90,7 @@ export function TransferQueue({
 }: TransferQueueProps) {
   const { t } = useTranslation();
   const activeCount = getActiveTransferCount(transfers);
-  const prevActiveCount = useRef(activeCount);
-
-  // Auto-expand when new transfers arrive
-  useEffect(() => {
-    if (activeCount > prevActiveCount.current && !expanded) {
-      onToggleExpanded();
-    }
-    prevActiveCount.current = activeCount;
-  }, [activeCount, expanded, onToggleExpanded]);
+  // Keep the user's disclosure choice; the collapsed summary still shows failures.
 
   if (transfers.length === 0 && !expanded) {
     return null;
@@ -113,11 +105,12 @@ export function TransferQueue({
     <Collapsible
       open={expanded}
       onOpenChange={onToggleExpanded}
-      className="border-t bg-muted/30"
+      className="border-t border-panel-border bg-panel-toolbar"
     >
+      <div className="flex items-center gap-2 px-3">
       <CollapsibleTrigger asChild>
-        <button className="flex items-center justify-between w-full px-3 py-1 text-xs hover:bg-muted/50 transition">
-          <span className="flex items-center gap-2 font-medium">
+        <button type="button" className="flex min-w-0 flex-1 items-center py-2 text-xs rounded-md hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors motion-reduce:transition-none">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
             {expanded ? (
               <ChevronDown className="h-3 w-3" />
             ) : (
@@ -127,7 +120,7 @@ export function TransferQueue({
             {activeCount > 0 && (
               <Badge
                 variant="secondary"
-                className="text-[10px] px-1.5 py-0 h-4"
+                className="text-xs px-1.5 py-0 min-h-5"
               >
                 {t('transferQueue.active', { count: activeCount })}
               </Badge>
@@ -136,14 +129,16 @@ export function TransferQueue({
               <span className="text-success">{t('transferQueue.done', { count: completedCount })}</span>
             )}
             {failedCount > 0 && (
-              <span className="text-destructive">{t('transferQueue.failed', { count: failedCount })}</span>
+              <span className="text-destructive">{t('transferQueue.failedCount', { count: failedCount })}</span>
             )}
           </span>
+        </button>
+      </CollapsibleTrigger>
           {transfers.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1.5 text-[10px]"
+              className="h-6 shrink-0 px-1.5 text-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 dispatch({ type: "CLEAR_COMPLETED" });
@@ -153,16 +148,15 @@ export function TransferQueue({
               {t('transferQueue.clear')}
             </Button>
           )}
-        </button>
-      </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
-        <ScrollArea className="max-h-40">
+        <ScrollArea className="h-40">
           {transfers.length === 0 ? (
             <div className="flex items-center justify-center h-12 text-xs text-muted-foreground">
               {t('transferQueue.noTransfers')}
             </div>
           ) : (
-            <div className="divide-y divide-border/40">
+            <div className="divide-y divide-panel-border bg-background">
               {transfers.map((item) => (
                 <div
                   key={item.id}
@@ -185,7 +179,7 @@ export function TransferQueue({
                     <>
                       <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-primary rounded-full transition-all duration-300"
+                          className="h-full bg-primary rounded-full transition-[width] duration-300 motion-reduce:transition-none"
                           style={{ width: `${item.progress}%` }}
                         />
                       </div>
@@ -211,7 +205,8 @@ export function TransferQueue({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label={t('transferQueue.openFile')}
                             title={t('transferQueue.openFile')}
                             onClick={() =>
                               invoke("open_in_os", {
@@ -224,7 +219,8 @@ export function TransferQueue({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label={t('transferQueue.showInFolder')}
                             title={t('transferQueue.showInFolder')}
                             onClick={() => {
                               const dir =
@@ -249,7 +245,7 @@ export function TransferQueue({
 
                   {item.status === "failed" && (
                     <span
-                      className="text-destructive truncate max-w-[150px]"
+                      className="text-destructive break-words max-w-[min(40%,20rem)]"
                       title={item.error}
                     >
                       {item.error}
@@ -261,7 +257,8 @@ export function TransferQueue({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 shrink-0"
+                      className="h-6 w-6 shrink-0"
+                      aria-label={t('transferQueue.retry')}
                       title={t('transferQueue.retry')}
                       onClick={() =>
                         dispatch({ type: "RETRY", id: item.id })
@@ -276,7 +273,8 @@ export function TransferQueue({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 shrink-0"
+                      className="h-6 w-6 shrink-0"
+                      aria-label={t('transferQueue.cancel')}
                       title={t('transferQueue.cancel')}
                       onClick={() =>
                         dispatch({ type: "CANCEL", id: item.id })
