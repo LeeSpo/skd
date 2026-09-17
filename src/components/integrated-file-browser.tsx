@@ -240,10 +240,25 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const [queueExpanded, setQueueExpanded] = useState(false);
   const processTransferRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchVisible, setSearchVisible] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
   const clearSearch = () => {
     setSearchTerm('');
     searchInputRef.current?.focus();
+  };
+  const hideSearch = () => {
+    setSearchTerm('');
+    setSearchVisible(false);
+    requestAnimationFrame(() => searchToggleRef.current?.focus());
+  };
+  const toggleSearch = () => {
+    if (searchVisible) {
+      hideSearch();
+    } else {
+      setSearchVisible(true);
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
   };
   const [treeVisible, setTreeVisible] = useState(() => {
     try {
@@ -318,7 +333,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   // Editable address bar state
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [editPathValue, setEditPathValue] = useState('');
-  const pathInputRef = React.useRef<HTMLInputElement>(null);
+  const pathEditFinishedRef = React.useRef(true);
+  const restorePathFocusRef = React.useRef(false);
 
   // Mock file data - in real implementation, this would fetch from SSH connection
   const _mockFiles: FileItem[] = [
@@ -787,11 +803,20 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   };
 
   const handlePathSubmit = () => {
+    if (pathEditFinishedRef.current) return;
+    pathEditFinishedRef.current = true;
     const trimmed = editPathValue.trim();
     if (trimmed && trimmed !== currentPath) {
       navigateTo(adapter.normalizeNavPath(trimmed));
     }
     setIsEditingPath(false);
+  };
+
+  const beginPathEdit = () => {
+    if (isEditingPath) return;
+    pathEditFinishedRef.current = false;
+    setEditPathValue(currentPath);
+    setIsEditingPath(true);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -1706,7 +1731,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   return (
     <div className={`flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
-      <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} gap-1 overflow-x-auto whitespace-nowrap scrollbar-none`}>
+      <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} h-auto min-h-9 gap-1 overflow-x-auto whitespace-nowrap py-1 scrollbar-none`}>
           <Button
             variant={treeVisible ? 'secondary' : 'ghost'}
             size="toolbar"
@@ -1761,30 +1786,37 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
           {/* Breadcrumb / Editable address bar */}
           <div
-            className="group mx-1.5 flex h-6 min-w-0 flex-1 cursor-text items-center rounded-sm border border-panel-border bg-background px-2 transition-colors hover:border-border"
+            className="group mx-1.5 flex h-7 min-w-24 flex-1 cursor-text items-center rounded-md border border-input bg-input-background px-2 transition-colors motion-reduce:transition-none hover:border-border focus-within:ring-2 focus-within:ring-ring"
             onClick={() => {
-              if (!isEditingPath) {
-                setEditPathValue(currentPath);
-                setIsEditingPath(true);
-                setTimeout(() => pathInputRef.current?.select(), 0);
-              }
+              if (!isEditingPath) beginPathEdit();
             }}
           >
             {isEditingPath ? (
               <input
-                ref={pathInputRef}
                 autoFocus
+                onFocus={(e) => e.currentTarget.select()}
+                aria-label={t('fileBrowser.toolbar.editPath')}
                 className="h-full w-full bg-transparent font-mono outline-none"
                 value={editPathValue}
                 onChange={(e) => setEditPathValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handlePathSubmit();
-                  if (e.key === 'Escape') setIsEditingPath(false);
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  if (e.key !== 'Enter' && e.key !== 'Escape') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  restorePathFocusRef.current = true;
+                  if (e.key === 'Enter') {
+                    handlePathSubmit();
+                  } else {
+                    pathEditFinishedRef.current = true;
+                    setIsEditingPath(false);
+                  }
                 }}
                 onBlur={handlePathSubmit}
               />
             ) : (
-              <div className="flex items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none">
+              <>
+                <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none">
                 {getBreadcrumbs(currentPath).map((seg, i) => (
                   <React.Fragment key={seg.path}>
                     {i > 0 && (
@@ -1802,8 +1834,28 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                     </button>
                   </React.Fragment>
                 ))}
-                <Pencil className="ml-auto h-2.5 w-2.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/50" />
-              </div>
+                </div>
+                <Button
+                  ref={(node) => {
+                    if (node && restorePathFocusRef.current) {
+                      restorePathFocusRef.current = false;
+                      node.focus();
+                    }
+                  }}
+                  type="button"
+                  variant="ghost"
+                  size="toolbar"
+                  className="ml-1 shrink-0 text-muted-foreground"
+                  title={t('fileBrowser.toolbar.editPath')}
+                  aria-label={t('fileBrowser.toolbar.editPath')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    beginPathEdit();
+                  }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              </>
             )}
           </div>
 
@@ -1827,7 +1879,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
           <ToolbarDivider />
 
-          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" onClick={handleCreateFolder}>
+          <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" aria-label={t('fileBrowser.toolbar.newFolder')} title={t('fileBrowser.toolbar.newFolder')} onClick={handleCreateFolder}>
             <FolderPlus className="h-3.5 w-3.5" />
           </Button>
           {adapter.supportsUpload && (
@@ -1854,7 +1906,22 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
           <ToolbarDivider />
 
-          <div className="relative w-44 shrink-0 sm:w-52">
+          <Button
+            ref={searchToggleRef}
+            variant={searchVisible ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2"
+            aria-label={t('fileBrowser.search.toggle')}
+            aria-pressed={searchVisible}
+            title={t('fileBrowser.search.toggle')}
+            onClick={toggleSearch}
+          >
+            <Search className="h-3.5 w-3.5" />
+            {t('fileBrowser.search.button')}
+          </Button>
+
+          {searchVisible && (
+          <div className="relative min-w-32 flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchInputRef}
@@ -1870,10 +1937,14 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                 if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                 if (e.key === 'Escape') {
                   e.stopPropagation();
-                  clearSearch();
+                  if (searchTerm) {
+                    clearSearch();
+                  } else {
+                    setSearchVisible(false);
+                  }
                 }
               }}
-              className="h-7 rounded-md border-transparent bg-muted/50 pl-7 pr-8 text-xs shadow-none placeholder:text-muted-foreground hover:bg-muted focus-visible:border-ring focus-visible:bg-background focus-visible:ring-1"
+              className="h-7 rounded-md border-input bg-input-background pl-7 pr-8 text-xs shadow-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1"
             />
             {searchTerm && (
               <Button
@@ -1888,6 +1959,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               </Button>
             )}
           </div>
+          )}
 
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">{t('fileBrowser.items', { count: actualItemCount })}</span>
 
@@ -1935,7 +2007,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           <ResizablePanel id="ssh-file-list" order={2} defaultSize={treeVisible ? 78 : 100} minSize={40}>
             <div
               ref={dropZoneRef}
-              className="relative flex h-full flex-col overflow-hidden bg-background transition-all"
+              className="relative flex h-full flex-col overflow-hidden bg-background"
               // Required on Linux/WebKit2GTK: without preventDefault the browser
               // never signals "drop accepted", so Tauri's native drop signal
               // never fires. Also suppresses the browser's default file-open

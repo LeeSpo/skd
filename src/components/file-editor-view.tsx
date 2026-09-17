@@ -159,12 +159,12 @@ export function FileEditorView({
         {filePath}
       </span>
       {readOnly && (
-        <span className="text-muted-foreground text-[10px] font-medium shrink-0">
+        <span className="text-muted-foreground text-xs font-medium shrink-0">
           {t('fileEditorView.readOnly')}
         </span>
       )}
       {showSaveButton && dirty && (
-        <span className="text-yellow-500 text-[10px] font-medium">{t('fileEditorView.modified')}</span>
+        <span className="text-warning text-xs font-medium">{t('fileEditorView.modified')}</span>
       )}
       <Button
         variant="ghost"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -22,9 +22,7 @@ import {
   Upload,
   X,
   RefreshCw,
-  Code2,
-  ChevronLeft,
-  ChevronRight
+  Code2
 } from 'lucide-react';
 import { 
   TerminalAppearanceSettings, 
@@ -279,52 +277,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     }
   };
 
-  // --- Scrollable tab bar logic ---
-  const tabListRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
   const [activeTab, setActiveTab] = useState('terminal');
-
-  const checkScroll = useCallback(() => {
-    const el = tabListRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 1);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const el = tabListRef.current;
-    if (!el) return;
-    checkScroll();
-    const observer = new ResizeObserver(checkScroll);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [open, checkScroll]);
-
-  // Auto-scroll to center the active tab
-  const scrollToActiveTab = useCallback(() => {
-    const el = tabListRef.current;
-    if (!el) return;
-    const activeTrigger = el.querySelector<HTMLElement>('[data-state="active"]');
-    if (!activeTrigger) return;
-    const targetLeft = activeTrigger.offsetLeft
-      - (el.clientWidth - activeTrigger.offsetWidth) / 2;
-    el.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    // Slight delay so DOM has the active trigger rendered
-    const raf = requestAnimationFrame(scrollToActiveTab);
-    return () => cancelAnimationFrame(raf);
-  }, [activeTab, open, scrollToActiveTab]);
-
-  const scrollTabs = (dir: 'left' | 'right') => {
-    const el = tabListRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir === 'left' ? -150 : 150, behavior: 'smooth' });
-  };
 
   // Tab definitions
   const tabItems = [
@@ -337,86 +290,40 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     { value: 'advanced', icon: Monitor, labelKey: 'settings.tab.advanced' },
   ] as const;
 
-  const TALL_TABS = new Set(['terminal', 'editor']);
-  const isTallTab = TALL_TABS.has(activeTab);
-  const tabContentClassName = cn(
-    'px-6 py-4 space-y-4 mt-0 overflow-y-auto',
-    isTallTab && 'flex-1 min-h-0',
-  );
+  const tabContentClassName = 'flex-1 min-w-0 min-h-0 px-5 py-5 space-y-4 mt-0 overflow-y-auto [&>[data-slot=card]]:border-0 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:shadow-none [&>[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-title]]:text-sm';
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
-        position={isTallTab ? "tauriTopTall" : "tauriTop"}
-        className={cn(
-          "w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl",
-          !isTallTab && "h-fit",
-        )}
+        position="tauriTall"
+        className="w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl"
       >
-        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Settings className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div>{t('settings.title')}</div>
-              <DialogDescription className="mt-1">
-                {t('settings.description')}
-              </DialogDescription>
-            </div>
+        <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+            {t('settings.title')}
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            {t('settings.description')}
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className={cn(
-            'flex flex-col overflow-hidden',
-            isTallTab ? 'flex-1 min-h-0' : 'shrink-0',
-          )}
+          orientation="vertical"
+          className="flex flex-row gap-0 flex-1 min-h-0 overflow-hidden"
         >
-          {/* Scrollable tab bar with fade edges and scroll arrows */}
-          <div className="relative border-b shrink-0">
-            {/* Left scroll button */}
-            {canScrollLeft && (
-              <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pl-1 pr-6 bg-gradient-to-r from-background via-background/95 to-transparent pointer-events-none">
-                <button
-                  type="button"
-                  onClick={() => scrollTabs('left')}
-                  className="pointer-events-auto flex items-center justify-center h-6 w-6 rounded-full bg-muted border border-border/50 shadow-sm hover:bg-muted/80 transition-colors"
-                  tabIndex={-1}
-                  aria-label="Scroll left"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
-                </button>
-              </div>
-            )}
-
-            {/* Right scroll button */}
-            {canScrollRight && (
-              <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-end pr-1 pl-6 bg-gradient-to-l from-background via-background/95 to-transparent pointer-events-none">
-                <button
-                  type="button"
-                  onClick={() => scrollTabs('right')}
-                  className="pointer-events-auto flex items-center justify-center h-6 w-6 rounded-full bg-muted border border-border/50 shadow-sm hover:bg-muted/80 transition-colors"
-                  tabIndex={-1}
-                  aria-label="Scroll right"
-                >
-                  <ChevronRight className="h-3.5 w-3.5 text-foreground" />
-                </button>
-              </div>
-            )}
-
+          <div className="w-36 sm:w-44 shrink-0 overflow-y-auto border-r border-panel-border bg-sidebar p-2">
             <TabsList
-              ref={tabListRef}
-              className="w-full justify-start rounded-none bg-transparent h-auto p-0 px-4 gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
-              onScroll={checkScroll}
+              aria-label={t('settings.title')}
+              className="flex w-full flex-col items-stretch justify-start rounded-none bg-transparent h-auto p-0 gap-1"
             >
               {tabItems.map(({ value, icon: Icon, labelKey }) => (
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="flex items-center gap-1.5 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-muted/60 data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-1 data-[state=active]:ring-primary/40 px-3 py-2 my-1.5 text-sm whitespace-nowrap transition-colors duration-150"
+                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-foreground data-[state=active]:shadow-none px-3 py-2 text-[13px] transition-colors motion-reduce:transition-none"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span>{t(labelKey)}</span>
@@ -1281,7 +1188,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           </TabsContent>
         </Tabs>
 
-        <div className="shrink-0 flex justify-between px-6 py-4 border-t bg-muted/30">
+        <div className="shrink-0 flex flex-wrap gap-2 justify-between px-5 py-3 border-t border-panel-border bg-panel-toolbar">
           <Button variant="ghost" onClick={handleReset}>
             {t('settings.button.resetToDefaults')}
           </Button>

@@ -108,10 +108,66 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe('IntegratedFileBrowser path editing', () => {
+  it('provides a focusable named edit button and ignores IME Enter/Escape before submitting', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    const edit = screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' });
+    edit.focus();
+    expect(document.activeElement).toBe(edit);
+    fireEvent.click(edit);
+    const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: '/var/next' } });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    expect(screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' })).toBe(input);
+    expect(mockedInvoke).not.toHaveBeenCalledWith('list_local_files', { path: '/var/next' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/var/next' }));
+    expect(mockedInvoke.mock.calls.filter(([command, args]) =>
+      command === 'list_local_files' && (args as { path: string }).path === '/var/next',
+    )).toHaveLength(1);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    await screen.findByRole('button', { name: 'test' });
+  });
+
+  it('submits on blur without taking focus back from the next control', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
+    fireEvent.change(input, { target: { value: '/blur-target' } });
+    const next = screen.getByRole('button', { name: 'Home' });
+    fireEvent.blur(input, { relatedTarget: next });
+    next.focus();
+    await waitFor(() => expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/blur-target' }));
+    expect(document.activeElement).toBe(next);
+    expect(screen.queryByRole('textbox', { name: 'fileBrowser.toolbar.editPath' })).toBeNull();
+    fireEvent.click(next);
+    await screen.findByRole('button', { name: 'test' });
+  });
+
+  it('cancels without navigating and returns keyboard focus', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
+    fireEvent.change(input, { target: { value: '/cancelled' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: 'fileBrowser.toolbar.editPath' })).toBeNull();
+    expect(mockedInvoke).not.toHaveBeenCalledWith('list_local_files', { path: '/cancelled' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+  });
+});
+
 describe('IntegratedFileBrowser scoped search', () => {
   it('filters immediately, explains empty results, and clears back to the list with focus', async () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
     const input = screen.getByRole('searchbox', { name: 'fileBrowser.search.label' });
     fireEvent.change(input, { target: { value: 'no-match' } });
     expect(screen.queryByText('readme.md')).toBeNull();
@@ -122,9 +178,28 @@ describe('IntegratedFileBrowser scoped search', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('keeps the filter collapsed until shown and clears it when hidden again', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    expect(screen.queryByRole('searchbox')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
+    const input = screen.getByRole('searchbox', { name: 'fileBrowser.search.label' });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent.change(input, { target: { value: 'no-match' } });
+    expect(screen.queryByText('readme.md')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('fileBrowser.search.noResults');
+
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByText('readme.md')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('ignores Escape during composition and clears on ordinary Escape', async () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
     const input = screen.getByRole('searchbox') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'README' } });
     expect(screen.getByText('readme.md')).toBeTruthy();
@@ -262,11 +337,12 @@ describe('IntegratedFileBrowser local mode', () => {
       expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/Users/test' });
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'alpha' } });
     fireEvent.keyDown(document, { key: 'a', metaKey: true });
     expect(screen.getByText('alpha.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByText('bravo.txt')).toBeNull();
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.search.toggle' }));
     expect(screen.getByText('bravo.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('false');
     expect(screen.getByText('..').closest('[role="row"]')?.hasAttribute('aria-selected')).toBe(false);
 

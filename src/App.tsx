@@ -998,6 +998,8 @@ function AppContent() {
         title: fileName,
         width: WIN_W,
         height: WIN_H,
+        minWidth: 640,
+        minHeight: 420,
         ...(position ? position : { center: true }),
         resizable: true,
         decorations: true,

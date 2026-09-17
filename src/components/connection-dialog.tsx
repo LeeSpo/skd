@@ -729,7 +729,7 @@ export function ConnectionDialog({
 
   const isTallAuth = config.authMethod === 'publickey';
   const tabContentClassName = cn(
-    'px-6 py-4 space-y-4 mt-0 overflow-y-auto',
+    'px-5 py-4 space-y-4 mt-0 overflow-y-auto [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-title]]:text-sm',
     isTallAuth && 'flex-1 min-h-0',
   );
   const showRememberPassword = (editingConnection || saveAsConnection)
@@ -745,18 +745,14 @@ export function ConnectionDialog({
           isTallAuth ? '!h-[85vh]' : 'h-fit',
         )}
       >
-        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Server className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div>{editingConnection ? t('connectionDialog.title.edit') : t('connectionDialog.title.new')}</div>
-              <DialogDescription className="mt-1">
-                {t('connectionDialog.description')}
-              </DialogDescription>
-            </div>
+        <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Server className="h-4 w-4 text-muted-foreground" />
+            {editingConnection ? t('connectionDialog.title.edit') : t('connectionDialog.title.new')}
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            {t('connectionDialog.description')}
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs
@@ -1204,7 +1200,7 @@ export function ConnectionDialog({
 
         </Tabs>
 
-        <DialogFooter className="shrink-0 px-6 py-4 border-t bg-muted/30 flex-col sm:flex-col">
+        <DialogFooter className="shrink-0 px-5 py-3 border-t border-panel-border bg-panel-toolbar flex-col sm:flex-col">
           <div className="flex flex-col gap-3 w-full">
             {/* Save as Connection Option - Only show for new connections */}
             {!editingConnection && (

@@ -137,6 +137,27 @@ describe('ComposePane', () => {
     expect(sessionStorage.getItem('skd-compose-draft-conn-1')).toBeNull();
   });
 
+  it('keeps failed sends visible and retains the draft until a successful retry', () => {
+    mocks.sendToTerminal.mockReturnValue(false);
+    renderComposePane();
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'echo hello' } });
+    fireEvent.click(screen.getByRole('button', { name: 'composePane.send' }));
+    expect(screen.getByRole('alert').textContent).toBe('composePane.toast.sendFailed');
+    expect(textarea.value).toBe('echo hello');
+    mocks.sendToTerminal.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'composePane.send' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('does not submit while composing text', () => {
+    renderComposePane();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, isComposing: true });
+    expect(mocks.sendToTerminal).not.toHaveBeenCalled();
+  });
+
   it('disables send when terminal is disconnected', () => {
     mocks.activeTab = {
       ...mocks.activeTab,
