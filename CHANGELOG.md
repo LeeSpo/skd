@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-17
+
+### Added
+
+- **Cupertino Theme**: Added a native macOS-inspired Cupertino theme palette with clean system colors, dark/light variations, and design contract tests.
+- **File Browser Search & Collapsible Tree**: Added scoped file search filtering, a collapsible directory tree structure, and an upload action menu to the integrated file browser.
+- **Collapsible Connection Details**: Made host connection details collapsible in the sidebar to maximize active file tree space.
+
+### Changed
+
+- **macOS HIG UI Refinements**: Comprehensive visual and ergonomic refresh adhering to Apple Human Interface Guidelines across controls, settings dialog, welcome screen, buttons, inputs, tooltips, and transfer queue.
+- **PTY Async I/O Streaming**: Replaced PTY output polling with native async waits in the backend WebSocket server and local shell manager, lowering CPU usage and output latency.
+- **Unified Connection Dialog**: Merged authentication and credentials settings into the primary connection tab for a streamlined, single-view configuration flow.
+- **New Tab Action Hierarchy**: Reordered the new-tab dropdown to prioritize immediate access to the local shell terminal.
+- **Status Bar Layout**: Reorganized status bar components and metrics for a cleaner and more balanced layout.
+
+### Fixed
+
+- **Connection Browser Selection**: Prevented unintended text selection when interacting with and clicking items in the connection list.
+
+
 ## [0.2.5] - 2026-08-22
 
 ### Added
