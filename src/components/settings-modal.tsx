@@ -100,6 +100,7 @@ const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> 
   graphite: ['#11141A', '#1D232D', '#5B8FF9'],
   midnight: ['#07101F', '#14223A', '#6B9BFA'],
   nordic: ['#20262F', '#303947', '#88C0D0'],
+  cupertino: ['#F5F5F7', '#1C1C1E', '#0A84FF'],
 };
 
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {
@@ -971,7 +972,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       {t('settings.interface.colorPaletteDesc')}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     {COLOR_PALETTES.map((palette) => {
                       const selected = settings.colorPalette === palette;
                       return (

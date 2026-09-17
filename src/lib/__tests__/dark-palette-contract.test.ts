@@ -41,6 +41,31 @@ const expectedCore = {
     'muted-foreground': '#b2bcc9',
     primary: '#88c0d0',
   },
+  cupertino: {
+    background: '#1c1c1e',
+    card: '#242426',
+    popover: '#2c2c2e',
+    'input-background': '#202022',
+    'surface-hover': '#343437',
+    'surface-selected': '#163d66',
+    border: '#48484a',
+    foreground: '#f5f5f7',
+    'muted-foreground': '#b0b0b8',
+    primary: '#0a84ff',
+  },
+} as const;
+
+const expectedCupertinoLight = {
+  background: '#f5f5f7',
+  card: '#ffffff',
+  popover: '#ffffff',
+  'input-background': '#ffffff',
+  'surface-hover': '#e8e8ed',
+  'surface-selected': '#c8e0ff',
+  border: '#d2d2d7',
+  foreground: '#1d1d1f',
+  'muted-foreground': '#56565c',
+  primary: '#0066cc',
 } as const;
 
 const requiredVariables = [
@@ -68,6 +93,20 @@ function paletteVariables(palette: keyof typeof expectedCore): Record<string, st
     new RegExp(`\\.dark\\[data-color-palette="${palette}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`),
   )?.[1];
   expect(block, `${palette} palette block`).toBeDefined();
+
+  return Object.fromEntries(
+    Array.from(block?.matchAll(/--([\w-]+):\s*([^;]+);/g) ?? [], (match) => [
+      match[1],
+      match[2].trim().toLowerCase(),
+    ]),
+  );
+}
+
+function cupertinoLightVariables(): Record<string, string> {
+  const block = css.match(
+    /\[data-color-palette="cupertino"\]\s*\{([\s\S]*?)\n\}/,
+  )?.[1];
+  expect(block, 'Cupertino light palette block').toBeDefined();
 
   return Object.fromEntries(
     Array.from(block?.matchAll(/--([\w-]+):\s*([^;]+);/g) ?? [], (match) => [
@@ -124,6 +163,27 @@ describe('dark workspace palette contract', () => {
     for (const state of ['success', 'warning', 'destructive']) {
       expect(contrastRatio(variables[state], variables[`${state}-foreground`])).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('Cupertino defines a complete, readable light appearance', () => {
+    const variables = cupertinoLightVariables();
+    for (const variable of requiredVariables) {
+      expect(variables[variable], `Cupertino light --${variable}`).toBeDefined();
+    }
+    expect(variables).toMatchObject(expectedCupertinoLight);
+
+    for (const text of ['foreground', 'muted-foreground', 'success', 'warning', 'destructive']) {
+      for (const surface of ['background', 'card', 'popover', 'surface-selected', 'surface-hover']) {
+        expect(contrastRatio(variables[text], variables[surface]), `Cupertino light ${text} on ${surface}`)
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const state of ['primary', 'success', 'warning', 'destructive']) {
+      expect(contrastRatio(variables[state], variables[`${state}-foreground`]))
+        .toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrastRatio(variables.primary, variables.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(variables['surface-selected'], variables.background)).toBeGreaterThanOrEqual(1.2);
   });
 
   for (const palette of Object.keys(expectedCore) as Array<keyof typeof expectedCore>) {

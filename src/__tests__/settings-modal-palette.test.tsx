@@ -49,17 +49,17 @@ describe('SettingsModal workspace palettes', () => {
     fireEvent.mouseDown(interfaceTab);
     fireEvent.click(interfaceTab);
     await waitFor(() => expect(interfaceTab.getAttribute('aria-selected')).toBe('true'));
-    fireEvent.click(screen.getByRole('button', { name: /Midnight/ }));
-    expect(document.documentElement.dataset.colorPalette).toBe('midnight');
+    fireEvent.click(screen.getByRole('button', { name: /Cupertino/ }));
+    expect(document.documentElement.dataset.colorPalette).toBe('cupertino');
 
     fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }));
 
     expect(JSON.parse(localStorage.getItem('sshClientSettings') ?? '{}')).toMatchObject({
       theme: 'dark',
-      colorPalette: 'midnight',
+      colorPalette: 'cupertino',
     });
     expect(JSON.parse(localStorage.getItem('terminalAppearance') ?? '{}')).toMatchObject({
-      theme: 'tokyo-night',
+      theme: 'vs-code-dark',
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

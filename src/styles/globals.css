@@ -112,6 +112,71 @@
   --font-weight-normal: 400;
 }
 
+[data-color-palette="cupertino"] {
+  color-scheme: light;
+
+  /* Cupertino — an app-defined, HIG-informed light appearance. */
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0066cc;
+  --primary-foreground: #ffffff;
+  --primary-hover: #0055b3;
+  --secondary: #e9e9ee;
+  --secondary-foreground: #1d1d1f;
+  --muted: #e9e9ee;
+  --muted-foreground: #56565c;
+  --accent: #c8e0ff;
+  --accent-foreground: #1d1d1f;
+  --destructive: #b92723;
+  --destructive-foreground: #ffffff;
+  --success: #12663d;
+  --success-foreground: #ffffff;
+  --warning: #805200;
+  --warning-foreground: #ffffff;
+  --border: #d2d2d7;
+  --input: #c7c7cc;
+  --input-background: #ffffff;
+  --ring: #0066cc;
+  --switch-background: #c7c7cc;
+  --chart-1: #0066cc;
+  --chart-2: #248a3d;
+  --chart-3: #a05a00;
+  --chart-4: #b92723;
+  --chart-5: #7d4eb3;
+  --sidebar: #eeeef0;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #0066cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dfe9f5;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #d2d2d7;
+  --sidebar-ring: #0066cc;
+  --terminal-bg: #ffffff;
+  --terminal-fg: #1d1d1f;
+  --terminal-cursor: #1d1d1f;
+  --terminal-selection: rgba(0, 102, 204, 0.26);
+  --status-connected: var(--success);
+  --status-connecting: var(--warning);
+  --status-disconnected: var(--destructive);
+  --status-pending: var(--primary);
+  --panel-header-bg: #eeeef0;
+  --panel-toolbar-bg: #f5f5f7;
+  --panel-border: #d2d2d7;
+  --surface-raised: #ffffff;
+  --surface-selected: #c8e0ff;
+  --surface-hover: #e8e8ed;
+  --workspace-bg: #f5f5f7;
+  --statusbar-bg: #eeeef0;
+  --drop-zone: rgba(0, 102, 204, 0.18);
+  --overlay: rgba(29, 29, 31, 0.42);
+  --scrollbar-thumb: rgba(29, 29, 31, 0.2);
+  --scrollbar-thumb-hover: rgba(29, 29, 31, 0.38);
+}
+
 .dark,
 .dark[data-color-palette="graphite"] {
   color-scheme: dark;
@@ -301,6 +366,71 @@
   --overlay: rgba(8, 12, 18, 0.66);
   --scrollbar-thumb: rgba(236, 239, 244, 0.18);
   --scrollbar-thumb-hover: rgba(236, 239, 244, 0.32);
+}
+
+.dark[data-color-palette="cupertino"] {
+  color-scheme: dark;
+
+  /* Cupertino — an app-defined, HIG-informed dark appearance. */
+  --background: #1c1c1e;
+  --foreground: #f5f5f7;
+  --card: #242426;
+  --card-foreground: #f5f5f7;
+  --popover: #2c2c2e;
+  --popover-foreground: #f5f5f7;
+  --primary: #0a84ff;
+  --primary-foreground: #001a33;
+  --primary-hover: #2994ff;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #2c2c2e;
+  --muted-foreground: #b0b0b8;
+  --accent: #163d66;
+  --accent-foreground: #f5f5f7;
+  --destructive: #ff8a84;
+  --destructive-foreground: #2a0705;
+  --success: #44d17a;
+  --success-foreground: #061b0f;
+  --warning: #ffb340;
+  --warning-foreground: #241400;
+  --border: #48484a;
+  --input: #3a3a3c;
+  --input-background: #202022;
+  --ring: #0a84ff;
+  --switch-background: #545458;
+  --chart-1: #0a84ff;
+  --chart-2: #44d17a;
+  --chart-3: #ffb340;
+  --chart-4: #ff8a84;
+  --chart-5: #bf5af2;
+  --sidebar: #242426;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #0a84ff;
+  --sidebar-primary-foreground: #001a33;
+  --sidebar-accent: #343437;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #3a3a3c;
+  --sidebar-ring: #0a84ff;
+  --terminal-bg: #161618;
+  --terminal-fg: #f5f5f7;
+  --terminal-cursor: #f5f5f7;
+  --terminal-selection: rgba(10, 132, 255, 0.3);
+  --status-connected: var(--success);
+  --status-connecting: var(--warning);
+  --status-disconnected: var(--destructive);
+  --status-pending: var(--primary);
+  --panel-header-bg: #2c2c2e;
+  --panel-toolbar-bg: #242426;
+  --panel-border: #3a3a3c;
+  --surface-raised: #2c2c2e;
+  --surface-selected: #163d66;
+  --surface-hover: #343437;
+  --workspace-bg: #1c1c1e;
+  --statusbar-bg: #242426;
+  --drop-zone: rgba(10, 132, 255, 0.22);
+  --overlay: rgba(0, 0, 0, 0.66);
+  --scrollbar-thumb: rgba(245, 245, 247, 0.2);
+  --scrollbar-thumb-hover: rgba(245, 245, 247, 0.36);
 }
 
 @theme inline {

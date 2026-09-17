@@ -38,6 +38,7 @@ describe('workspace color palettes', () => {
   it('defaults missing and invalid saved values to Graphite', () => {
     expect(getSavedColorPalette()).toBe(DEFAULT_COLOR_PALETTE);
     expect(normalizeColorPalette('unknown')).toBe('graphite');
+    expect(normalizeColorPalette('cupertino')).toBe('cupertino');
 
     localStorage.setItem('sshClientSettings', JSON.stringify({ colorPalette: 'unknown' }));
     expect(getSavedColorPalette()).toBe('graphite');
@@ -48,9 +49,9 @@ describe('workspace color palettes', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.dataset.colorPalette).toBe('midnight');
 
-    applyTheme('light', 'nordic');
+    applyTheme('light', 'cupertino');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(document.documentElement.dataset.colorPalette).toBe('nordic');
+    expect(document.documentElement.dataset.colorPalette).toBe('cupertino');
   });
 
   it('restores saved palette before rendering and follows system mode changes', () => {
@@ -74,6 +75,7 @@ describe('workspace color palettes', () => {
       graphite: 'one-dark',
       midnight: 'tokyo-night',
       nordic: 'nord',
+      cupertino: 'vs-code-dark',
     });
   });
 });

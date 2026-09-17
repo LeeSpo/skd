@@ -346,7 +346,7 @@
       "desc": "Customize the application interface and panels.",
       "appTheme": "Application Theme",
       "colorPalette": "Workspace Color Palette",
-      "colorPaletteDesc": "Choose a deep workspace palette. Selecting one also suggests a matching terminal theme.",
+      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Selecting one also suggests a matching terminal theme.",
       "panelVisibility": "Panel Visibility",
       "connectionManager": "Connection Manager",
       "systemMonitor": "System Monitor",
@@ -394,6 +394,10 @@
       "nordic": {
         "name": "Nordic",
         "description": "Soft slate with calm arctic cyan"
+      },
+      "cupertino": {
+        "name": "Cupertino",
+        "description": "macOS-inspired neutrals with adaptive blue accents"
       }
     },
     "cursor": {

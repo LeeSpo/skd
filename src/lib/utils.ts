@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
-export type ColorPalette = 'graphite' | 'midnight' | 'nordic';
+export type ColorPalette = 'graphite' | 'midnight' | 'nordic' | 'cupertino';
 
 export const DEFAULT_COLOR_PALETTE: ColorPalette = 'graphite';
 
@@ -15,12 +15,14 @@ export const COLOR_PALETTES: readonly ColorPalette[] = [
   'graphite',
   'midnight',
   'nordic',
+  'cupertino',
 ];
 
 export const PALETTE_TERMINAL_THEMES: Record<ColorPalette, string> = {
   graphite: 'one-dark',
   midnight: 'tokyo-night',
   nordic: 'nord',
+  cupertino: 'vs-code-dark',
 };
 
 const APP_SETTINGS_STORAGE_KEY = 'sshClientSettings';
