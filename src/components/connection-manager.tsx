@@ -583,7 +583,7 @@ export function ConnectionManager({
     <>
     <div className="flex h-full min-w-0 flex-col bg-sidebar">
       {/* Connection Browser */}
-      <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col select-none">
         <PanelHeader tone="sidebar" className="h-9 shrink-0 gap-0.5 px-2">
           <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-muted-foreground">
             {t('connectionManager.connectionsHeader')}

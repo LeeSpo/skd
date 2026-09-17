@@ -53,6 +53,21 @@ describe('ConnectionManager tree layout', () => {
     expect(details?.textContent).toContain('example.test');
   });
 
+  it('disables browser text selection in the connection browser but preserves details and dragging', () => {
+    vi.spyOn(ConnectionStorageManager, 'buildConnectionTree').mockReturnValue([
+      { id: 'host', name: 'Production', type: 'connection', protocol: 'SSH', host: 'example.test' },
+    ]);
+    render(<ConnectionManager onConnectionSelect={() => {}} selectedConnectionId="host" />);
+
+    const heading = screen.getByRole('heading', { name: 'Connections' });
+    const browser = heading.closest('.select-none');
+    expect(browser).not.toBeNull();
+    const row = document.querySelector('[draggable="true"]');
+    expect(row).not.toBeNull();
+    expect(browser?.contains(row)).toBe(true);
+    expect(screen.getByText('example.test').closest('.select-none')).toBeNull();
+  });
+
   it('keeps connection icon slots fixed and truncates long names at each tree depth', () => {
     vi.spyOn(ConnectionStorageManager, 'buildConnectionTree').mockReturnValue([
       {
