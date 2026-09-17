@@ -2,6 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { IntegratedFileBrowser } from '../components/integrated-file-browser';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -25,6 +26,7 @@ vi.mock('react-i18next', () => ({
         'fileBrowser.column.size': 'Size',
         'fileBrowser.column.modified': 'Modified',
         'fileBrowser.searchFiles': 'Search files...',
+        'fileBrowser.search.placeholder': 'Filter this folder…',
         'fileBrowser.items': `${String(params?.count ?? 0)} item(s)`,
         'fileBrowser.toolbar.back': 'Back',
         'fileBrowser.toolbar.forward': 'Forward',
@@ -77,6 +79,8 @@ const mockedInvoke = vi.mocked(invoke);
 
 beforeEach(() => {
   localStorage.clear();
+  // Existing drag/drop cases exercise the explicitly expanded sidebar.
+  localStorage.setItem('skd-file-browser-tree-visible', 'true');
   mockedInvoke.mockImplementation(async (command: string) => {
     if (command === 'get_home_directory') {
       return '/Users/test';
@@ -102,6 +106,85 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe('IntegratedFileBrowser scoped search', () => {
+  it('filters immediately, explains empty results, and clears back to the list with focus', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    const input = screen.getByRole('searchbox', { name: 'fileBrowser.search.label' });
+    fireEvent.change(input, { target: { value: 'no-match' } });
+    expect(screen.queryByText('readme.md')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('fileBrowser.search.noResults');
+    fireEvent.click(screen.getAllByRole('button', { name: 'fileBrowser.search.clear' })[0]);
+    expect(screen.getByText('readme.md')).toBeTruthy();
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('ignores Escape during composition and clears on ordinary Escape', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    const input = screen.getByRole('searchbox') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'README' } });
+    expect(screen.getByText('readme.md')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    expect(input.value).toBe('README');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input.value).toBe('');
+    expect(screen.queryByRole('button', { name: 'fileBrowser.search.clear' })).toBeNull();
+  });
+});
+
+describe('IntegratedFileBrowser directory tree preference', () => {
+  it('starts hidden, persists toggles, and restores the expanded choice on remount', async () => {
+    localStorage.removeItem('skd-file-browser-tree-visible');
+    const first = render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    const toggle = screen.getByRole('button', { name: 'fileBrowser.toolbar.toggleDirectoryTree' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('directory-tree')).toBeNull();
+    expect(screen.queryByTestId('resize-handle')).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('directory-tree')).toBeTruthy();
+    expect(localStorage.getItem('skd-file-browser-tree-visible')).toBe('true');
+    first.unmount();
+
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    expect(screen.getByTestId('directory-tree')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.toggleDirectoryTree' }));
+    expect(screen.queryByTestId('directory-tree')).toBeNull();
+    expect(localStorage.getItem('skd-file-browser-tree-visible')).toBe('false');
+    expect(screen.getByText('readme.md')).toBeTruthy();
+  });
+});
+
+describe('IntegratedFileBrowser upload menu', () => {
+  it.each([
+    ['fileBrowser.toolbar.uploadFiles', false],
+    ['fileBrowser.toolbar.uploadFolder', true],
+  ] as const)('opens the correct native picker for %s', async (label, directory) => {
+    vi.mocked(openDialog).mockResolvedValue(null);
+    render(<IntegratedFileBrowser mode="remote" connectionId="upload-menu-test" isConnected onClose={() => {}} />);
+    await screen.findByText('remote.txt');
+
+    const trigger = screen.getByRole('button', { name: 'fileBrowser.toolbar.upload' });
+    expect(screen.queryByRole('button', { name: label })).toBeNull();
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+
+    await waitFor(() => expect(openDialog).toHaveBeenCalledWith(expect.objectContaining({ multiple: true, directory })));
+    expect(openDialog).toHaveBeenCalledTimes(1);
+    // Cancelling the picker must not enqueue or start an upload.
+    expect(mockedInvoke.mock.calls.some(([command]) => command.includes('upload'))).toBe(false);
+  });
+
+  it('does not offer upload actions in local mode', async () => {
+    render(<IntegratedFileBrowser mode="local" />);
+    await screen.findByText('readme.md');
+    expect(screen.queryByRole('button', { name: 'fileBrowser.toolbar.upload' })).toBeNull();
+  });
 });
 
 describe('IntegratedFileBrowser local mode', () => {
@@ -179,11 +262,11 @@ describe('IntegratedFileBrowser local mode', () => {
       expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/Users/test' });
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Search files...'), { target: { value: 'alpha' } });
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'alpha' } });
     fireEvent.keyDown(document, { key: 'a', metaKey: true });
     expect(screen.getByText('alpha.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByText('bravo.txt')).toBeNull();
-    fireEvent.change(screen.getByPlaceholderText('Search files...'), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
     expect(screen.getByText('bravo.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('false');
     expect(screen.getByText('..').closest('[role="row"]')?.hasAttribute('aria-selected')).toBe(false);
 

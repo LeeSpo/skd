@@ -22,9 +22,9 @@ export interface LayoutPreset {
 const DEFAULT_LAYOUT: LayoutConfig = {
   leftSidebarVisible: true,
   leftSidebarSize: 18,
-  rightSidebarVisible: true,
+  rightSidebarVisible: false,
   rightSidebarSize: 20,
-  bottomPanelVisible: true,
+  bottomPanelVisible: false,
   bottomPanelSize: 30,
   zenMode: false,
 };
@@ -74,7 +74,7 @@ export class LayoutManager {
     return [
       {
         name: 'Default',
-        description: 'Standard three-panel layout',
+        description: 'Terminal with connection manager only',
         config: DEFAULT_LAYOUT,
       },
       {

@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
-import { Separator } from './ui/separator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +62,7 @@ export function MenuBar({
 
   return (
     <div
-      className="flex h-8 items-center gap-1 border-b border-panel-border bg-surface-raised"
+      className="window-chrome flex h-10 shrink-0 items-center border-b border-panel-border bg-sidebar"
       // macOS traffic-light inset — keeps native window controls unobstructed
       style={{ paddingLeft: '80px' }}
     >
@@ -72,53 +71,75 @@ export function MenuBar({
         data-tauri-drag-region
       />
 
-      <div className="flex items-center gap-0.5 pr-1">
+      <div className="flex shrink-0 items-center gap-3 pr-3">
         <TooltipProvider>
-          <Separator orientation="vertical" className="h-4 mx-1" />
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="menubar" onClick={onToggleLeftSidebar}>
-                {leftSidebarVisible
-                  ? <PanelLeftClose className="w-4 h-4" />
-                  : <PanelLeftOpen className="w-4 h-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t(leftSidebarVisible ? 'common.hide' : 'common.show')} {t('menuBar.toggleConnectionManager')}</TooltipContent>
-          </Tooltip>
-
-          {showBottomPanelToggle && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="menubar" onClick={onToggleBottomPanel}>
-                  {bottomPanelVisible
-                    ? <PanelBottomClose className="w-4 h-4" />
-                    : <PanelBottomOpen className="w-4 h-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t(bottomPanelVisible ? 'common.hide' : 'common.show')} {t('menuBar.toggleBottomPanel')}</TooltipContent>
-            </Tooltip>
-          )}
-
-          {showRightPanelToggle && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="menubar" onClick={onToggleRightSidebar}>
-                  {rightSidebarVisible
-                    ? <PanelRightClose className="w-4 h-4" />
-                    : <PanelRightOpen className="w-4 h-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t(rightSidebarVisible ? 'common.hide' : 'common.show')} {t('menuBar.toggleMonitorPanel')}</TooltipContent>
-            </Tooltip>
-          )}
+          <div className="flex items-center gap-1">
 
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="menubar"
-                className={zenMode ? 'bg-accent' : undefined}
+                aria-label={t('menuBar.toggleConnectionManager')}
+                aria-pressed={!!leftSidebarVisible}
+                onClick={onToggleLeftSidebar}
+              >
+                {leftSidebarVisible
+                  ? <PanelLeftClose className="w-4 h-4" />
+                  : <PanelLeftOpen className="w-4 h-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('menuBar.toggleConnectionManager')}</TooltipContent>
+          </Tooltip>
+
+          {showBottomPanelToggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="menubar"
+                  aria-label={t('menuBar.toggleBottomPanel')}
+                  aria-pressed={!!bottomPanelVisible}
+                  onClick={onToggleBottomPanel}
+                >
+                  {bottomPanelVisible
+                    ? <PanelBottomClose className="w-4 h-4" />
+                    : <PanelBottomOpen className="w-4 h-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('menuBar.toggleBottomPanel')}</TooltipContent>
+            </Tooltip>
+          )}
+
+          {showRightPanelToggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="menubar"
+                  aria-label={t('menuBar.toggleMonitorPanel')}
+                  aria-pressed={!!rightSidebarVisible}
+                  onClick={onToggleRightSidebar}
+                >
+                  {rightSidebarVisible
+                    ? <PanelRightClose className="w-4 h-4" />
+                    : <PanelRightOpen className="w-4 h-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('menuBar.toggleMonitorPanel')}</TooltipContent>
+            </Tooltip>
+          )}
+
+          </div>
+
+          <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="menubar"
+                aria-label={t('menuBar.toggleZenMode')}
+                aria-pressed={!!zenMode}
                 onClick={onToggleZenMode}
               >
                 <Maximize2 className="w-4 h-4" />
@@ -131,7 +152,7 @@ export function MenuBar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="menubar">
+                  <Button variant="ghost" size="menubar" aria-label={t('menuBar.layoutPresets')}>
                     <LayoutGrid className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -149,12 +170,15 @@ export function MenuBar({
               <DropdownMenuItem onClick={() => onApplyPreset?.('Zen Mode')}>{t('menuBar.zenMode')}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
 
+          <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="menubar"
+                aria-label={t('menuBar.portForwarding')}
                 onClick={onOpenPortForward}
                 disabled={!portForwardEnabled}
               >
@@ -166,12 +190,13 @@ export function MenuBar({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="menubar" onClick={onOpenSettings}>
+              <Button variant="ghost" size="menubar" aria-label={t('common.options')} onClick={onOpenSettings}>
                 <Settings className="w-4 h-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t('common.options')}</TooltipContent>
           </Tooltip>
+          </div>
         </TooltipProvider>
       </div>
     </div>

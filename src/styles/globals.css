@@ -436,6 +436,40 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Window-bar pilot: opaque surfaces; deliberately scoped away from panel toolbars. */
+.window-chrome [data-slot="button"] {
+  color: var(--muted-foreground);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.window-chrome [data-slot="button"]:hover:not(:disabled) {
+  color: var(--foreground);
+  background-color: var(--surface-hover);
+}
+
+.window-chrome [data-slot="button"][aria-pressed="true"],
+.window-chrome [data-slot="button"][data-state="open"] {
+  color: var(--primary);
+  background-color: var(--surface-selected);
+}
+
+.window-chrome [data-slot="button"]:active:not(:disabled) {
+  color: var(--foreground);
+  background-color: var(--accent);
+}
+
+.window-chrome [data-slot="button"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-chrome [data-slot="button"] {
+    transition: none;
+  }
+}
+
 /* Default border color — without this, bare `border` uses currentColor (light in dark mode) */
 *,
 ::before,

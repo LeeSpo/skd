@@ -6,6 +6,7 @@ import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { PanelToolbar, ToolbarDivider } from './ui/panel-chrome';
 import {
   FILE_BROWSER_CHROME_TEXT,
@@ -58,6 +59,7 @@ import {
   Scissors,
   FolderPlus,
   ChevronRight,
+  ChevronDown,
   X,
   FileEdit,
   ClipboardPaste,
@@ -68,6 +70,8 @@ import {
   ScrollText,
   Pencil,
   LocateFixed,
+  PanelLeft,
+  Search,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from './ui/context-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
@@ -236,6 +240,27 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const [queueExpanded, setQueueExpanded] = useState(false);
   const processTransferRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setSearchTerm('');
+    searchInputRef.current?.focus();
+  };
+  const [treeVisible, setTreeVisible] = useState(() => {
+    try {
+      return localStorage.getItem('skd-file-browser-tree-visible') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const toggleTree = () => {
+    const next = !treeVisible;
+    setTreeVisible(next);
+    try {
+      localStorage.setItem('skd-file-browser-tree-visible', String(next));
+    } catch {
+      // Keep the control usable when preference storage is unavailable.
+    }
+  };
   const [isLoading, setIsLoading] = useState(false);
   // Tracks which connectionId the current path/files state belongs to.
   // Updated synchronously (via ref) in the restore effect so the save effect
@@ -1682,6 +1707,16 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   return (
     <div className={`flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
       <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} gap-1 overflow-x-auto whitespace-nowrap scrollbar-none`}>
+          <Button
+            variant={treeVisible ? 'secondary' : 'ghost'}
+            size="toolbar"
+            aria-label={t('fileBrowser.toolbar.toggleDirectoryTree')}
+            aria-pressed={treeVisible}
+            title={t('fileBrowser.toolbar.toggleDirectoryTree')}
+            onClick={toggleTree}
+          >
+            <PanelLeft className="h-3.5 w-3.5" />
+          </Button>
           {/* Back */}
           <Button
             variant="ghost"
@@ -1796,25 +1831,62 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             <FolderPlus className="h-3.5 w-3.5" />
           </Button>
           {adapter.supportsUpload && (
-            <>
-              <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFiles')} onClick={handleUpload}>
-                <Upload className="h-3.5 w-3.5" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2" title={t('fileBrowser.toolbar.uploadFolder')} onClick={handleUploadFolder}>
-                <FolderUp className="h-3.5 w-3.5" />
-              </Button>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 shrink-0 gap-1 px-2">
+                  <Upload className="h-3.5 w-3.5" />
+                  {t('fileBrowser.toolbar.upload')}
+                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => { void handleUpload(); }}>
+                  <Upload className="mr-2 h-3.5 w-3.5" />
+                  {t('fileBrowser.toolbar.uploadFiles')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { void handleUploadFolder(); }}>
+                  <FolderUp className="mr-2 h-3.5 w-3.5" />
+                  {t('fileBrowser.toolbar.uploadFolder')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <ToolbarDivider />
 
-          <div className="w-32 min-w-[7rem] shrink-0 sm:w-40">
+          <div className="relative w-44 shrink-0 sm:w-52">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder={t('fileBrowser.searchFiles')}
+              ref={searchInputRef}
+              role="searchbox"
+              aria-label={t('fileBrowser.search.label')}
+              title={t('fileBrowser.search.scope')}
+              placeholder={t('fileBrowser.search.placeholder')}
+              autoComplete="off"
+              spellCheck={false}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-6 border-panel-border bg-background shadow-none placeholder:text-muted-foreground/60 transition-colors focus-visible:bg-background"
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  clearSearch();
+                }
+              }}
+              className="h-7 rounded-md border-transparent bg-muted/50 pl-7 pr-8 text-xs shadow-none placeholder:text-muted-foreground hover:bg-muted focus-visible:border-ring focus-visible:bg-background focus-visible:ring-1"
             />
+            {searchTerm && (
+              <Button
+                variant="ghost"
+                size="toolbar"
+                className="absolute right-0.5 top-1/2 size-6 -translate-y-1/2 rounded-sm text-muted-foreground"
+                aria-label={t('fileBrowser.search.clear')}
+                title={t('fileBrowser.search.clear')}
+                onClick={clearSearch}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
           </div>
 
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">{t('fileBrowser.items', { count: actualItemCount })}</span>
@@ -1833,8 +1905,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           autoSaveId="integrated-file-browser-split"
           className="h-full"
         >
-          {/* Directory tree sidebar */}
-          <ResizablePanel
+          {/* Unmount the sidebar when hidden so the file list receives all available space. */}
+          {treeVisible && <ResizablePanel
             id="ssh-dir-tree"
             order={1}
             defaultSize={22}
@@ -1855,12 +1927,12 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               onSaveState={handleSaveTreeState}
               onSaveScroll={handleSaveTreeScroll}
             />
-          </ResizablePanel>
+          </ResizablePanel>}
 
-          <ResizableHandle dividerTone="panel" />
+          {treeVisible && <ResizableHandle dividerTone="panel" />}
 
           {/* File list panel */}
-          <ResizablePanel id="ssh-file-list" order={2} defaultSize={78} minSize={40}>
+          <ResizablePanel id="ssh-file-list" order={2} defaultSize={treeVisible ? 78 : 100} minSize={40}>
             <div
               ref={dropZoneRef}
               className="relative flex h-full flex-col overflow-hidden bg-background transition-all"
@@ -1937,6 +2009,16 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                 )}
               </PanelToolbar>
 
+              {searchTerm && !isLoading && actualItemCount === 0 && (
+                <div role="status" className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                  <Search aria-hidden="true" className="h-6 w-6 text-muted-foreground" />
+                  <p className="text-sm font-medium">{t('fileBrowser.search.noResults')}</p>
+                  <p className="text-xs text-muted-foreground">{t('fileBrowser.search.scope')}</p>
+                  <Button variant="ghost" size="sm" onClick={clearSearch}>
+                    {t('fileBrowser.search.clear')}
+                  </Button>
+                </div>
+              )}
               <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]]:[scrollbar-gutter:stable]">
                 <ContextMenu>
                   <ContextMenuTrigger asChild>

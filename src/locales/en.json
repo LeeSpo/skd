@@ -474,6 +474,7 @@
     "toggleMonitorPanel": "Toggle Monitor Panel",
     "toggleZenMode": "Toggle Zen Mode",
     "closeTab": "Close Tab",
+    "closeTabNamed": "Close {{name}}",
     "window": "Window"
   },
   "composePane": {
@@ -578,6 +579,13 @@
     "disconnected": "Connection lost to {{name}}",
     "notConnected": "Not Connected",
     "searchFiles": "Search files...",
+    "search": {
+      "label": "Filter files in this folder",
+      "placeholder": "Filter this folder…",
+      "scope": "Matches names in this folder only, not subfolders or file contents.",
+      "clear": "Clear filter",
+      "noResults": "No matching files"
+    },
     "items": "{{count}} item(s)",
     "local": "Local",
     "remote": "Remote",
@@ -675,6 +683,7 @@
     "toolbar": {
       "back": "Back",
       "forward": "Forward",
+      "toggleDirectoryTree": "Toggle directory tree",
       "parentDir": "Parent directory",
       "home": "Home",
       "refresh": "Refresh",
@@ -986,6 +995,7 @@
     }
   },
   "statusBar": {
+    "pending": "Waiting to connect",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "connecting": "Connecting...",

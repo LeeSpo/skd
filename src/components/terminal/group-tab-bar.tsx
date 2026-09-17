@@ -332,7 +332,7 @@ export function GroupTabBar({
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`relative flex h-full flex-1 items-center overflow-x-auto transition-colors ${
+          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 transition-colors ${
             isDragOver ? 'bg-accent/40' : ''
           }`}
         >
@@ -346,40 +346,44 @@ export function GroupTabBar({
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    className={`group box-border flex h-full min-w-0 cursor-pointer select-none items-center gap-1.5 border-r border-t-2 border-panel-border px-2.5 outline-none focus:outline-none focus-visible:outline-none ${
+                    title={t(`statusBar.${tab.connectionStatus}`)}
+                    className={`group box-border flex h-7 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-2.5 ${
                       tab.id === activeTabId
-                        ? 'border-t-primary bg-surface-raised text-foreground'
-                        : 'border-t-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                        ? 'bg-surface-selected text-foreground'
+                        : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
                     onDragStart={handleNativeDragStart}
                     draggable={false}
                     onClick={() => handleTabSelect(tab.id)}
                   >
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-pressed={tab.id === activeTabId}
+                      className="flex min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                    >
                       {tab.tabType === 'file-browser' ? (
-                        <FolderSync className="h-3.5 w-3.5 shrink-0 text-warning" />
+                        <FolderSync className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       ) : tab.tabType === 'editor' ? (
-                        <FileCode className="h-3.5 w-3.5 shrink-0 text-success" />
+                        <FileCode className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       ) : (
                         <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       )}
-                      <StatusDot
-                        variant={
-                          tab.connectionStatus === 'connected'
-                            ? 'connected'
-                            : tab.connectionStatus === 'connecting'
-                              ? 'connecting'
-                              : 'disconnected'
-                        }
-                      />
-                      <span className="truncate text-sm leading-none">{getTabDisplayName(tab, tabs)}</span>
-                    </div>
+                      {tab.connectionStatus !== 'connected' && (
+                        <StatusDot
+                          variant={tab.connectionStatus}
+                          aria-label={t(`statusBar.${tab.connectionStatus}`)}
+                        />
+                      )}
+                      <span className="truncate text-[13px] leading-none">{getTabDisplayName(tab, tabs)}</span>
+                    </button>
 
                     <Button
                       variant="ghost"
                       size="toolbar"
-                      className="size-4 opacity-0 group-hover:opacity-100"
+                      className="size-5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                      aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleTabClose(tab.id);
