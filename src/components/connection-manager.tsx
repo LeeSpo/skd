@@ -47,7 +47,7 @@ import {
 } from './ui/context-menu';
 import { toast } from 'sonner';
 import { StatusDot } from './ui/status-dot';
-import { PanelHeader, PanelToolbar } from './ui/panel-chrome';
+import { PanelHeader } from './ui/panel-chrome';
 import { treeIndent, treeRowState } from '@/lib/panel-layout-styles';
 import { cn } from './ui/utils';
 
@@ -429,7 +429,7 @@ export function ConnectionManager({
       <div
         className={cn(
           treeRowState({ selected: isSelected, variant: 'sidebar' }),
-          'gap-2 px-2 py-1 cursor-pointer',
+          'min-h-8 gap-2 rounded-md px-2 py-1 cursor-pointer',
           isDragging && 'opacity-50',
         )}
         style={treeIndent(level)}
@@ -460,7 +460,7 @@ export function ConnectionManager({
             />
           )}
         </div>
-        <span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px]" title={node.name}>{node.name}</span>
       </div>
     );
 
@@ -571,19 +571,18 @@ export function ConnectionManager({
     <div className="flex h-full min-w-0 flex-col bg-sidebar">
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-        <PanelHeader tone="sidebar">
-          <h3 className="min-w-0 flex-1 truncate font-medium text-sm">
+        <PanelHeader tone="sidebar" className="h-11 shrink-0 gap-1 px-3">
+          <h3 className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
             {t('connectionManager.connectionsHeader')}
           </h3>
-        </PanelHeader>
-        <PanelToolbar className="border-b border-sidebar-border">
+
           <TooltipProvider>
             {/* Quick Connect */}
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="toolbar">
+                    <Button variant="ghost" size="toolbar" aria-label={t('toolbar.quickConnect')}>
                       <Zap className="w-3.5 h-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -626,6 +625,7 @@ export function ConnectionManager({
                 <Button
                   variant="ghost"
                   size="toolbar"
+                  aria-label={t('connectionManager.newFolder')}
                   onClick={() => openNewFolderDialog()}
                 >
                   <FolderPlus className="w-3.5 h-3.5" />
@@ -640,6 +640,7 @@ export function ConnectionManager({
                 <Button
                   variant="ghost"
                   size="toolbar"
+                  aria-label={t('connectionManager.newConnection')}
                   onClick={onNewConnection}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -665,8 +666,8 @@ export function ConnectionManager({
               </Tooltip>
             )}
           </TooltipProvider>
-        </PanelToolbar>
-        <div className="flex-1 min-w-0 overflow-auto">
+        </PanelHeader>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 py-2">
           {connections.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full p-4 text-center">
               <p className="text-sm text-muted-foreground mb-4">{t('connectionManager.noConnectionsYet')}</p>
@@ -684,13 +685,14 @@ export function ConnectionManager({
       </div>
 
       {/* Connection Details */}
-      <div className="border-t border-border">
-        <div className="p-3">
-          <h3 className="font-medium text-sm mb-3">{t('connectionManager.connectionDetails')}</h3>
+      {selectedConnection?.type === 'connection' && (
+      <details className="group/details max-h-[40%] shrink-0 overflow-auto border-t border-sidebar-border">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+          <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open/details:rotate-90 motion-reduce:transition-none" />
+          {t('connectionManager.connectionDetails')}
+        </summary>
+        <div className="sidebar-connection-details px-3 pb-3">
 
-          {!selectedConnection || selectedConnection.type === 'folder' ? (
-            <p className="text-sm text-muted-foreground">{t('connectionManager.noConnectionSelected')}</p>
-          ) : (
             <div className="space-y-3">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -763,9 +765,9 @@ export function ConnectionManager({
                 </div>
               </div>
             </div>
-          )}
         </div>
-      </div>
+      </details>
+      )}
     </div>
     
     {/* New Folder Dialog */}

@@ -436,6 +436,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Keep inspector values readable inside a narrow, resizable connection sidebar. */
+.sidebar-connection-details .justify-between {
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.sidebar-connection-details .justify-between > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 /* Window-bar pilot: opaque surfaces; deliberately scoped away from panel toolbars. */
 .window-chrome [data-slot="button"] {
   color: var(--muted-foreground);
