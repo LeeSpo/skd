@@ -9,8 +9,8 @@ afterEach(cleanup);
 
 // App-specific class contracts, not measured contrast or native HIG compliance.
 function expectSemanticFocus(control: HTMLElement) {
-  expect(control.classList.contains('focus-visible:ring-ring')).toBe(true);
-  expect(control.classList.contains('focus-visible:ring-[3px]')).toBe(true);
+  expect(control.classList.contains('focus-visible:ring-primary/40')).toBe(true);
+  expect(control.classList.contains('focus-visible:ring-[2px]')).toBe(true);
   expect(control.classList.contains('focus-visible:border-ring')).toBe(true);
   expect(control.className).not.toMatch(/ring-ring\/|ring-destructive/);
 }
@@ -52,7 +52,7 @@ describe('shared control focus and density', () => {
 
   it.each([
     ['default', 'h-9'], ['sm', 'h-8'], ['lg', 'h-10'],
-    ['icon', 'size-9'], ['toolbar', 'size-6'], ['menubar', 'size-7'],
+    ['icon', 'size-9'], ['toolbar', 'size-6'], ['menubar', 'size-[26px]'],
   ] as const)('preserves the %s button size rather than imposing one height', (size, density) => {
     render(<Button size={size}>Action</Button>);
     expect(screen.getByRole('button', { name: 'Action' }).classList.contains(density)).toBe(true);

@@ -328,28 +328,28 @@ export function GroupTabBar({
 
   return (
     <>
-      <div className="flex h-8 shrink-0 items-center border-b border-panel-border bg-panel-toolbar">
+      <div className="flex h-11 shrink-0 items-center border-b border-panel-border bg-sidebar px-1.5">
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 transition-colors ${
-            isDragOver ? 'bg-accent/40' : ''
+          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto transition-colors ${
+            isDragOver ? 'bg-surface-hover' : ''
           }`}
         >
           {tabs.map((tab, index) => (
             <React.Fragment key={tab.id}>
               {/* Insertion indicator line */}
               {dropIndex === index && (
-                <div className="w-0.5 h-4 bg-primary shrink-0" />
+                <div className="w-px h-4 bg-primary shrink-0" />
               )}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
                     title={t(`statusBar.${tab.connectionStatus}`)}
-                    className={`group box-border flex h-7 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-2.5 ${
+                    className={`group box-border flex h-8 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-transparent px-2.5 ${
                       tab.id === activeTabId
-                        ? 'bg-surface-selected text-foreground'
+                        ? 'border-panel-border bg-surface-content text-foreground shadow-sm'
                         : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
@@ -381,7 +381,7 @@ export function GroupTabBar({
                     <Button
                       variant="ghost"
                       size="toolbar"
-                      className="size-5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                      className="size-4 shrink-0 rounded-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                       aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
@@ -472,7 +472,7 @@ export function GroupTabBar({
           ))}
           {/* Insertion indicator at the end */}
           {dropIndex === tabs.length && (
-            <div className="w-0.5 h-4 bg-primary shrink-0" />
+            <div className="w-px h-4 bg-primary shrink-0" />
           )}
         </div>
 

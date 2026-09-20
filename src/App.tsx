@@ -1476,8 +1476,8 @@ function AppContent() {
   const isLocalTab = activeTab?.protocol === 'Local';
   const hideRightPanels = isFileBrowserTab || isEditorTab || isLocalTab;
   const hideBottomPanels = isFileBrowserTab || isEditorTab;
-  const showBottomPanelToggle = !hideBottomPanels;
-  const showRightPanelToggle = !hideRightPanels;
+  const showBottomPanelToggle = hasAnyTabs && !hideBottomPanels;
+  const showRightPanelToggle = hasAnyTabs && !hideRightPanels;
   const activeConnectionIds = useMemo(() => new Set(allTabs.map(tab => tab.id)), [allTabs]);
   const terminalCallbacks = useMemo(() => ({
     onDuplicateTab: handleDuplicateTab,
@@ -1514,6 +1514,7 @@ function AppContent() {
         <UpdateChecker checkSignal={updateCheckSignal} />
       </Suspense>
       <MenuBar
+        workspaceTitle={activeConnection?.name}
         onOpenSettings={handleOpenSettings}
         onOpenPortForward={handleOpenPortForward}
         portForwardEnabled={canManagePortForward}
@@ -1571,6 +1572,7 @@ function AppContent() {
               {showWelcomeInMainArea ? (
                 <WelcomeScreen
                   onNewConnection={handleNewTab}
+                  onNewLocalTerminal={handleNewLocalTab}
                   onOpenSettings={handleOpenSettings}
                 />
               ) : (

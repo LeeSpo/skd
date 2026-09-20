@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Monitor, Server, HardDrive, Plus, Pencil, Copy, Trash2, FolderPlus, FolderEdit, Zap, Clock, Terminal } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Monitor, Server, HardDrive, Plus, Pencil, Copy, Trash2, FolderPlus, FolderEdit, Zap, Clock, Terminal, Search, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
@@ -47,7 +47,7 @@ import {
 } from './ui/context-menu';
 import { toast } from 'sonner';
 import { StatusDot } from './ui/status-dot';
-import { PanelHeader, ToolbarDivider } from './ui/panel-chrome';
+import { PanelHeader } from './ui/panel-chrome';
 import { treeIndent, treeRowState } from '@/lib/panel-layout-styles';
 import { cn } from './ui/utils';
 
@@ -105,6 +105,21 @@ export function ConnectionManager({
   };
 
   const [connections, setConnections] = useState<ConnectionNode[]>(loadConnections());
+
+  const [search, setSearch] = useState('');
+  const filteredConnections = React.useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return connections;
+    const filter = (nodes: ConnectionNode[], parentMatches = false): ConnectionNode[] => nodes.flatMap(node => {
+      const matches = parentMatches || [node.name, node.host, node.username]
+        .some(value => value?.toLocaleLowerCase().includes(query));
+      if (node.type === 'connection') return matches ? [node] : [];
+      const children = filter(node.children ?? [], matches);
+      return matches || children.length > 0 ? [{ ...node, children, isExpanded: true }] : [];
+    });
+    return filter(connections);
+  }, [connections, search]);
+  const hasSavedConnections = connections.some(node => node.type === 'connection' || node.path !== 'All Connections' || (node.children?.length ?? 0) > 0);
 
   // Folder management state
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
@@ -432,10 +447,25 @@ export function ConnectionManager({
       <div
         className={cn(
           treeRowState({ selected: isSelected, variant: 'sidebar' }),
-          'h-7 gap-1.5 rounded-sm py-0 pr-2 cursor-pointer',
+          'min-h-8 gap-1.5 py-1 pr-2 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
           isDragging && 'opacity-50',
         )}
         style={treeIndent(level, 4, 12)}
+        role={node.type === 'connection' ? 'button' : undefined}
+        tabIndex={node.type === 'connection' ? 0 : undefined}
+        aria-pressed={node.type === 'connection' ? isSelected : undefined}
+        aria-label={node.type === 'connection' ? node.name : undefined}
+        title={node.type === 'connection' ? [node.username, node.host].filter(Boolean).join('@') : undefined}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing || event.keyCode === 229 || event.target !== event.currentTarget || node.type !== 'connection') return;
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            handleNodeDoubleClick();
+          } else if (event.key === ' ') {
+            event.preventDefault();
+            handleNodeClick();
+          }
+        }}
         onClick={handleNodeClick}
         onDoubleClick={handleNodeDoubleClick}
         draggable={node.path !== 'All Connections'}
@@ -584,8 +614,8 @@ export function ConnectionManager({
     <div className="flex h-full min-w-0 flex-col bg-sidebar">
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col select-none">
-        <PanelHeader tone="sidebar" className="h-9 shrink-0 gap-0.5 px-2">
-          <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-muted-foreground">
+        <PanelHeader tone="sidebar" className="h-11 shrink-0 gap-1 border-b-0 px-3">
+          <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-sidebar-foreground">
             {t('connectionManager.connectionsHeader')}
           </h3>
 
@@ -632,23 +662,6 @@ export function ConnectionManager({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <ToolbarDivider className="mx-1 h-4" />
-
-            {/* New Folder */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="toolbar"
-                  aria-label={t('connectionManager.newFolder')}
-                  onClick={() => openNewFolderDialog()}
-                >
-                  <FolderPlus className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('connectionManager.newFolder')}</TooltipContent>
-            </Tooltip>
-
             {/* New Connection */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -664,28 +677,63 @@ export function ConnectionManager({
               <TooltipContent>{t('connectionManager.newConnection')}</TooltipContent>
             </Tooltip>
 
-            {/* Local Terminal */}
-            {onNewLocalTerminal && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="toolbar"
-                    onClick={onNewLocalTerminal}
-                    aria-label={t('connectionManager.newLocalTerminal')}
-                  >
-                    <Terminal className="w-3.5 h-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('connectionManager.newLocalTerminal')}</TooltipContent>
-              </Tooltip>
-            )}
           </TooltipProvider>
         </PanelHeader>
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-1.5 py-1">
-          {connections.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full p-4 text-center">
-              <p className="text-sm text-muted-foreground mb-4">{t('connectionManager.noConnectionsYet')}</p>
+        <div className="space-y-2 px-3 pb-3 pt-2">
+          <div className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-muted-foreground" />
+            <Input
+              aria-label={t('connectionManager.searchConnections')}
+              placeholder={t('connectionManager.searchConnections')}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
+                  setSearch('');
+                }
+              }}
+              className="h-8 pl-8 pr-7 text-xs"
+            />
+            {search && (
+              <Button variant="ghost" size="toolbar" className="absolute right-1 top-1 size-6" aria-label={t('common.clear')} onClick={() => setSearch('')}>
+                <X className="size-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {onNewLocalTerminal && (
+              <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start gap-2 px-2 text-xs text-muted-foreground" onClick={onNewLocalTerminal} aria-label={t('connectionManager.newLocalTerminal')}>
+                <Terminal className="size-3.5" />
+                <span className="truncate">{t('connectionManager.localTerminal')}</span>
+              </Button>
+            )}
+            <TooltipProvider>
+            {/* New Folder */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="toolbar"
+                  aria-label={t('connectionManager.newFolder')}
+                  onClick={() => openNewFolderDialog()}
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('connectionManager.newFolder')}</TooltipContent>
+            </Tooltip>
+
+            </TooltipProvider>
+          </div>
+        </div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 py-1">
+          {!hasSavedConnections && !search ? (
+            <div className="flex flex-col items-center justify-center px-3 py-8 text-center">
+              <Server className="mb-3 size-6 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
+              <p className="text-[13px] font-medium">{t('connectionManager.noConnectionsYet')}</p>
+              <p className="mb-4 mt-2 text-xs leading-relaxed text-muted-foreground">{t('connectionManager.emptyDescription')}</p>
               {onNewConnection && (
                 <Button onClick={onNewConnection} size="sm" variant="outline">
                   <Plus className="w-4 h-4 mr-2" />
@@ -694,7 +742,12 @@ export function ConnectionManager({
               )}
             </div>
           ) : (
-            connections.map(connection => renderNode(connection))
+            filteredConnections.length > 0 ? filteredConnections.map(connection => renderNode(connection)) : (
+              <div role="status" className="px-3 py-8 text-center">
+                <p className="text-[13px] font-medium">{t('connectionManager.noSearchResults')}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{t('connectionManager.searchHint')}</p>
+              </div>
+            )
           )}
         </div>
       </div>
@@ -702,7 +755,7 @@ export function ConnectionManager({
       {/* Connection Details */}
       {selectedConnection?.type === 'connection' && (
       <details className="group/details max-h-[40%] shrink-0 overflow-auto border-t border-sidebar-border">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-2 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
           <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open/details:rotate-90 motion-reduce:transition-none" />
           {t('connectionManager.connectionDetails')}
         </summary>

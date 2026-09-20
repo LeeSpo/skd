@@ -6,16 +6,16 @@ const css = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf8
 
 const expectedCore = {
   graphite: {
-    background: '#11141a',
-    card: '#171b23',
-    popover: '#1d232d',
-    'input-background': '#13171e',
-    'surface-hover': '#222a35',
-    'surface-selected': '#243652',
-    border: '#2b3442',
-    foreground: '#e7ecf4',
-    'muted-foreground': '#98a2b2',
-    primary: '#5b8ff9',
+    background: '#181818',
+    card: '#212121',
+    popover: '#282828',
+    'input-background': '#1c1c1c',
+    'surface-hover': '#2a2a2a',
+    'surface-selected': '#343434',
+    border: '#353535',
+    foreground: '#e6e6e6',
+    'muted-foreground': '#ababab',
+    primary: '#8ab4f8',
   },
   midnight: {
     background: '#10151e',
@@ -80,6 +80,7 @@ const requiredVariables = [
   'surface-raised',
   'surface-selected',
   'surface-hover',
+  'surface-content',
   'workspace-bg',
   'statusbar-bg',
   'terminal-bg',
@@ -137,6 +138,16 @@ describe('dark workspace palette contract', () => {
     const variables = paletteVariables('graphite');
     expect(contrastRatio(variables['muted-foreground'], variables['surface-selected']))
       .toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('Graphite separates content, chrome and floating surfaces with a visible keyboard focus', () => {
+    const variables = paletteVariables('graphite');
+    expect(luminance(variables.background)).toBeLessThan(luminance(variables.card));
+    expect(luminance(variables.card)).toBeLessThan(luminance(variables.popover));
+    expect(variables['surface-content']).toBe(variables.background);
+    for (const surface of ['background', 'card', 'popover', 'surface-selected']) {
+      expect(contrastRatio(variables.ring, variables[surface])).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it('Midnight keeps supporting text readable on elevated and selected surfaces', () => {

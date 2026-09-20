@@ -47,6 +47,7 @@ import {
   COLOR_PALETTES,
   DEFAULT_COLOR_PALETTE,
   getSavedColorPalette,
+  getSavedTheme,
   normalizeColorPalette,
   PALETTE_TERMINAL_THEMES,
   type ColorPalette,
@@ -97,7 +98,7 @@ interface AppSettings {
 }
 
 const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> = {
-  graphite: ['#11141A', '#1D232D', '#5B8FF9'],
+  graphite: ['#181818', '#212121', '#8AB4F8'],
   midnight: ['#07101F', '#14223A', '#6B9BFA'],
   nordic: ['#20262F', '#303947', '#88C0D0'],
   cupertino: ['#F5F5F7', '#1C1C1E', '#0A84FF'],
@@ -108,6 +109,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearanceSettings>(defaultAppearanceSettings);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
   const originalPaletteRef = useRef<ColorPalette>(getSavedColorPalette());
+  const originalThemeRef = useRef<ThemeMode>(getSavedTheme());
   
   const [settings, setSettings] = useState<AppSettings>({
     // Terminal settings
@@ -150,6 +152,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   // Load settings when modal opens
   useEffect(() => {
     if (open) {
+      originalThemeRef.current = getSavedTheme();
       originalPaletteRef.current = normalizeColorPalette(
         document.documentElement.dataset.colorPalette,
       );
@@ -201,7 +204,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   };
 
   const handleCancel = () => {
-    applyColorPalette(originalPaletteRef.current);
+    applyTheme(originalThemeRef.current, originalPaletteRef.current);
     onOpenChange(false);
   };
 
@@ -291,7 +294,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     { value: 'advanced', icon: Monitor, labelKey: 'settings.tab.advanced' },
   ] as const;
 
-  const tabContentClassName = 'flex-1 min-w-0 min-h-0 px-5 py-5 space-y-4 mt-0 overflow-y-auto [&>[data-slot=card]]:border-0 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:shadow-none [&>[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-title]]:text-sm';
+  const tabContentClassName = 'flex-1 min-w-0 min-h-0 px-5 py-5 space-y-4 mt-0 overflow-y-auto [&>[data-slot=card]]:border-0 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:shadow-none [&>[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-header]]:pt-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-content]]:pb-0 [&_[data-slot=card-title]]:text-sm';
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -347,12 +350,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.fontFamily')}</Label>
+                    <Label htmlFor="settings-terminal-fontFamily">{t('settings.terminal.fontFamily')}</Label>
                     <Select 
                       value={terminalAppearance.fontFamily} 
                       onValueChange={(value) => updateTerminalAppearance('fontFamily', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-terminal-fontFamily">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -389,8 +392,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.fontSize', { size: terminalAppearance.fontSize })}</Label>
-                    <Slider
+                    <Label id="settings-terminal-fontSize-label">{t('settings.terminal.fontSize', { size: terminalAppearance.fontSize })}</Label>
+                    <Slider aria-labelledby="settings-terminal-fontSize-label"
                       value={[terminalAppearance.fontSize]}
                       onValueChange={([value]) => updateTerminalAppearance('fontSize', value)}
                       min={8}
@@ -402,8 +405,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.lineHeight', { height: terminalAppearance.lineHeight })}</Label>
-                    <Slider
+                    <Label id="settings-terminal-lineHeight-label">{t('settings.terminal.lineHeight', { height: terminalAppearance.lineHeight })}</Label>
+                    <Slider aria-labelledby="settings-terminal-lineHeight-label"
                       value={[terminalAppearance.lineHeight]}
                       onValueChange={([value]) => updateTerminalAppearance('lineHeight', value)}
                       min={1.0}
@@ -412,8 +415,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.letterSpacing', { spacing: terminalAppearance.letterSpacing })}</Label>
-                    <Slider
+                    <Label id="settings-terminal-letterSpacing-label">{t('settings.terminal.letterSpacing', { spacing: terminalAppearance.letterSpacing })}</Label>
+                    <Slider aria-labelledby="settings-terminal-letterSpacing-label"
                       value={[terminalAppearance.letterSpacing]}
                       onValueChange={([value]) => updateTerminalAppearance('letterSpacing', value)}
                       min={-2}
@@ -425,12 +428,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.colorTheme')}</Label>
+                    <Label htmlFor="settings-terminal-colorTheme">{t('settings.terminal.colorTheme')}</Label>
                     <Select 
                       value={terminalAppearance.theme} 
                       onValueChange={(value) => updateTerminalAppearance('theme', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-terminal-colorTheme">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -448,12 +451,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.cursorStyle')}</Label>
+                    <Label htmlFor="settings-terminal-cursorStyle">{t('settings.terminal.cursorStyle')}</Label>
                     <Select 
                       value={terminalAppearance.cursorStyle} 
                       onValueChange={(value: 'block' | 'underline' | 'bar') => updateTerminalAppearance('cursorStyle', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-terminal-cursorStyle">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -466,8 +469,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('settings.terminal.scrollbackLines', { count: terminalAppearance.scrollback.toLocaleString() })}</Label>
-                  <Slider
+                  <Label id="settings-terminal-scrollbackLines-label">{t('settings.terminal.scrollbackLines', { count: terminalAppearance.scrollback.toLocaleString() })}</Label>
+                  <Slider aria-labelledby="settings-terminal-scrollbackLines-label"
                     value={[terminalAppearance.scrollback]}
                     onValueChange={([value]) => updateTerminalAppearance('scrollback', value)}
                     min={MIN_TERMINAL_SCROLLBACK}
@@ -480,12 +483,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                   <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.terminal.cursorBlink')}</Label>
+                    <Label htmlFor="settings-terminal-cursorBlink">{t('settings.terminal.cursorBlink')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.terminal.cursorBlinkDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-terminal-cursorBlink"
                     checked={terminalAppearance.cursorBlink}
                     onCheckedChange={(checked) => updateTerminalAppearance('cursorBlink', checked)}
                   />
@@ -493,12 +496,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.terminal.useWebglRenderer')}</Label>
+                    <Label htmlFor="settings-terminal-useWebglRenderer">{t('settings.terminal.useWebglRenderer')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.terminal.useWebglRendererDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-terminal-useWebglRenderer"
                     checked={terminalAppearance.useWebglRenderer}
                     onCheckedChange={(checked) => updateTerminalAppearance('useWebglRenderer', checked)}
                   />
@@ -506,12 +509,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.terminal.allowTransparency')}</Label>
+                    <Label htmlFor="settings-terminal-allowTransparency">{t('settings.terminal.allowTransparency')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.terminal.allowTransparencyDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-terminal-allowTransparency"
                     checked={terminalAppearance.allowTransparency}
                     onCheckedChange={(checked) => updateTerminalAppearance('allowTransparency', checked)}
                   />
@@ -519,8 +522,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 {terminalAppearance.allowTransparency && (
                   <div className="space-y-2">
-                    <Label>{t('settings.terminal.opacity', { opacity: terminalAppearance.opacity })}</Label>
-                    <Slider
+                    <Label id="settings-terminal-opacity-label">{t('settings.terminal.opacity', { opacity: terminalAppearance.opacity })}</Label>
+                    <Slider aria-labelledby="settings-terminal-opacity-label"
                       value={[terminalAppearance.opacity]}
                       onValueChange={([value]) => updateTerminalAppearance('opacity', value)}
                       min={10}
@@ -600,8 +603,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       </div>
 
                       <div className="space-y-2">
-                        <Label>{t('settings.terminal.imageOpacity', { opacity: terminalAppearance.backgroundImageOpacity })}</Label>
-                        <Slider
+                        <Label id="settings-terminal-imageOpacity-label">{t('settings.terminal.imageOpacity', { opacity: terminalAppearance.backgroundImageOpacity })}</Label>
+                        <Slider aria-labelledby="settings-terminal-imageOpacity-label"
                           value={[terminalAppearance.backgroundImageOpacity]}
                           onValueChange={([value]) => updateTerminalAppearance('backgroundImageOpacity', value)}
                           min={5}
@@ -611,8 +614,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       </div>
 
                       <div className="space-y-2">
-                        <Label>{t('settings.terminal.imageBlur', { blur: terminalAppearance.backgroundImageBlur })}</Label>
-                        <Slider
+                        <Label id="settings-terminal-imageBlur-label">{t('settings.terminal.imageBlur', { blur: terminalAppearance.backgroundImageBlur })}</Label>
+                        <Slider aria-labelledby="settings-terminal-imageBlur-label"
                           value={[terminalAppearance.backgroundImageBlur]}
                           onValueChange={([value]) => updateTerminalAppearance('backgroundImageBlur', value)}
                           min={0}
@@ -622,12 +625,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       </div>
 
                       <div className="space-y-2">
-                        <Label>{t('settings.terminal.imagePosition')}</Label>
+                        <Label htmlFor="settings-terminal-imagePosition">{t('settings.terminal.imagePosition')}</Label>
                         <Select 
                           value={terminalAppearance.backgroundImagePosition} 
                           onValueChange={(value: 'cover' | 'contain' | 'center' | 'tile') => updateTerminalAppearance('backgroundImagePosition', value)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger id="settings-terminal-imagePosition">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -698,12 +701,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 {/* Theme & Font */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.editor.theme')}</Label>
+                    <Label htmlFor="settings-editor-theme">{t('settings.editor.theme')}</Label>
                     <Select
                       value={editorConfig.theme}
                       onValueChange={(value) => setEditorConfig(prev => ({ ...prev, theme: value }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-editor-theme">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -714,12 +717,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.editor.fontFamily')}</Label>
+                    <Label htmlFor="settings-editor-fontFamily">{t('settings.editor.fontFamily')}</Label>
                     <Select
                       value={editorConfig.fontFamily}
                       onValueChange={(value) => setEditorConfig(prev => ({ ...prev, fontFamily: value }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-editor-fontFamily">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -737,8 +740,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.editor.fontSize', { size: editorConfig.fontSize })}</Label>
-                    <Slider
+                    <Label id="settings-editor-fontSize-label">{t('settings.editor.fontSize', { size: editorConfig.fontSize })}</Label>
+                    <Slider aria-labelledby="settings-editor-fontSize-label"
                       value={[editorConfig.fontSize]}
                       onValueChange={([value]) => setEditorConfig(prev => ({ ...prev, fontSize: value }))}
                       min={10}
@@ -747,12 +750,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.editor.tabSize', { size: editorConfig.tabSize })}</Label>
+                    <Label htmlFor="settings-editor-tabSize">{t('settings.editor.tabSize', { size: editorConfig.tabSize })}</Label>
                     <Select
                       value={String(editorConfig.tabSize)}
                       onValueChange={(value) => setEditorConfig(prev => ({ ...prev, tabSize: Number(value) }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-editor-tabSize">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -769,10 +772,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 {/* Toggle options */}
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.editor.lineNumbers')}</Label>
+                    <Label htmlFor="settings-editor-lineNumbers">{t('settings.editor.lineNumbers')}</Label>
                     <p className="text-sm text-muted-foreground">{t('settings.editor.lineNumbersDesc')}</p>
                   </div>
-                  <Switch
+                  <Switch id="settings-editor-lineNumbers"
                     checked={editorConfig.lineNumbers}
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, lineNumbers: checked }))}
                   />
@@ -780,10 +783,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.editor.wordWrap')}</Label>
+                    <Label htmlFor="settings-editor-wordWrap">{t('settings.editor.wordWrap')}</Label>
                     <p className="text-sm text-muted-foreground">{t('settings.editor.wordWrapDesc')}</p>
                   </div>
-                  <Switch
+                  <Switch id="settings-editor-wordWrap"
                     checked={editorConfig.wordWrap}
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, wordWrap: checked }))}
                   />
@@ -791,10 +794,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.editor.highlightActiveLine')}</Label>
+                    <Label htmlFor="settings-editor-highlightActiveLine">{t('settings.editor.highlightActiveLine')}</Label>
                     <p className="text-sm text-muted-foreground">{t('settings.editor.highlightActiveLineDesc')}</p>
                   </div>
-                  <Switch
+                  <Switch id="settings-editor-highlightActiveLine"
                     checked={editorConfig.highlightActiveLine}
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, highlightActiveLine: checked }))}
                   />
@@ -802,10 +805,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.editor.foldGutter')}</Label>
+                    <Label htmlFor="settings-editor-foldGutter">{t('settings.editor.foldGutter')}</Label>
                     <p className="text-sm text-muted-foreground">{t('settings.editor.foldGutterDesc')}</p>
                   </div>
-                  <Switch
+                  <Switch id="settings-editor-foldGutter"
                     checked={editorConfig.foldGutter}
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, foldGutter: checked }))}
                   />
@@ -813,10 +816,10 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.editor.bracketMatching')}</Label>
+                    <Label htmlFor="settings-editor-bracketMatching">{t('settings.editor.bracketMatching')}</Label>
                     <p className="text-sm text-muted-foreground">{t('settings.editor.bracketMatchingDesc')}</p>
                   </div>
-                  <Switch
+                  <Switch id="settings-editor-bracketMatching"
                     checked={editorConfig.bracketMatching}
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, bracketMatching: checked }))}
                   />
@@ -839,9 +842,9 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.connection.defaultProtocol')}</Label>
+                    <Label htmlFor="settings-connection-defaultProtocol">{t('settings.connection.defaultProtocol')}</Label>
                     <Select value={settings.defaultProtocol} onValueChange={(value) => updateSetting('defaultProtocol', value)}>
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-connection-defaultProtocol">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -850,8 +853,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.connection.connectionTimeout', { timeout: settings.connectionTimeout })}</Label>
-                    <Slider
+                    <Label id="settings-connection-connectionTimeout-label">{t('settings.connection.connectionTimeout', { timeout: settings.connectionTimeout })}</Label>
+                    <Slider aria-labelledby="settings-connection-connectionTimeout-label"
                       value={[settings.connectionTimeout]}
                       onValueChange={([value]) => updateSetting('connectionTimeout', value)}
                       min={5}
@@ -862,8 +865,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('settings.connection.keepAliveInterval', { interval: settings.keepAliveInterval })}</Label>
-                  <Slider
+                  <Label id="settings-connection-keepAliveInterval-label">{t('settings.connection.keepAliveInterval', { interval: settings.keepAliveInterval })}</Label>
+                  <Slider aria-labelledby="settings-connection-keepAliveInterval-label"
                     value={[settings.keepAliveInterval]}
                     onValueChange={([value]) => updateSetting('keepAliveInterval', value)}
                     min={30}
@@ -874,12 +877,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.connection.autoReconnect')}</Label>
+                    <Label htmlFor="settings-connection-autoReconnect">{t('settings.connection.autoReconnect')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.connection.autoReconnectDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-connection-autoReconnect"
                     checked={settings.autoReconnect}
                     onCheckedChange={(checked) => updateSetting('autoReconnect', checked)}
                   />
@@ -902,12 +905,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.security.hostKeyVerification')}</Label>
+                    <Label htmlFor="settings-security-hostKeyVerification">{t('settings.security.hostKeyVerification')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.security.hostKeyVerificationDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-security-hostKeyVerification"
                     checked={settings.hostKeyVerification}
                     onCheckedChange={(checked) => updateSetting('hostKeyVerification', checked)}
                   />
@@ -916,8 +919,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
 
                 <div className="space-y-2">
-                  <Label>{t('settings.security.autoLockTimeout', { timeout: settings.autoLockTimeout })}</Label>
-                  <Slider
+                  <Label id="settings-security-autoLockTimeout-label">{t('settings.security.autoLockTimeout', { timeout: settings.autoLockTimeout })}</Label>
+                  <Slider aria-labelledby="settings-security-autoLockTimeout-label"
                     value={[settings.autoLockTimeout]}
                     onValueChange={([value]) => updateSetting('autoLockTimeout', value)}
                     min={5}
@@ -945,7 +948,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>{t('settings.interface.appTheme')}</Label>
+                  <Label htmlFor="settings-interface-appTheme">{t('settings.interface.appTheme')}</Label>
                   <Select 
                     value={settings.theme} 
                     onValueChange={(value) => {
@@ -954,7 +957,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       applyTheme(value as ThemeMode, settings.colorPalette);
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="settings-interface-appTheme">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -972,7 +975,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       {t('settings.interface.colorPaletteDesc')}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {COLOR_PALETTES.map((palette) => {
                       const selected = settings.colorPalette === palette;
                       return (
@@ -982,7 +985,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                           aria-pressed={selected}
                           onClick={() => handlePaletteChange(palette)}
                           className={cn(
-                            'rounded-lg border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
+                            'rounded-md border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
                             selected
                               ? 'border-primary bg-surface-selected ring-1 ring-primary/50'
                               : 'border-border',
@@ -1015,24 +1018,24 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   <Label>{t('settings.interface.panelVisibility')}</Label>
                   
                   <div className="flex items-center justify-between">
-                    <span>{t('settings.interface.connectionManager')}</span>
-                    <Switch
+                    <Label htmlFor="settings-interface-connectionManager">{t('settings.interface.connectionManager')}</Label>
+                    <Switch id="settings-interface-connectionManager"
                       checked={settings.showConnectionManager}
                       onCheckedChange={(checked) => updateSetting('showConnectionManager', checked)}
                     />
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span>{t('settings.interface.systemMonitor')}</span>
-                    <Switch
+                    <Label htmlFor="settings-interface-systemMonitor">{t('settings.interface.systemMonitor')}</Label>
+                    <Switch id="settings-interface-systemMonitor"
                       checked={settings.showSystemMonitor}
                       onCheckedChange={(checked) => updateSetting('showSystemMonitor', checked)}
                     />
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span>{t('settings.interface.statusBar')}</span>
-                    <Switch
+                    <Label htmlFor="settings-interface-statusBar">{t('settings.interface.statusBar')}</Label>
+                    <Switch id="settings-interface-statusBar"
                       checked={settings.showStatusBar}
                       onCheckedChange={(checked) => updateSetting('showStatusBar', checked)}
                     />
@@ -1043,12 +1046,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.interface.enableNotifications')}</Label>
+                    <Label htmlFor="settings-interface-enableNotifications">{t('settings.interface.enableNotifications')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.interface.enableNotificationsDesc')}
                     </p>
                   </div>
-                  <Switch
+                  <Switch id="settings-interface-enableNotifications"
                     checked={settings.enableNotifications}
                     onCheckedChange={(checked) => updateSetting('enableNotifications', checked)}
                   />
@@ -1130,9 +1133,9 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.advanced.logLevel')}</Label>
+                    <Label htmlFor="settings-advanced-logLevel">{t('settings.advanced.logLevel')}</Label>
                     <Select value={settings.logLevel} onValueChange={(value) => updateSetting('logLevel', value)}>
-                      <SelectTrigger>
+                      <SelectTrigger id="settings-advanced-logLevel">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1144,8 +1147,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('settings.advanced.maxLogSize', { size: settings.maxLogSize })}</Label>
-                    <Slider
+                    <Label id="settings-advanced-maxLogSize-label">{t('settings.advanced.maxLogSize', { size: settings.maxLogSize })}</Label>
+                    <Slider aria-labelledby="settings-advanced-maxLogSize-label"
                       value={[settings.maxLogSize]}
                       onValueChange={([value]) => updateSetting('maxLogSize', value)}
                       min={10}
@@ -1159,7 +1162,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>{t('settings.advanced.checkUpdates')}</Label>
+                    <Label htmlFor="settings-advanced-checkUpdates">{t('settings.advanced.checkUpdates')}</Label>
                     <p className="text-sm text-muted-foreground">
                       {t('settings.advanced.checkUpdatesDesc')}
                     </p>
@@ -1178,7 +1181,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       <RefreshCw className="h-3.5 w-3.5" />
                       {t('settings.advanced.checkNow')}
                     </Button>
-                    <Switch
+                    <Switch id="settings-advanced-checkUpdates"
                       checked={settings.checkUpdates}
                       onCheckedChange={(checked) => updateSetting('checkUpdates', checked)}
                     />

@@ -35,7 +35,8 @@
     "left": "Left",
     "right": "Right",
     "up": "Up",
-    "down": "Down"
+    "down": "Down",
+    "clear": "Clear"
   },
   "app": {
     "title": "skd",
@@ -385,7 +386,7 @@
     "palette": {
       "graphite": {
         "name": "Graphite",
-        "description": "Neutral charcoal with crisp blue accents"
+        "description": "Cursor-inspired neutrals with a soft blue accent"
       },
       "midnight": {
         "name": "Midnight",
@@ -420,14 +421,17 @@
   },
   "welcome": {
     "getStarted": "Get Started",
-    "getStartedDesc": "Create a new session or manage your saved connections",
-    "newConnection": "New Connection",
-    "newConnectionDesc": "Connect via SSH, SFTP, FTP, or FTPS",
+    "getStartedDesc": "Remote servers and your local shell. One quiet place to get things done.",
+    "newConnection": "Connect to a server",
+    "newConnectionDesc": "Start a secure SSH or SFTP session",
     "connectionManager": "Connection Manager",
     "connectionManagerDesc": "Browse & organize saved connections",
     "preferences": "Preferences",
     "preferencesDesc": "Terminal themes, fonts & layout",
-    "orPickFromSidebar": "or pick a saved server from the left sidebar"
+    "orPickFromSidebar": "Saved connections are always within reach in the sidebar.",
+    "title": "Your workspace, connected.",
+    "localTerminal": "Open a local terminal",
+    "localTerminalDesc": "Work with the shell on this Mac"
   },
   "menuBar": {
     "file": "File",
@@ -479,7 +483,8 @@
     "toggleZenMode": "Toggle Zen Mode",
     "closeTab": "Close Tab",
     "closeTabNamed": "Close {{name}}",
-    "window": "Window"
+    "window": "Window",
+    "workspace": "Workspace"
   },
   "composePane": {
     "send": "Send",
@@ -694,6 +699,7 @@
       "home": "Home",
       "refresh": "Refresh",
       "editPath": "Edit path",
+      "editPathHint": "Press Enter or Space to edit the path.",
       "newFolder": "New Folder",
       "newFile": "New File",
       "upload": "Upload",
@@ -897,7 +903,12 @@
     "unableToMoveFolder": "Unable to move folder to new location.",
     "noConnectionsYet": "No connections yet",
     "connectionDetails": "Connection Details",
-    "noConnectionSelected": "No connection selected"
+    "noConnectionSelected": "No connection selected",
+    "searchConnections": "Search connections",
+    "noSearchResults": "No matching connections",
+    "searchHint": "Try a name, host, or username.",
+    "localTerminal": "Local terminal",
+    "emptyDescription": "Add a server to keep your connections in one place."
   },
   "filePanel": {
     "selectDirectory": "Select a directory to view its contents",
@@ -1010,8 +1021,7 @@
     "transferSpeed": "{{speed}}/s",
     "uptime": "Uptime: {{time}}",
     "cpu": "CPU: {{percent}}%",
-    "memory": "Memory: {{used}}/{{total}}",
-    "ready": "Ready"
+    "memory": "Memory: {{used}}/{{total}}"
   },
   "transferQueue": {
     "title": "Transfer Queue",

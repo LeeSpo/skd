@@ -46,15 +46,15 @@ describe('PanelChrome', () => {
     expect(screen.getByTestId('toolbar').getAttribute('data-slot')).toBe('panel-toolbar');
   });
 
-  it('uses fixed h-8 chrome height for default density', () => {
+  it('uses fixed 35px chrome height for default density', () => {
     render(
       <div>
         <PanelHeader data-testid="header">Header</PanelHeader>
         <PanelToolbar data-testid="toolbar">Toolbar</PanelToolbar>
       </div>,
     );
-    expect(screen.getByTestId('header').className).toContain('h-8');
-    expect(screen.getByTestId('toolbar').className).toContain('h-8');
+    expect(screen.getByTestId('header').className).toContain('h-[35px]');
+    expect(screen.getByTestId('toolbar').className).toContain('h-[35px]');
   });
 });
 

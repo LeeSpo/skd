@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 interface MenuBarProps {
+  workspaceTitle?: string;
   onOpenSettings?: () => void;
   onOpenPortForward?: () => void;
   portForwardEnabled?: boolean;
@@ -42,6 +43,7 @@ interface MenuBarProps {
 }
 
 export function MenuBar({
+  workspaceTitle,
   onOpenSettings,
   onOpenPortForward,
   portForwardEnabled = false,
@@ -62,19 +64,12 @@ export function MenuBar({
 
   return (
     <div
-      className="window-chrome flex h-10 shrink-0 items-center border-b border-panel-border bg-sidebar"
+      className="window-chrome relative flex h-11 shrink-0 items-center gap-3 border-b border-panel-border bg-sidebar"
       // macOS traffic-light inset — keeps native window controls unobstructed
       style={{ paddingLeft: '80px' }}
     >
-      <div
-        className="h-full min-h-0 min-w-0 flex-1 cursor-default"
-        data-tauri-drag-region
-      />
-
-      <div className="flex shrink-0 items-center gap-3 pr-3">
-        <TooltipProvider>
-          <div className="flex items-center gap-1">
-
+      <TooltipProvider>
+        <div className="flex shrink-0 items-center pl-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -85,12 +80,23 @@ export function MenuBar({
                 onClick={onToggleLeftSidebar}
               >
                 {leftSidebarVisible
-                  ? <PanelLeftClose className="w-4 h-4" />
-                  : <PanelLeftOpen className="w-4 h-4" />}
+                  ? <PanelLeftClose className="size-[18px]" />
+                  : <PanelLeftOpen className="size-[18px]" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t('menuBar.toggleConnectionManager')}</TooltipContent>
           </Tooltip>
+
+        </div>
+        <div className="flex h-full min-w-0 flex-1 items-center gap-2 cursor-default" data-tauri-drag-region>
+          <span className="pointer-events-none text-[13px] font-semibold">{t('app.title')}</span>
+          <span className="pointer-events-none text-muted-foreground/50" aria-hidden="true">/</span>
+          <span className="pointer-events-none truncate text-[12px] text-muted-foreground">
+            {workspaceTitle || t('menuBar.workspace')}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 pr-3">
+          <div className="flex items-center gap-1">
 
           {showBottomPanelToggle && (
             <Tooltip>
@@ -103,8 +109,8 @@ export function MenuBar({
                   onClick={onToggleBottomPanel}
                 >
                   {bottomPanelVisible
-                    ? <PanelBottomClose className="w-4 h-4" />
-                    : <PanelBottomOpen className="w-4 h-4" />}
+                    ? <PanelBottomClose className="size-[18px]" />
+                    : <PanelBottomOpen className="size-[18px]" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{t('menuBar.toggleBottomPanel')}</TooltipContent>
@@ -122,8 +128,8 @@ export function MenuBar({
                   onClick={onToggleRightSidebar}
                 >
                   {rightSidebarVisible
-                    ? <PanelRightClose className="w-4 h-4" />
-                    : <PanelRightOpen className="w-4 h-4" />}
+                    ? <PanelRightClose className="size-[18px]" />
+                    : <PanelRightOpen className="size-[18px]" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{t('menuBar.toggleMonitorPanel')}</TooltipContent>
@@ -142,7 +148,7 @@ export function MenuBar({
                 aria-pressed={!!zenMode}
                 onClick={onToggleZenMode}
               >
-                <Maximize2 className="w-4 h-4" />
+                <Maximize2 className="size-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t('menuBar.toggleZenMode')}</TooltipContent>
@@ -153,7 +159,7 @@ export function MenuBar({
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="menubar" aria-label={t('menuBar.layoutPresets')}>
-                    <LayoutGrid className="w-4 h-4" />
+                    <LayoutGrid className="size-[18px]" />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -182,7 +188,7 @@ export function MenuBar({
                 onClick={onOpenPortForward}
                 disabled={!portForwardEnabled}
               >
-                <Network className="w-4 h-4" />
+                <Network className="size-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t('menuBar.portForwarding')}</TooltipContent>
@@ -191,14 +197,14 @@ export function MenuBar({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="menubar" aria-label={t('common.options')} onClick={onOpenSettings}>
-                <Settings className="w-4 h-4" />
+                <Settings className="size-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t('common.options')}</TooltipContent>
           </Tooltip>
           </div>
-        </TooltipProvider>
-      </div>
+        </div>
+      </TooltipProvider>
     </div>
   );
 }

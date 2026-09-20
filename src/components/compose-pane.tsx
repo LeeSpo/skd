@@ -122,7 +122,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-panel-border bg-panel-toolbar px-3 py-1.5">
+      <div className="flex min-h-[35px] shrink-0 flex-wrap items-center gap-2 border-b border-panel-border bg-panel-toolbar px-3 py-1.5">
         <Button
           type="button"
           size="sm"

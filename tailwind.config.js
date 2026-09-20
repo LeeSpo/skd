@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       borderRadius: {
+        xl: '14px',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
@@ -55,6 +56,7 @@ export default {
         border: 'var(--border)',
         input: 'var(--input)',
         'input-background': 'var(--input-background)',
+        'switch-background': 'var(--switch-background)',
         ring: 'var(--ring)',
         chart: {
           '1': 'var(--chart-1)',

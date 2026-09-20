@@ -727,10 +727,9 @@ export function ConnectionDialog({
     onOpenChange(newOpen);
   };
 
-  const isTallAuth = config.authMethod === 'publickey';
   const tabContentClassName = cn(
-    'px-5 py-4 space-y-4 mt-0 overflow-y-auto [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-title]]:text-sm',
-    isTallAuth && 'flex-1 min-h-0',
+    'px-5 py-4 space-y-4 mt-0 overflow-y-auto [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-header]]:pt-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-content]]:pb-0 [&_[data-slot=card-title]]:text-sm',
+    'flex-1 min-h-0',
   );
   const showRememberPassword = (editingConnection || saveAsConnection)
     && (config.authMethod === 'password' || config.authMethod === 'publickey');
@@ -739,11 +738,8 @@ export function ConnectionDialog({
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        position="tauri"
-        className={cn(
-          'w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl',
-          isTallAuth ? '!h-[85vh]' : 'h-fit',
-        )}
+        position="tauriTall"
+        className="h-[min(680px,85vh)] w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-[760px]"
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -758,32 +754,29 @@ export function ConnectionDialog({
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className={cn('flex flex-col overflow-hidden', isTallAuth && 'min-h-0 flex-1')}
+          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
         >
           <TabsList
-            variant="underline"
-            className="h-auto shrink-0 w-full overflow-x-auto px-4"
+            aria-label={t('connectionDialog.title.new')}
+            className="mx-5 my-3 h-8 shrink-0 self-start rounded-lg bg-muted p-1"
           >
             <TabsTrigger
-              variant="underline"
               value="connection"
-              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="h-6 gap-1.5 rounded-md px-3 py-1 text-xs"
             >
               <Server className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.connection')}</span>
             </TabsTrigger>
             <TabsTrigger
-              variant="underline"
               value="proxy"
-              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="h-6 gap-1.5 rounded-md px-3 py-1 text-xs"
             >
               <Network className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.proxy')}</span>
             </TabsTrigger>
             <TabsTrigger
-              variant="underline"
               value="advanced"
-              className="gap-1 px-2.5 py-2.5 text-sm whitespace-nowrap"
+              className="h-6 gap-1.5 rounded-md px-3 py-1 text-xs"
             >
               <TerminalIcon className="h-3.5 w-3.5" />
               <span>{t('connectionDialog.tab.advanced')}</span>

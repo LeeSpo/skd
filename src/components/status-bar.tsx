@@ -29,13 +29,13 @@ export function StatusBar({ activeConnection }: StatusBarProps) {
     t('statusBar.disconnected')
   );
   return (
-    <div className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-panel-border bg-statusbar px-4 text-xs">
+    <div className="flex h-[22px] shrink-0 items-center justify-between gap-4 border-t border-panel-border bg-statusbar px-3 text-[12px] text-muted-foreground">
       <div className="flex min-w-0 items-center gap-3">
         {activeConnection && (
           <>
             <div className="flex shrink-0 items-center gap-1.5">
               <StatusDot variant={toStatusDotVariant(activeConnection.status)} />
-              <span className={activeConnection.status === 'disconnected' ? 'text-muted-foreground' : ''}>
+              <span className={activeConnection.status === 'disconnected' ? 'text-muted-foreground' : 'text-foreground'}>
                 {statusLabel}
               </span>
             </div>

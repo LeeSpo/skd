@@ -16,7 +16,7 @@ describe('shared control design', () => {
     for (const field of [input, textarea]) {
       expect(field.classList.contains('bg-input-background')).toBe(true);
       expect(field.classList.contains('dark:bg-input/30')).toBe(false);
-      expect(field.classList.contains('focus-visible:ring-[3px]')).toBe(true);
+      expect(field.classList.contains('focus-visible:ring-[2px]')).toBe(true);
       expect(field.classList.contains('motion-reduce:transition-none')).toBe(true);
     }
     expect(input.getAttribute('aria-invalid')).toBe('true');

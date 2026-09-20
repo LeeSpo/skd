@@ -109,13 +109,13 @@ afterEach(() => {
 });
 
 describe('IntegratedFileBrowser path editing', () => {
-  it('provides a focusable named edit button and ignores IME Enter/Escape before submitting', async () => {
+  it('provides a keyboard-operable path bar and ignores IME Enter/Escape before submitting', async () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
-    const edit = screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' });
+    const edit = screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' });
     edit.focus();
     expect(document.activeElement).toBe(edit);
-    fireEvent.click(edit);
+    fireEvent.keyDown(edit, { key: 'Enter' });
     const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
     expect(document.activeElement).toBe(input);
     fireEvent.change(input, { target: { value: '/var/next' } });
@@ -129,7 +129,7 @@ describe('IntegratedFileBrowser path editing', () => {
     expect(mockedInvoke.mock.calls.filter(([command, args]) =>
       command === 'list_local_files' && (args as { path: string }).path === '/var/next',
     )).toHaveLength(1);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
     fireEvent.click(screen.getByRole('button', { name: 'Home' }));
     await screen.findByRole('button', { name: 'test' });
   });
@@ -137,7 +137,7 @@ describe('IntegratedFileBrowser path editing', () => {
   it('submits on blur without taking focus back from the next control', async () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
-    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    fireEvent.click(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
     const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
     fireEvent.change(input, { target: { value: '/blur-target' } });
     const next = screen.getByRole('button', { name: 'Home' });
@@ -153,13 +153,13 @@ describe('IntegratedFileBrowser path editing', () => {
   it('cancels without navigating and returns keyboard focus', async () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
-    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    fireEvent.click(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
     const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
     fireEvent.change(input, { target: { value: '/cancelled' } });
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByRole('textbox', { name: 'fileBrowser.toolbar.editPath' })).toBeNull();
     expect(mockedInvoke).not.toHaveBeenCalledWith('list_local_files', { path: '/cancelled' });
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'fileBrowser.toolbar.editPath' }));
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
   });
 });
 

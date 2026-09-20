@@ -2,40 +2,40 @@
 
 :root {
   --font-size: 16px;
-  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   /* Base colors */
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #242424;
   
   /* Card & Surface */
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #242424;
   
   /* Popover */
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #242424;
   
   /* Primary - Brand color */
-  --primary: #2563eb;
+  --primary: #0066cc;
   --primary-foreground: #ffffff;
-  --primary-hover: #1d4ed8;
+  --primary-hover: #005bb5;
   
   /* Secondary */
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary: #ebebed;
+  --secondary-foreground: #242424;
   
   /* Muted */
-  --muted: #f1f5f9;
-  --muted-foreground: #566579;
+  --muted: #ebebed;
+  --muted-foreground: #606064;
   
   /* Accent */
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --accent: #e8e8ec;
+  --accent-foreground: #242424;
   
   /* Destructive */
-  --destructive: #c93430;
+  --destructive: #b92723;
   --destructive-foreground: #ffffff;
   
   /* Success */
@@ -43,20 +43,22 @@
   --success-foreground: #ffffff;
   
   /* Warning */
-  --warning: #946000;
+  --warning: #855600;
   --warning-foreground: #ffffff;
   
   /* Border & Input */
-  --border: #e2e8f0;
-  --input: transparent;
-  --input-background: #f8fafc;
-  --ring: #2563eb;
+  --border: #d8d8dc;
+  --input: #c8c8ce;
+  --input-background: #ffffff;
+  --ring: #0066cc;
   
   /* Switch */
   --switch-background: #cbd5e1;
   
-  /* Radius */
-  --radius: 0.5rem;
+  /* Shared macOS-inspired geometry; app choices, not native AppKit metrics. */
+  --radius: 0.625rem;
+  --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.12);
+  --shadow-dialog: 0 8px 28px rgba(0, 0, 0, 0.16);
 
   /* Chart colors */
   --chart-1: #2563eb;
@@ -66,19 +68,19 @@
   --chart-5: #8b5cf6;
 
   /* Sidebar */
-  --sidebar: #f8fafc;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #2563eb;
+  --sidebar: #f2f2f4;
+  --sidebar-foreground: #242424;
+  --sidebar-primary: #0066cc;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1f5f9;
-  --sidebar-accent-foreground: #0f172a;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #2563eb;
+  --sidebar-accent: #e8e8ec;
+  --sidebar-accent-foreground: #242424;
+  --sidebar-border: #d8d8dc;
+  --sidebar-ring: #0066cc;
 
   /* Terminal */
-  --terminal-bg: #1e1e1e;
-  --terminal-fg: #d4d4d4;
-  --terminal-cursor: #aeafad;
+  --terminal-bg: #ffffff;
+  --terminal-fg: #242424;
+  --terminal-cursor: #242424;
   --terminal-selection: rgba(0, 90, 200, 0.3);
 
   /* Status colors */
@@ -88,14 +90,15 @@
   --status-pending: var(--primary);
 
   /* Panel chrome */
-  --panel-header-bg: color-mix(in srgb, var(--muted) 50%, transparent);
-  --panel-toolbar-bg: color-mix(in srgb, var(--muted) 30%, transparent);
-  --panel-border: color-mix(in srgb, var(--border) 50%, transparent);
+  --panel-header-bg: #f2f2f4;
+  --panel-toolbar-bg: #f2f2f4;
+  --panel-border: #d8d8dc;
   --surface-raised: #ffffff;
-  --surface-selected: #e8f0fe;
-  --surface-hover: #f1f5f9;
+  --surface-selected: #dce8f8;
+  --surface-hover: #ededf0;
+  --surface-content: #ffffff;
   --workspace-bg: #ffffff;
-  --statusbar-bg: #f1f5f9;
+  --statusbar-bg: #f2f2f4;
   --drop-zone: rgba(37, 99, 235, 0.2);
   --overlay: rgba(15, 23, 42, 0.45);
   --scrollbar-thumb: rgba(15, 23, 42, 0.2);
@@ -169,6 +172,7 @@
   --surface-raised: #ffffff;
   --surface-selected: #c8e0ff;
   --surface-hover: #e8e8ed;
+  --surface-content: #ffffff;
   --workspace-bg: #f5f5f7;
   --statusbar-bg: #eeeef0;
   --drop-zone: rgba(0, 102, 204, 0.18);
@@ -181,66 +185,69 @@
 .dark[data-color-palette="graphite"] {
   color-scheme: dark;
 
-  /* Graphite — neutral charcoal with cool blue interaction accents */
-  --background: #11141a;
-  --foreground: #e7ecf4;
-  --card: #171b23;
-  --card-foreground: #e7ecf4;
-  --popover: #1d232d;
-  --popover-foreground: #e7ecf4;
-  --primary: #5b8ff9;
-  --primary-foreground: #08111f;
-  --primary-hover: #70a1ff;
-  --secondary: #1d232d;
-  --secondary-foreground: #e7ecf4;
-  --muted: #1d232d;
-  --muted-foreground: #98a2b2;
-  --accent: #243652;
-  --accent-foreground: #e7ecf4;
-  --destructive: #f58289;
+  /* Graphite — Cursor-inspired neutral surfaces with a macOS-style blue accent */
+  --background: #181818;
+  --foreground: #e6e6e6;
+  --card: #212121;
+  --card-foreground: #e6e6e6;
+  --popover: #282828;
+  --popover-foreground: #e6e6e6;
+  --primary: #8ab4f8;
+  --primary-foreground: #152033;
+  --primary-hover: #a1c3fa;
+  --secondary: #333333;
+  --secondary-foreground: #e6e6e6;
+  --muted: #242424;
+  --muted-foreground: #ababab;
+  --accent: #2a2a2a;
+  --accent-foreground: #e6e6e6;
+  --destructive: #ff7b91;
   --destructive-foreground: #21090d;
-  --success: #57c99a;
+  --success: #89c49a;
   --success-foreground: #071a13;
-  --warning: #e5b567;
+  --warning: #f1b467;
   --warning-foreground: #201704;
-  --border: #2b3442;
-  --input: #1d232d;
-  --input-background: #13171e;
-  --ring: #5b8ff9;
-  --switch-background: #3b4554;
-  --chart-1: #5b8ff9;
-  --chart-2: #57c99a;
-  --chart-3: #e5b567;
-  --chart-4: #f07178;
-  --chart-5: #b394f6;
-  --sidebar: #171b23;
-  --sidebar-foreground: #e7ecf4;
-  --sidebar-primary: #5b8ff9;
-  --sidebar-primary-foreground: #08111f;
-  --sidebar-accent: #1d232d;
-  --sidebar-accent-foreground: #e7ecf4;
-  --sidebar-border: #252d39;
-  --sidebar-ring: #5b8ff9;
-  --terminal-bg: #0e1116;
-  --terminal-fg: #e7ecf4;
-  --terminal-cursor: #e7ecf4;
-  --terminal-selection: rgba(91, 143, 249, 0.3);
+  --border: #353535;
+  --input: #353535;
+  --input-background: #1c1c1c;
+  --ring: #8ab4f8;
+  --switch-background: #3a3a3a;
+  --chart-1: #8ab4f8;
+  --chart-2: #3fa266;
+  --chart-3: #f1b467;
+  --chart-4: #e34671;
+  --chart-5: #b48ead;
+  --sidebar: #212121;
+  --sidebar-foreground: #e6e6e6;
+  --sidebar-primary: #8ab4f8;
+  --sidebar-primary-foreground: #152033;
+  --sidebar-accent: #2a2a2a;
+  --sidebar-accent-foreground: #e6e6e6;
+  --sidebar-border: #303030;
+  --sidebar-ring: #8ab4f8;
+  --terminal-bg: #181818;
+  --terminal-fg: #e6e6e6;
+  --terminal-cursor: #e6e6e6;
+  --terminal-selection: rgba(138, 180, 248, 0.24);
   --status-connected: var(--success);
   --status-connecting: var(--warning);
   --status-disconnected: var(--destructive);
-  --status-pending: #5b8ff9;
-  --panel-header-bg: #1d232d;
-  --panel-toolbar-bg: #171b23;
-  --panel-border: #252d39;
-  --surface-raised: #1d232d;
-  --surface-selected: #243652;
-  --surface-hover: #222a35;
-  --workspace-bg: #11141a;
-  --statusbar-bg: #171b23;
-  --drop-zone: rgba(91, 143, 249, 0.22);
-  --overlay: rgba(2, 6, 15, 0.68);
-  --scrollbar-thumb: rgba(231, 236, 244, 0.18);
-  --scrollbar-thumb-hover: rgba(231, 236, 244, 0.32);
+  --status-pending: #8ab4f8;
+  --panel-header-bg: #212121;
+  --panel-toolbar-bg: #212121;
+  --panel-border: #303030;
+  --surface-raised: #282828;
+  --surface-selected: #343434;
+  --surface-hover: #2a2a2a;
+  --surface-content: #181818;
+  --workspace-bg: #181818;
+  --statusbar-bg: #212121;
+  --drop-zone: rgba(138, 180, 248, 0.2);
+  --overlay: rgba(0, 0, 0, 0.45);
+  --scrollbar-thumb: rgba(230, 230, 230, 0.18);
+  --scrollbar-thumb-hover: rgba(230, 230, 230, 0.32);
+  --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  --shadow-dialog: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
 .dark[data-color-palette="midnight"] {
@@ -298,6 +305,7 @@
   --surface-raised: #232d3b;
   --surface-selected: #2a3e59;
   --surface-hover: #283445;
+  --surface-content: #181f2b;
   --workspace-bg: #10151e;
   --statusbar-bg: #181f2b;
   --drop-zone: rgba(107, 155, 250, 0.22);
@@ -360,6 +368,7 @@
   --surface-raised: #303947;
   --surface-selected: #354c5b;
   --surface-hover: #374251;
+  --surface-content: #272e39;
   --workspace-bg: #20262f;
   --statusbar-bg: #272e39;
   --drop-zone: rgba(136, 192, 208, 0.22);
@@ -425,6 +434,7 @@
   --surface-raised: #2c2c2e;
   --surface-selected: #163d66;
   --surface-hover: #343437;
+  --surface-content: #242426;
   --workspace-bg: #1c1c1e;
   --statusbar-bg: #242426;
   --drop-zone: rgba(10, 132, 255, 0.22);
@@ -465,10 +475,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -491,6 +501,7 @@
   --color-surface-raised: var(--surface-raised);
   --color-surface-selected: var(--surface-selected);
   --color-surface-hover: var(--surface-hover);
+  --color-surface-content: var(--surface-content);
   --color-workspace: var(--workspace-bg);
   --color-statusbar: var(--statusbar-bg);
   --color-drop-zone: var(--drop-zone);
@@ -578,32 +589,40 @@ body {
   text-align: right;
 }
 
-/* Window-bar pilot: opaque surfaces; deliberately scoped away from panel toolbars. */
+/* Unified window toolbar: keep pointer and keyboard states equally legible. */
 .window-chrome [data-slot="button"] {
   color: var(--muted-foreground);
   transition: color 120ms ease, background-color 120ms ease;
 }
 
 .window-chrome [data-slot="button"]:hover:not(:disabled) {
-  color: var(--foreground);
-  background-color: var(--surface-hover);
+  color: color-mix(in srgb, var(--foreground) 74%, transparent);
+  background-color: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
 
 .window-chrome [data-slot="button"][aria-pressed="true"],
 .window-chrome [data-slot="button"][data-state="open"] {
-  color: var(--primary);
-  background-color: var(--surface-selected);
+  color: var(--foreground);
+  background-color: var(--surface-hover);
 }
 
 .window-chrome [data-slot="button"]:active:not(:disabled) {
   color: var(--foreground);
-  background-color: var(--accent);
+  background-color: var(--surface-selected);
 }
 
 .window-chrome [data-slot="button"]:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   box-shadow: none;
+}
+
+.shadow-menu {
+  box-shadow: var(--shadow-menu);
+}
+
+.shadow-dialog {
+  box-shadow: var(--shadow-dialog);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -754,6 +773,10 @@ html {
 }
 
 /* Panel chrome utilities */
+.bg-surface-content {
+  background-color: var(--surface-content);
+}
+
 .panel-header {
   background-color: var(--panel-header-bg);
   border-bottom: 1px solid var(--panel-border);
@@ -819,4 +842,37 @@ html {
 
 .cm-editor .cm-scroller {
   overflow: auto;
+}
+
+/* Respect system accessibility preferences across all app-owned chrome. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root, :root[data-color-palette] {
+    --panel-border: var(--muted-foreground);
+    --sidebar-border: var(--muted-foreground);
+    --border: var(--muted-foreground);
+    --input: var(--muted-foreground);
+  }
+}
+
+.workspace-key {
+  display: inline-flex;
+  min-width: 1.5rem;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 5px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+  background: var(--input-background);
 }

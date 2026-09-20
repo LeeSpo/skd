@@ -68,7 +68,6 @@ import {
   Layers,
   GripVertical,
   ScrollText,
-  Pencil,
   LocateFixed,
   PanelLeft,
   Search,
@@ -1786,9 +1785,26 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
           {/* Breadcrumb / Editable address bar */}
           <div
-            className="group mx-1.5 flex h-7 min-w-24 flex-1 cursor-text items-center rounded-md border border-input bg-input-background px-2 transition-colors motion-reduce:transition-none hover:border-border focus-within:ring-2 focus-within:ring-ring"
+            ref={(node) => {
+              if (node && restorePathFocusRef.current && !isEditingPath) {
+                restorePathFocusRef.current = false;
+                node.focus();
+              }
+            }}
+            role="group"
+            tabIndex={isEditingPath ? -1 : 0}
+            aria-label={t('fileBrowser.toolbar.editPath')}
+            aria-description={t('fileBrowser.toolbar.editPathHint')}
+            aria-keyshortcuts="Enter Space"
+            className="group mx-1.5 flex h-7 min-w-24 flex-1 cursor-text items-center rounded-md border border-input bg-input-background px-2 transition-colors motion-reduce:transition-none hover:border-border focus-within:ring-2 focus-within:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               if (!isEditingPath) beginPathEdit();
+            }}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              beginPathEdit();
             }}
           >
             {isEditingPath ? (
@@ -1815,8 +1831,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                 onBlur={handlePathSubmit}
               />
             ) : (
-              <>
-                <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none">
+              <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none">
                 {getBreadcrumbs(currentPath).map((seg, i) => (
                   <React.Fragment key={seg.path}>
                     {i > 0 && (
@@ -1834,28 +1849,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                     </button>
                   </React.Fragment>
                 ))}
-                </div>
-                <Button
-                  ref={(node) => {
-                    if (node && restorePathFocusRef.current) {
-                      restorePathFocusRef.current = false;
-                      node.focus();
-                    }
-                  }}
-                  type="button"
-                  variant="ghost"
-                  size="toolbar"
-                  className="ml-1 shrink-0 text-muted-foreground"
-                  title={t('fileBrowser.toolbar.editPath')}
-                  aria-label={t('fileBrowser.toolbar.editPath')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    beginPathEdit();
-                  }}
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-              </>
+              </div>
             )}
           </div>
 
@@ -2017,7 +2011,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               {/* Drag overlay */}
               {isDraggingOver && (
                 <div className="absolute inset-0 bg-accent/20 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
-                  <div className="bg-background/90 rounded-lg p-6 shadow-lg">
+                  <div className="bg-background/90 rounded-xl p-6 shadow-dialog">
                     <Upload className="h-12 w-12 mx-auto mb-3 text-primary" />
                     <p className="font-medium">Drop files or folders to upload</p>
                     <p className="text-sm text-muted-foreground mt-1">Upload to {currentPath}</p>
