@@ -29,6 +29,13 @@ describe('terminal multilingual font configuration', () => {
     expect(defaultTerminalOptions.fontFamily).toBe(MACOS_MULTILINGUAL_TERMINAL_FONT);
   });
 
+  it('forces Option-click selection so TUI mouse mode still allows copy', () => {
+    expect(defaultTerminalOptions.macOptionClickForcesSelection).toBe(true);
+    expect(getTerminalOptions(defaultAppearanceSettings).macOptionClickForcesSelection).toBe(true);
+    expect(defaultTerminalOptions.altClickMovesCursor).toBe(false);
+    expect(getTerminalOptions(defaultAppearanceSettings).altClickMovesCursor).toBe(false);
+  });
+
   it('includes CJK and emoji fallbacks in the multilingual stack', () => {
     expect(MACOS_MULTILINGUAL_TERMINAL_FONT).toContain('Hiragino Kaku Gothic ProN');
     expect(MACOS_MULTILINGUAL_TERMINAL_FONT).toContain('PingFang SC');

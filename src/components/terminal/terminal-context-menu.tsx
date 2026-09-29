@@ -77,10 +77,17 @@ export function TerminalContextMenu({
             <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuItem onClick={onCopy} disabled={!hasSelection}>
+        <ContextMenuItem
+          onClick={onCopy}
+          disabled={!hasSelection}
+          title={!hasSelection ? t('contextMenu.copyHoldOptionToSelect') : undefined}
+          className={!hasSelection ? 'data-[disabled]:pointer-events-auto' : undefined}
+        >
           <Copy className="mr-2 h-4 w-4" />
           <span>{t('contextMenu.copy')}</span>
-          <ContextMenuShortcut>{modKey}+C</ContextMenuShortcut>
+          <ContextMenuShortcut>
+            {hasSelection ? `${modKey}+C` : t('contextMenu.copyOptionDrag')}
+          </ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem onClick={onPaste}>
           <Clipboard className="mr-2 h-4 w-4" />

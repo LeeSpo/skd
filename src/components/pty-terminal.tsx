@@ -14,7 +14,7 @@ import {
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
-import { selectTerminalContent } from '@/lib/terminal-selection';
+import { bindTerminalSelectionMouseGuard, selectTerminalContent } from '@/lib/terminal-selection';
 import { TerminalSearchBar } from './terminal/terminal-search-bar';
 import { toast } from 'sonner';
 import { signalReady } from '../lib/restoration-manager';
@@ -329,6 +329,9 @@ export function PtyTerminal({
     term.onSelectionChange(() => {
       setHasSelection(term.hasSelection());
     });
+    const removeSelectionMouseGuard = term.element
+      ? bindTerminalSelectionMouseGuard(term.element, () => term.hasSelection())
+      : () => {};
 
     // NOTE: No custom paste event listener needed — xterm.js registers its own
     // paste handler on the textarea that reads clipboard data, applies bracketed
@@ -877,6 +880,7 @@ export function PtyTerminal({
       }
       wsRef.current = null;
       
+      removeSelectionMouseGuard();
       inputDisposable.dispose();
       resizeDisposable.dispose();
       lineFeedDisposable.dispose();

@@ -392,6 +392,11 @@ export const defaultTerminalOptions: ITerminalOptions = {
   allowTransparency: false,
   scrollSensitivity: 1,
   rescaleOverlappingGlyphs: true,
+  // Option+drag selects text while a TUI has mouse reporting on (vim, htop, tmux).
+  macOptionClickForcesSelection: true,
+  // Option is the selection modifier. The default alt-click cursor move sends
+  // keystrokes on mouseup, and xterm clears the selection when that happens.
+  altClickMovesCursor: false,
 };
 
 export function getTerminalOptions(appearance: TerminalAppearanceSettings): ITerminalOptions {

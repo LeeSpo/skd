@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Terminal } from '@xterm/xterm';
-import { selectTerminalContent } from '../terminal-selection';
+import { selectTerminalContent, shouldSuppressSelectionClearingMouseMove } from '../terminal-selection';
 
 function createTerminal(lines: string[]) {
   const selectLines = vi.fn();
@@ -57,5 +57,20 @@ describe('selectTerminalContent', () => {
 
     expect(clearSelection).toHaveBeenCalledOnce();
     expect(selectLines).not.toHaveBeenCalled();
+  });
+});
+
+describe('shouldSuppressSelectionClearingMouseMove', () => {
+  it('lets a drag update the selection', () => {
+    expect(shouldSuppressSelectionClearingMouseMove({ buttons: 1, altKey: true }, true)).toBe(false);
+  });
+
+  it('swallows the buttonless move that follows an Option-drag', () => {
+    expect(shouldSuppressSelectionClearingMouseMove({ buttons: 0, altKey: true }, true)).toBe(true);
+    expect(shouldSuppressSelectionClearingMouseMove({ buttons: 0, altKey: false }, true)).toBe(true);
+  });
+
+  it('still reports hover moves when nothing is selected and Option is up', () => {
+    expect(shouldSuppressSelectionClearingMouseMove({ buttons: 0, altKey: false }, false)).toBe(false);
   });
 });

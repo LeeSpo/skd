@@ -739,6 +739,8 @@
   },
   "contextMenu": {
     "copy": "Copy",
+    "copyHoldOptionToSelect": "Hold ⌥ and drag to select",
+    "copyOptionDrag": "⌥ & drag",
     "paste": "Paste",
     "selectAll": "Select All",
     "clear": "Clear",
