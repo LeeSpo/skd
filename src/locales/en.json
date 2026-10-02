@@ -1096,6 +1096,12 @@
     "failedToCopyClipboard": "Failed to copy to clipboard",
     "failedToOpenUrl": "Failed to open link",
     "reconnectingTerminal": "Reconnecting terminal…",
+    "connectionError": "Could not connect to the terminal",
+    "connectionFailed": "Could not connect to the terminal. Use right-click → Reconnect to retry.",
+    "reconnectFailed_one": "Connection lost. Reconnection failed after {{count}} attempt. Use right-click → Reconnect to retry.",
+    "reconnectFailed_other": "Connection lost. Reconnection failed after {{count}} attempts. Use right-click → Reconnect to retry.",
+    "connectionLostRetry": "Connection lost. Reconnecting in {{seconds}}s (attempt {{attempt}}/{{total}})…",
+    "connectionRetry": "Could not connect. Retrying in {{seconds}}s (attempt {{attempt}}/{{total}})…",
     "outputSaved": "Terminal output saved",
     "failedToSaveOutput": "Failed to save output"
   },

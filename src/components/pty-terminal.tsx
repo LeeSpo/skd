@@ -7,7 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
-import { invoke } from '@tauri-apps/api/core';
+import { getWebSocketUrl } from '@/lib/websocket-endpoint';
 import {
   loadAppearanceSettings,
   getThemeAwareTerminalOptions,
@@ -416,6 +416,7 @@ export function PtyTerminal({
     // buffer). Connection status is surfaced via tab chrome + toasts instead.
 
     let isRunning = true;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     // Tracks whether a PTY session has been successfully established in this
     // effect run. Reset to false when we initiate an auto-reconnect after a
     // drop so the reconnect loop can function normally.
@@ -438,7 +439,10 @@ export function PtyTerminal({
         const startTime = Date.now();
 
         const checkSize = () => {
-          if (!isRunning) return;
+          if (!isRunning) {
+            resolve();
+            return;
+          }
 
           // Refit to get latest dimensions
           fitAddon.fit();
@@ -464,10 +468,82 @@ export function PtyTerminal({
       });
     };
 
+    const scheduleReconnect = () => {
+      if (isRunning) {
+        // If a session was successfully established, a WS drop means the
+        // remote shell is gone (e.g. sleep/wake cycle, server timeout).
+        // Auto-reconnect with exponential backoff so the user doesn't have
+        // to manually click Reconnect every time the network hiccups.
+        if (hasEverConnected) {
+          const dropAttempt = autoReconnectAfterDropRef.current;
+          if (dropAttempt >= MAX_AUTO_RECONNECT_AFTER_DROP) {
+            // Exhausted auto-reconnect attempts — ask user to act manually.
+            term.write(`\r\n\x1b[31m[${t('ptyTerminal.reconnectFailed', { count: MAX_AUTO_RECONNECT_AFTER_DROP })}]\x1b[0m\r\n`);
+            toast.error(t('ptyTerminal.connectionFailed'));
+            if (connectionStatusRef.current !== 'disconnected') {
+              connectionStatusRef.current = 'disconnected';
+              onConnectionStatusChange?.(connectionId, 'disconnected');
+            }
+            return;
+          }
+
+          const delay = Math.min(2000 * Math.pow(2, dropAttempt), 30000);
+          autoReconnectAfterDropRef.current = dropAttempt + 1;
+
+          term.write(`\r\n\x1b[33m[${t('ptyTerminal.connectionLostRetry', { seconds: Math.round(delay / 1000), attempt: dropAttempt + 1, total: MAX_AUTO_RECONNECT_AFTER_DROP })}]\x1b[0m\r\n`);
+          if (connectionStatusRef.current !== 'connecting') {
+            connectionStatusRef.current = 'connecting';
+            onConnectionStatusChange?.(connectionId, 'connecting');
+          }
+
+          // Reset flags so the reconnect loop can start cleanly.
+          // isReconnectAfterDrop stays true so the Success message warns
+          // the user that a fresh shell was started.
+          isReconnectAfterDrop = true;
+          hasEverConnected = false;
+          reconnectAttemptsRef.current = 0;
+
+          reconnectTimer = setTimeout(() => {
+            if (isRunning) {
+              void connectWebSocket();
+            }
+          }, delay);
+          return;
+        }
+
+        const attempts = reconnectAttemptsRef.current;
+
+        if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+          term.write(`\r\n\x1b[31m[${t('ptyTerminal.connectionFailed')}]\x1b[0m\r\n`);
+          toast.error(t('ptyTerminal.connectionFailed'));
+          if (connectionStatusRef.current !== 'disconnected') {
+            connectionStatusRef.current = 'disconnected';
+            onConnectionStatusChange?.(connectionId, 'disconnected');
+          }
+          return;
+        }
+
+        const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
+        reconnectAttemptsRef.current = attempts + 1;
+
+        if (connectionStatusRef.current !== 'connecting') {
+          connectionStatusRef.current = 'connecting';
+          onConnectionStatusChange?.(connectionId, 'connecting');
+        }
+        term.write(`\r\n\x1b[33m[${t('ptyTerminal.connectionRetry', { seconds: Math.round(delay / 1000), attempt: attempts + 1, total: MAX_RECONNECT_ATTEMPTS })}]\x1b[0m\r\n`);
+        reconnectTimer = setTimeout(() => {
+          if (isRunning) {
+            void connectWebSocket();
+          }
+        }, delay);
+      }
+    };
+
     // Connect to WebSocket server
     const connectWebSocket = async () => {
       // CRITICAL: Wait for terminal to be properly sized before starting PTY
       await waitForProperSize();
+      if (!isRunning) return;
       
       // Notify parent that we're connecting
       if (connectionStatusRef.current !== 'connecting') {
@@ -475,17 +551,19 @@ export function PtyTerminal({
         onConnectionStatusChange?.(connectionId, 'connecting');
       }
       
-      // Get the dynamically assigned WebSocket port from the backend
-      let wsPort = 9001; // fallback default
+      let wsUrl: string;
       try {
-        wsPort = await invoke<number>('get_websocket_port');
-        terminalDebug(`[PTY Terminal] [${connectionId}] WebSocket port: ${wsPort}`);
-      } catch (e) {
-        terminalWarn(`[PTY Terminal] [${connectionId}] Failed to get WebSocket port, using default:`, e);
+        wsUrl = await getWebSocketUrl();
+      } catch {
+        if (!isRunning) return;
+        terminalWarn('[PTY Terminal] Terminal bridge endpoint unavailable');
+        scheduleReconnect();
+        return;
       }
-      
+      if (!isRunning) return;
+
       terminalDebug(`[PTY Terminal] [${connectionId}] Connecting to WebSocket...`);
-      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+      const ws = new WebSocket(wsUrl);
       // Receive PTY output as ArrayBuffer so we can avoid the JSON overhead of
       // encoding Vec<u8> as integer arrays.  The backend sends binary output
       // frames with the format: [0x01][id_len: u16 BE][connection_id][payload]
@@ -680,9 +758,10 @@ export function PtyTerminal({
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[PTY Terminal] WebSocket error:', error);
-        term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
+      ws.onerror = () => {
+        if (!isRunning) return;
+        terminalWarn('[PTY Terminal] WebSocket connection failed');
+        term.write(`\r\n\x1b[31m[${t('ptyTerminal.connectionError')}]\x1b[0m\r\n`);
         // Report disconnected status on WebSocket error
         if (connectionStatusRef.current !== 'disconnected') {
           connectionStatusRef.current = 'disconnected';
@@ -692,76 +771,11 @@ export function PtyTerminal({
 
       ws.onclose = () => {
         terminalDebug('[PTY Terminal] WebSocket closed');
-        if (isRunning) {
-          // If a session was successfully established, a WS drop means the
-          // remote shell is gone (e.g. sleep/wake cycle, server timeout).
-          // Auto-reconnect with exponential backoff so the user doesn't have
-          // to manually click Reconnect every time the network hiccups.
-          if (hasEverConnected) {
-            const dropAttempt = autoReconnectAfterDropRef.current;
-            if (dropAttempt >= MAX_AUTO_RECONNECT_AFTER_DROP) {
-              // Exhausted auto-reconnect attempts — ask user to act manually.
-              term.write('\r\n\x1b[31m[Connection lost. Auto-reconnect failed after ' + MAX_AUTO_RECONNECT_AFTER_DROP + ' attempts. Use right-click → Reconnect.]\x1b[0m\r\n');
-              if (connectionStatusRef.current !== 'disconnected') {
-                connectionStatusRef.current = 'disconnected';
-                onConnectionStatusChange?.(connectionId, 'disconnected');
-              }
-              return;
-            }
-
-            const delay = Math.min(2000 * Math.pow(2, dropAttempt), 30000);
-            autoReconnectAfterDropRef.current = dropAttempt + 1;
-
-            term.write(`\r\n\x1b[33m[Connection lost. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${dropAttempt + 1}/${MAX_AUTO_RECONNECT_AFTER_DROP})...]\x1b[0m\r\n`);
-            if (connectionStatusRef.current !== 'connecting') {
-              connectionStatusRef.current = 'connecting';
-              onConnectionStatusChange?.(connectionId, 'connecting');
-            }
-
-            // Reset flags so the reconnect loop can start cleanly.
-            // isReconnectAfterDrop stays true so the Success message warns
-            // the user that a fresh shell was started.
-            isReconnectAfterDrop = true;
-            hasEverConnected = false;
-            reconnectAttemptsRef.current = 0;
-
-            setTimeout(() => {
-              if (isRunning) {
-                connectWebSocket();
-              }
-            }, delay);
-            return;
-          }
-
-          const attempts = reconnectAttemptsRef.current;
-          
-          if (attempts >= MAX_RECONNECT_ATTEMPTS) {
-            term.write('\r\n\x1b[31m[Connection failed permanently. Use right-click → Reconnect to retry.]\x1b[0m\r\n');
-            if (connectionStatusRef.current !== 'disconnected') {
-              connectionStatusRef.current = 'disconnected';
-              onConnectionStatusChange?.(connectionId, 'disconnected');
-            }
-            return;
-          }
-          
-          const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
-          reconnectAttemptsRef.current = attempts + 1;
-          
-          if (connectionStatusRef.current !== 'connecting') {
-            connectionStatusRef.current = 'connecting';
-            onConnectionStatusChange?.(connectionId, 'connecting');
-          }
-          term.write(`\r\n\x1b[33m[Connection closed. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${attempts + 1}/${MAX_RECONNECT_ATTEMPTS})...]\x1b[0m\r\n`);
-          setTimeout(() => {
-            if (isRunning) {
-              connectWebSocket();
-            }
-          }, delay);
-        }
+        scheduleReconnect();
       };
     };
 
-    connectWebSocket();
+    void connectWebSocket();
 
     // Handle user input
     const inputDisposable = term.onData((data: string) => {
@@ -847,6 +861,7 @@ export function PtyTerminal({
       terminalDebug(`[PTY Terminal] [${connectionId}] Cleaning up`);
       unregisterSender(connectionId);
       isRunning = false;
+      if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
 
       // Discard queued PTY output so stale writes never reach a disposed terminal.
       ptyOutputQueue = [];
@@ -864,8 +879,8 @@ export function PtyTerminal({
           closeMsg.generation = ptyGenerationRef.current;
         }
         ws.send(JSON.stringify(closeMsg));
-        ws.close();
       }
+      ws?.close();
       ptyGenerationRef.current = null;
 
       // CRITICAL: Null out WebSocket handlers to break closure reference chains.

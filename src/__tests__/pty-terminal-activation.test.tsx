@@ -1,6 +1,8 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import { PtyTerminal } from '../components/pty-terminal';
 import { TerminalInputProvider } from '../lib/terminal-input-context';
 
@@ -113,7 +115,7 @@ vi.mock('@xterm/addon-unicode11', () => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async (command: string) => (command === 'get_websocket_port' ? 9001 : undefined)),
+  invoke: vi.fn(async (command: string) => (command === 'get_websocket_endpoint' ? { port: 9001, token: 'test-token' } : undefined)),
 }));
 
 vi.mock('../lib/terminal-config', () => ({
@@ -167,7 +169,10 @@ vi.mock('sonner', () => ({
   },
 }));
 
-function renderTerminal(isActive: boolean) {
+function renderTerminal(
+  isActive: boolean,
+  onConnectionStatusChange?: React.ComponentProps<typeof PtyTerminal>['onConnectionStatusChange'],
+) {
   return render(
     <TerminalInputProvider>
       <PtyTerminal
@@ -176,6 +181,7 @@ function renderTerminal(isActive: boolean) {
         host="127.0.0.1"
         username="root"
         isActive={isActive}
+        onConnectionStatusChange={onConnectionStatusChange}
       />
     </TerminalInputProvider>,
   );
@@ -204,6 +210,10 @@ describe('PtyTerminal activation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockImplementation(async (command) => (
+      command === 'get_websocket_endpoint' ? { port: 9001, token: 'test-token' } : undefined
+    ));
     mocks.terminals.length = 0;
     mocks.fitAddons.length = 0;
     mocks.webSockets.length = 0;
@@ -238,6 +248,89 @@ describe('PtyTerminal activation', () => {
     cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('opens the authenticated endpoint and obtains fresh credentials on reconnect', async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({ port: 9004, token: 'first-token' })
+      .mockResolvedValueOnce({ port: 9005, token: 'second-token' });
+    renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(mocks.webSockets[0].url).toBe('ws://127.0.0.1:9004/?token=first-token');
+    act(() => { mocks.webSockets[0].onclose?.(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(mocks.webSockets[1].url).toBe('ws://127.0.0.1:9005/?token=second-token');
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not open a bare socket on endpoint failure and retries with fresh IPC', async () => {
+    vi.mocked(invoke)
+      .mockRejectedValueOnce(new Error('private-ipc-error'))
+      .mockResolvedValueOnce({ port: 9002, token: 'recovered-token' });
+    renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(mocks.webSockets).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(mocks.webSockets).toHaveLength(1);
+    expect(mocks.webSockets[0].url).toBe('ws://127.0.0.1:9002/?token=recovered-token');
+  });
+
+  it('stops after five retries and reports failure when endpoint IPC stays unavailable', async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error('unavailable'));
+    const onStatus = vi.fn();
+    renderTerminal(true, onStatus);
+    await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
+    expect(invoke).toHaveBeenCalledTimes(6);
+    expect(mocks.webSockets).toHaveLength(0);
+    expect(onStatus).toHaveBeenLastCalledWith('connection-1', 'disconnected');
+    expect(toast.error).toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(invoke).toHaveBeenCalledTimes(6);
+  });
+
+  it('does not establish a connection when a pending endpoint resolves after unmount', async () => {
+    let resolveEndpoint!: (endpoint: { port: number; token: string }) => void;
+    vi.mocked(invoke).mockImplementationOnce(() => new Promise((resolve) => { resolveEndpoint = resolve; }));
+    const { unmount } = renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => { resolveEndpoint({ port: 9001, token: 'late-token' }); });
+    expect(mocks.webSockets).toHaveLength(0);
+  });
+
+  it('does not retry when a pending endpoint rejects after unmount', async () => {
+    let rejectEndpoint!: (error: Error) => void;
+    vi.mocked(invoke).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectEndpoint = reject; }));
+    const { unmount } = renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    unmount();
+    await act(async () => { rejectEndpoint(new Error('late failure')); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.webSockets).toHaveLength(0);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('clears a scheduled retry when the terminal unmounts', async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error('unavailable'));
+    const { unmount } = renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.webSockets).toHaveLength(0);
+  });
+
+  it('closes a socket that is still handshaking on unmount', async () => {
+    const { unmount } = renderTerminal(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    const socket = mocks.webSockets[0];
+    socket.readyState = 0;
+    unmount();
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(socket.send).not.toHaveBeenCalled();
+    expect(socket.onopen).toBeNull();
   });
 
   it('does not focus the terminal when it mounts inactive', () => {

@@ -17,12 +17,15 @@ mod websocket_server;
 
 use connection_manager::ConnectionManager;
 use std::sync::atomic::AtomicU16;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::{Emitter, Manager};
 use websocket_server::WebSocketServer;
 
 // Global atomic to store the WebSocket port (shared between backend and frontend)
 pub static WEBSOCKET_PORT: AtomicU16 = AtomicU16::new(0);
+
+// Process-local secret, published to the main webview only through IPC.
+pub(crate) static WEBSOCKET_TOKEN: OnceLock<String> = OnceLock::new();
 
 /// Build the native macOS menu bar (File / Edit / Tools / Connection / Window).
 /// `t` is a lookup function: given a key like "menuBar.file", returns the translated string.
@@ -328,6 +331,7 @@ pub fn run() {
             commands::detect_gpu,
             commands::get_gpu_stats,
             commands::get_websocket_port,
+            commands::get_websocket_endpoint,
             // Standalone SFTP/FTP commands
             commands::sftp_connect,
             commands::sftp_standalone_disconnect,

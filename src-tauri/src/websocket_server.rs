@@ -1,7 +1,8 @@
 use crate::connection_diagnostics::{classify_connect_error, ConnectErrorKind, ConnectStage};
 use crate::connection_manager::ConnectionManager;
-use crate::WEBSOCKET_PORT;
+use crate::{WEBSOCKET_PORT, WEBSOCKET_TOKEN};
 use anyhow::Result;
+use base64::Engine as _;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,9 +10,12 @@ use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use subtle::ConstantTimeEq;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
-use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request};
+use tokio_tungstenite::tungstenite::http::StatusCode;
+use tokio_tungstenite::{accept_hdr_async, tungstenite::Message, WebSocketStream};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -117,6 +121,79 @@ const BINARY_OUTPUT_CMD: u8 = 0x01;
 
 type WsTx = mpsc::Sender<Message>;
 
+const APP_ORIGINS: &[&str] = &[
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+];
+const DEV_ORIGINS: &[&str] = &["http://localhost:1420", "http://127.0.0.1:1420"];
+
+fn generate_bridge_token() -> Result<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to generate WebSocket bridge token: {e}"))?;
+    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn validate_handshake(
+    request: &Request,
+    expected_token: &str,
+    allow_dev_origins: bool,
+) -> std::result::Result<(), &'static str> {
+    if expected_token.is_empty() {
+        return Err("bridge token not initialized");
+    }
+    let mut origins = request.headers().get_all("origin").iter();
+    if let Some(origin) = origins.next() {
+        if origins.next().is_some() {
+            return Err("multiple origins");
+        }
+        let origin = origin.to_str().map_err(|_| "invalid origin")?;
+        if !APP_ORIGINS.contains(&origin) && !(allow_dev_origins && DEV_ORIGINS.contains(&origin)) {
+            return Err("origin not allowed");
+        }
+    }
+
+    let mut tokens = request
+        .uri()
+        .query()
+        .unwrap_or_default()
+        .split('&')
+        .filter_map(|parameter| {
+            let (key, value) = parameter.split_once('=').unwrap_or((parameter, ""));
+            (key == "token").then_some(value)
+        });
+    let token = tokens.next().ok_or("missing token")?;
+    if tokens.next().is_some() {
+        return Err("multiple tokens");
+    }
+    if !bool::from(token.as_bytes().ct_eq(expected_token.as_bytes())) {
+        return Err("invalid token");
+    }
+    Ok(())
+}
+
+async fn accept_authenticated_connection(
+    stream: TcpStream,
+    expected_token: &str,
+) -> Result<WebSocketStream<TcpStream>> {
+    accept_hdr_async(stream, |request: &Request, response| {
+        match validate_handshake(request, expected_token, cfg!(debug_assertions)) {
+            Ok(()) => Ok(response),
+            Err(reason) => {
+                // Never log the request URI: it contains the bridge secret.
+                tracing::warn!("Rejected WebSocket handshake: {}", reason);
+                let mut rejection = ErrorResponse::new(Some(reason.to_string()));
+                *rejection.status_mut() = StatusCode::FORBIDDEN;
+                Err(rejection)
+            }
+        }
+    })
+    .await
+    // Handshake library errors may contain request headers or URIs.
+    .map_err(|_| anyhow::anyhow!("WebSocket handshake failed"))
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum SendOutcome {
     Sent,
@@ -160,7 +237,12 @@ fn encode_output_frame(connection_id: &str, data: &[u8]) -> Vec<u8> {
 /// Control messages are best-effort — a saturated channel returns `Dropped`.
 async fn send_control(tx: &WsTx, msg: &WsMessage) -> Result<SendOutcome> {
     let frame = Message::Text(serde_json::to_string(msg)?.into());
-    match tokio::time::timeout(Duration::from_millis(CONTROL_SEND_TIMEOUT_MS), tx.send(frame)).await {
+    match tokio::time::timeout(
+        Duration::from_millis(CONTROL_SEND_TIMEOUT_MS),
+        tx.send(frame),
+    )
+    .await
+    {
         Ok(Ok(())) => Ok(SendOutcome::Sent),
         Ok(Err(_)) => Ok(SendOutcome::Closed),
         Err(_) => Ok(SendOutcome::Dropped),
@@ -240,6 +322,12 @@ impl WebSocketServer {
 
     /// Start the WebSocket server, trying ports 9001-9010 to find an available one
     pub async fn start(self: Arc<Self>) -> Result<()> {
+        if WEBSOCKET_TOKEN.get().is_none() {
+            let token = generate_bridge_token()?;
+            WEBSOCKET_TOKEN
+                .set(token)
+                .map_err(|_| anyhow::anyhow!("WebSocket bridge token already initialized"))?;
+        }
         // Try ports 9001-9010 to find an available one
         let mut listener = None;
         let mut bound_port = 0u16;
@@ -272,7 +360,11 @@ impl WebSocketServer {
                     tracing::info!("New WebSocket connection from: {}", addr);
                     let server = self.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = server.handle_connection(stream).await {
+                        let token = WEBSOCKET_TOKEN
+                            .get()
+                            .map(String::as_str)
+                            .unwrap_or_default();
+                        if let Err(e) = server.handle_connection(stream, token).await {
                             tracing::error!("WebSocket connection error: {}", e);
                         }
                     });
@@ -285,8 +377,8 @@ impl WebSocketServer {
     }
 
     /// Handle a single WebSocket connection
-    async fn handle_connection(&self, stream: TcpStream) -> Result<()> {
-        let ws_stream = accept_async(stream).await?;
+    async fn handle_connection(&self, stream: TcpStream, expected_token: &str) -> Result<()> {
+        let ws_stream = accept_authenticated_connection(stream, expected_token).await?;
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
         // Bounded channel: when full the PTY reader blocks, providing backpressure
@@ -348,10 +440,16 @@ impl WebSocketServer {
                         }
                     };
                     match self.handle_message(ws_msg, tx.clone()).await {
-                        Ok(PtyLifecycleEvent::Started { connection_id, generation }) => {
+                        Ok(PtyLifecycleEvent::Started {
+                            connection_id,
+                            generation,
+                        }) => {
                             active_pty_generations.insert(connection_id, generation);
                         }
-                        Ok(PtyLifecycleEvent::Closed { connection_id, generation }) => {
+                        Ok(PtyLifecycleEvent::Closed {
+                            connection_id,
+                            generation,
+                        }) => {
                             if should_remove_pty_state(
                                 active_pty_generations.get(&connection_id).copied(),
                                 generation,
@@ -628,6 +726,258 @@ impl WebSocketServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::http::HeaderValue;
+
+    const TOKEN: &str = "test-bridge-secret";
+
+    fn request(query: &str, origin: Option<&str>) -> Request {
+        let mut request = format!("ws://127.0.0.1:9001/?{query}")
+            .into_client_request()
+            .unwrap();
+        if let Some(origin) = origin {
+            request
+                .headers_mut()
+                .insert("origin", origin.parse().unwrap());
+        }
+        request
+    }
+
+    #[test]
+    fn authenticates_app_origins_and_native_clients() {
+        for origin in APP_ORIGINS.iter().copied().map(Some).chain([None]) {
+            assert_eq!(
+                validate_handshake(&request("token=test-bridge-secret", origin), TOKEN, false),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            validate_handshake(
+                &request("other=1&token=test-bridge-secret&after=2", None),
+                TOKEN,
+                false
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn dev_origins_are_only_accepted_in_debug_policy() {
+        for origin in DEV_ORIGINS {
+            let request = request("token=test-bridge-secret", Some(origin));
+            assert!(validate_handshake(&request, TOKEN, true).is_ok());
+            assert_eq!(
+                validate_handshake(&request, TOKEN, false),
+                Err("origin not allowed")
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_empty_wrong_and_duplicate_tokens() {
+        for query in [
+            "",
+            "token",
+            "token=",
+            "token=%20",
+            "token=wrong",
+            "token=test-bridge-secre",
+            "token=test-bridge-secret-extra",
+            "token=test-bridge-secret&token=test-bridge-secret",
+            "token=test-bridge-secret&token",
+            "token=wrong&token=test-bridge-secret",
+        ] {
+            assert!(
+                validate_handshake(&request(query, None), TOKEN, true).is_err(),
+                "accepted {query}"
+            );
+        }
+        assert!(validate_handshake(&request("token=test-bridge-secret", None), "", true).is_err());
+    }
+
+    #[test]
+    fn rejects_foreign_null_invalid_and_duplicate_origins() {
+        for origin in [
+            "https://example.com",
+            "null",
+            "",
+            "tauri://localhost.evil",
+            "http://localhost:1421",
+        ] {
+            assert!(validate_handshake(
+                &request("token=test-bridge-secret", Some(origin)),
+                TOKEN,
+                true
+            )
+            .is_err());
+        }
+        let mut invalid = request("token=test-bridge-secret", None);
+        invalid
+            .headers_mut()
+            .insert("origin", HeaderValue::from_bytes(b"\xff").unwrap());
+        assert_eq!(
+            validate_handshake(&invalid, TOKEN, true),
+            Err("invalid origin")
+        );
+        let mut duplicate = request("token=test-bridge-secret", Some("tauri://localhost"));
+        duplicate
+            .headers_mut()
+            .append("origin", HeaderValue::from_static("tauri://localhost"));
+        assert_eq!(
+            validate_handshake(&duplicate, TOKEN, true),
+            Err("multiple origins")
+        );
+    }
+
+    #[test]
+    fn token_is_256_bits_urlsafe_and_fresh() {
+        let token = generate_bridge_token().unwrap();
+        assert_eq!(token.len(), 43);
+        assert!(token
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'));
+        assert_eq!(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(&token)
+                .unwrap()
+                .len(),
+            32
+        );
+        assert_ne!(token, generate_bridge_token().unwrap());
+    }
+
+    async fn spawn_bridge() -> (
+        SocketAddr,
+        Arc<ConnectionManager>,
+        tokio::task::JoinHandle<Result<()>>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let manager = Arc::new(ConnectionManager::new());
+        let server = WebSocketServer::new(manager.clone());
+        let task = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await?;
+            server.handle_connection(stream, TOKEN).await
+        });
+        (addr, manager, task)
+    }
+
+    #[tokio::test]
+    async fn authenticated_socket_upgrades_and_reaches_pty_dispatch() {
+        let (addr, _, server) = spawn_bridge().await;
+        let mut request = format!("ws://{addr}/?token={TOKEN}")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("origin", HeaderValue::from_static("tauri://localhost"));
+        let (mut socket, response) = tokio_tungstenite::connect_async(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+        socket
+            .send(Message::Text(
+                r#"{"type":"StartPty","connection_id":"missing-ssh-session","cols":80,"rows":24}"#
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        for expected in ["Progress", "Error"] {
+            let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(message.to_text().unwrap()).unwrap();
+            assert_eq!(value["type"], expected);
+        }
+        socket.close(None).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_socket_with_token_needs_no_origin() {
+        let (addr, _, server) = spawn_bridge().await;
+        let (mut socket, response) =
+            tokio_tungstenite::connect_async(format!("ws://{addr}/?token={TOKEN}"))
+                .await
+                .unwrap();
+        assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+        socket.close(None).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn real_handshake_rejects_unauthenticated_and_foreign_clients() {
+        for (query, origin) in [
+            ("", None),
+            ("token=wrong", None),
+            ("token=test-bridge-secret", Some("https://example.com")),
+        ] {
+            let (addr, _, server) = spawn_bridge().await;
+            let mut request = format!("ws://{addr}/?{query}")
+                .into_client_request()
+                .unwrap();
+            if let Some(origin) = origin {
+                request
+                    .headers_mut()
+                    .insert("origin", origin.parse().unwrap());
+            }
+            let error = tokio_tungstenite::connect_async(request).await.unwrap_err();
+            match error {
+                tokio_tungstenite::tungstenite::Error::Http(response) => {
+                    assert_eq!(response.status(), StatusCode::FORBIDDEN)
+                }
+                other => panic!("unexpected handshake error: {other}"),
+            }
+            assert!(server.await.unwrap().is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn rejected_upgrade_cannot_start_a_pty_even_with_pipelined_input() {
+        let (addr, manager, server) = spawn_bridge().await;
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let request = format!("GET / HTTP/1.1\r\nHost: {addr}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
+        let message =
+            br#"{"type":"StartPty","connection_id":"local-auth-probe","cols":80,"rows":24}"#;
+        assert!(message.len() < 126);
+        let mask = [1, 2, 3, 4];
+        let mut bytes = request.into_bytes();
+        bytes.extend_from_slice(&[0x81, 0x80 | message.len() as u8]);
+        bytes.extend_from_slice(&mask);
+        bytes.extend(
+            message
+                .iter()
+                .enumerate()
+                .map(|(i, byte)| byte ^ mask[i % 4]),
+        );
+        stream.write_all(&bytes).await.unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(5), stream.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        // tungstenite may reject bytes sent before the upgrade as
+        // JunkAfterRequest, before invoking the authentication callback.
+        // Either rejection must keep the PTY dispatcher unreachable.
+        assert!(
+            response.is_empty() || String::from_utf8_lossy(&response).starts_with("HTTP/1.1 403")
+        );
+        assert!(server.await.unwrap().is_err());
+        assert!(manager
+            .get_pty_cancel_token("local-auth-probe")
+            .await
+            .is_none());
+    }
 
     #[test]
     fn should_flush_pty_output_immediately_for_interactive_chunks() {

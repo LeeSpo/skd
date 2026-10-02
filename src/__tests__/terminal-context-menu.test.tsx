@@ -41,7 +41,7 @@ describe('TerminalContextMenu', () => {
 
     expect(copyItem.getAttribute('aria-disabled')).toBe('true');
     expect(copyItem.getAttribute('title')).toBe('Hold ⌥ and drag to select');
-    expect(copyItem.textContent).toContain('⌥-drag');
+    expect(copyItem.textContent).toContain('⌥ & drag');
   });
 
   it('enables Copy with the keyboard shortcut when text is selected', async () => {
