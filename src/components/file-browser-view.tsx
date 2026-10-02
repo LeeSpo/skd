@@ -1,3 +1,4 @@
+import { transferFile, useTransferScope, type TransferProgressSnapshot } from '@/lib/transfer-progress';
 import React, { useState, useEffect, useCallback, useReducer, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { invoke } from "@tauri-apps/api/core";
@@ -157,6 +158,25 @@ export function FileBrowserView({
     [connectionId],
   );
 
+  const transferScope = useTransferScope(connectionId ?? '');
+  const [transferRevision, setTransferRevision] = useState(0);
+  const transferMounted = useRef(false);
+  useEffect(() => {
+    transferMounted.current = true;
+    return () => { transferMounted.current = false; };
+  }, []);
+
+  const latestTransfers = useRef(transfers);
+  useEffect(() => { latestTransfers.current = transfers; }, [transfers]);
+  useEffect(() => () => {
+    // Work queued for one connection must not run against another connection.
+    for (const item of latestTransfers.current) {
+      if (item.status === 'queued' || item.status === 'transferring') {
+        dispatchTransfer({ type: 'CANCEL', id: item.id });
+      }
+    }
+  }, [connectionId]);
+
   // ------ Transfer execution ------
   const processTransferRef = useRef(false);
 
@@ -167,19 +187,25 @@ export function FileBrowserView({
     processTransferRef.current = true;
     dispatchTransfer({ type: "START", id: nextItem.id });
 
+    const isCurrent = transferScope.capture();
+    const isActive = () => {
+      const item = latestTransfers.current.find(item => item.id === nextItem.id);
+      return isCurrent() && (item?.status === 'transferring' || item === nextItem);
+    };
+    const report = (snapshot: TransferProgressSnapshot) => {
+      dispatchTransfer({ type: 'PROGRESS', id: nextItem.id, ...snapshot });
+    };
     const doTransfer = async () => {
       try {
         if (nextItem.direction === "upload") {
-          const result = await invoke<{ success: boolean; error?: string }>(
-            "upload_remote_file",
-            {
-              connectionId,
-              localPath: nextItem.sourcePath,
-              remotePath: nextItem.destinationPath,
-            },
-          );
+          const result = await transferFile("upload", {
+            connectionId,
+            localPath: nextItem.sourcePath,
+            remotePath: nextItem.destinationPath,
+          }, report, isActive);
+          if (!isActive()) return;
           if (result.success) {
-            dispatchTransfer({ type: "COMPLETE", id: nextItem.id });
+            dispatchTransfer({ type: "COMPLETE", id: nextItem.id, bytesTransferred: result.bytes_transferred });
             remotePanelRef.current?.refresh();
           } else {
             dispatchTransfer({
@@ -189,16 +215,14 @@ export function FileBrowserView({
             });
           }
         } else {
-          const result = await invoke<{ success: boolean; error?: string }>(
-            "download_remote_file",
-            {
-              connectionId,
-              remotePath: nextItem.sourcePath,
-              localPath: nextItem.destinationPath,
-            },
-          );
+          const result = await transferFile("download", {
+            connectionId,
+            remotePath: nextItem.sourcePath,
+            localPath: nextItem.destinationPath,
+          }, report, isActive);
+          if (!isActive()) return;
           if (result.success) {
-            dispatchTransfer({ type: "COMPLETE", id: nextItem.id });
+            dispatchTransfer({ type: "COMPLETE", id: nextItem.id, bytesTransferred: result.bytes_transferred });
             localPanelRef.current?.refresh();
             // Show success toast with quick-open actions
             const destPath = nextItem.destinationPath;
@@ -223,6 +247,7 @@ export function FileBrowserView({
           }
         }
       } catch (err) {
+        if (!isActive()) return;
         dispatchTransfer({
           type: "FAIL",
           id: nextItem.id,
@@ -230,11 +255,12 @@ export function FileBrowserView({
         });
       } finally {
         processTransferRef.current = false;
+        if (transferMounted.current) setTransferRevision(value => value + 1);
       }
     };
 
-    doTransfer();
-  }, [transfers, connectionId]);
+    void doTransfer();
+  }, [transfers, connectionId, transferRevision, transferScope]);
 
   // ------ Transfer initiation helpers ------
   const enqueueUpload = useCallback(
@@ -306,7 +332,7 @@ export function FileBrowserView({
               success: boolean;
               error?: string;
             }>("create_remote_directory", {
-              connectionId,
+            connectionId,
               path: remoteDirectory,
             });
             if (result.success) {

@@ -242,18 +242,28 @@ impl StandaloneSftpClient {
 
     /// Download a remote file to a local path. Returns bytes downloaded.
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<u64> {
-        let buffer = self.read_file_bytes(remote_path).await?;
-        let total_bytes = buffer.len() as u64;
-        tokio::fs::write(local_path, buffer).await?;
-        Ok(total_bytes)
+        self.download_file_with_progress(remote_path, local_path, None).await
+    }
+
+    pub async fn download_file_with_progress(
+        &self, remote_path: &str, local_path: &str,
+        progress: Option<&crate::sftp_transfer::ProgressCallback>,
+    ) -> Result<u64> {
+        let sftp = self.sftp.as_ref().ok_or_else(|| anyhow::anyhow!("SFTP session not connected"))?;
+        crate::sftp_transfer::download(sftp, remote_path, local_path, progress).await
     }
 
     /// Upload a local file to a remote path. Returns bytes uploaded.
     pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<u64> {
-        let data = tokio::fs::read(local_path)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to read local file '{}': {}", local_path, e))?;
-        self.write_file_bytes(remote_path, &data).await
+        self.upload_file_with_progress(local_path, remote_path, None).await
+    }
+
+    pub async fn upload_file_with_progress(
+        &self, local_path: &str, remote_path: &str,
+        progress: Option<&crate::sftp_transfer::ProgressCallback>,
+    ) -> Result<u64> {
+        let sftp = self.sftp.as_ref().ok_or_else(|| anyhow::anyhow!("SFTP session not connected"))?;
+        crate::sftp_transfer::upload(sftp, local_path, remote_path, progress).await
     }
 
     /// Create a directory on the remote server.

@@ -12,6 +12,7 @@ mod port_forward;
 mod pty_session;
 mod shell_integration;
 mod sftp_client;
+mod sftp_transfer;
 mod ssh;
 mod websocket_server;
 

@@ -120,10 +120,10 @@ describe("transfer-queue-reducer", () => {
       expect(next[0].startedAt).toBeDefined();
     });
 
-    it("transitions any matching item to transferring (no guard on status)", () => {
+    it("does not restart a completed item without retry", () => {
       const state = [makeItem({ id: "t1", status: "completed" })];
       const next = transferQueueReducer(state, { type: "START", id: "t1" });
-      expect(next[0].status).toBe("transferring");
+      expect(next[0].status).toBe("completed");
     });
 
     it("does not affect other items", () => {

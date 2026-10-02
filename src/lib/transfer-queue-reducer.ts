@@ -19,7 +19,7 @@ export interface TransferItem {
   status: TransferStatus;
   progress: number; // 0-100
   bytesTransferred: number;
-  totalBytes: number;
+  totalBytes: number | null;
   speed: number; // bytes/sec
   error?: string;
   startedAt?: number;
@@ -44,8 +44,9 @@ export type TransferAction =
       progress: number;
       bytesTransferred: number;
       speed: number;
+      totalBytes?: number | null;
     }
-  | { type: "COMPLETE"; id: string }
+  | { type: "COMPLETE"; id: string; bytesTransferred?: number | null }
   | { type: "FAIL"; id: string; error: string }
   | { type: "CANCEL"; id: string }
   | { type: "RETRY"; id: string }
@@ -87,7 +88,7 @@ export function transferQueueReducer(
 
     case "START": {
       return state.map((item) =>
-        item.id === action.id
+        item.id === action.id && item.status === "queued"
           ? { ...item, status: "transferring" as const, startedAt: Date.now() }
           : item,
       );
@@ -95,12 +96,13 @@ export function transferQueueReducer(
 
     case "PROGRESS": {
       return state.map((item) =>
-        item.id === action.id
+        item.id === action.id && item.status === "transferring"
           ? {
               ...item,
               progress: action.progress,
               bytesTransferred: action.bytesTransferred,
               speed: action.speed,
+              totalBytes: action.totalBytes === undefined ? item.totalBytes : action.totalBytes,
             }
           : item,
       );
@@ -108,11 +110,13 @@ export function transferQueueReducer(
 
     case "COMPLETE": {
       return state.map((item) =>
-        item.id === action.id
+        item.id === action.id && item.status === "transferring"
           ? {
               ...item,
               status: "completed" as const,
               progress: 100,
+              bytesTransferred: action.bytesTransferred ?? item.bytesTransferred,
+              totalBytes: action.bytesTransferred ?? item.totalBytes,
               completedAt: Date.now(),
             }
           : item,
@@ -121,7 +125,7 @@ export function transferQueueReducer(
 
     case "FAIL": {
       return state.map((item) =>
-        item.id === action.id
+        item.id === action.id && item.status === "transferring"
           ? {
               ...item,
               status: "failed" as const,

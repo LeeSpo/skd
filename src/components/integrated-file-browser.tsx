@@ -1,3 +1,4 @@
+import { transferFile, useTransferScope, type TransferProgressSnapshot } from '@/lib/transfer-progress';
 import React, { useState, useEffect, useReducer, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -540,6 +541,25 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     };
   }, [resizingColumn]);
 
+  const transferScope = useTransferScope(connectionId ?? '');
+  const [transferRevision, setTransferRevision] = useState(0);
+  const transferMounted = useRef(false);
+  useEffect(() => {
+    transferMounted.current = true;
+    return () => { transferMounted.current = false; };
+  }, []);
+
+  const latestTransfers = useRef(transfers);
+  useEffect(() => { latestTransfers.current = transfers; }, [transfers]);
+  useEffect(() => () => {
+    // Work queued for one connection must not run against another connection.
+    for (const item of latestTransfers.current) {
+      if (item.status === 'queued' || item.status === 'transferring') {
+        dispatchTransfer({ type: 'CANCEL', id: item.id });
+      }
+    }
+  }, [connectionId]);
+
   // Transfer processing loop — remote mode only
   useEffect(() => {
     if (!adapter.supportsTransfer || !connectionId) return;
@@ -549,19 +569,25 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     processTransferRef.current = true;
     dispatchTransfer({ type: "START", id: nextItem.id });
 
+    const isCurrent = transferScope.capture();
+    const isActive = () => {
+      const item = latestTransfers.current.find(item => item.id === nextItem.id);
+      return isCurrent() && (item?.status === 'transferring' || item === nextItem);
+    };
+    const report = (snapshot: TransferProgressSnapshot) => {
+      dispatchTransfer({ type: 'PROGRESS', id: nextItem.id, ...snapshot });
+    };
     const doTransfer = async () => {
       try {
         if (nextItem.direction === "upload") {
-          const result = await invoke<{ success: boolean; bytes_transferred?: number; error?: string }>(
-            "upload_remote_file",
-            {
-              connectionId,
-              localPath: nextItem.sourcePath,
-              remotePath: nextItem.destinationPath,
-            },
-          );
+          const result = await transferFile("upload", {
+            connectionId,
+            localPath: nextItem.sourcePath,
+            remotePath: nextItem.destinationPath,
+          }, report, isActive);
+          if (!isActive()) return;
           if (result.success) {
-            dispatchTransfer({ type: "COMPLETE", id: nextItem.id });
+            dispatchTransfer({ type: "COMPLETE", id: nextItem.id, bytesTransferred: result.bytes_transferred });
             toast.success(t('fileBrowser.toast.uploaded', { name: nextItem.fileName }));
             void loadFiles();
           } else {
@@ -575,16 +601,14 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
             });
           }
         } else {
-          const result = await invoke<{ success: boolean; bytes_transferred?: number; error?: string }>(
-            "download_remote_file",
-            {
-              connectionId,
-              remotePath: nextItem.sourcePath,
-              localPath: nextItem.destinationPath,
-            },
-          );
+          const result = await transferFile("download", {
+            connectionId,
+            remotePath: nextItem.sourcePath,
+            localPath: nextItem.destinationPath,
+          }, report, isActive);
+          if (!isActive()) return;
           if (result.success) {
-            dispatchTransfer({ type: "COMPLETE", id: nextItem.id });
+            dispatchTransfer({ type: "COMPLETE", id: nextItem.id, bytesTransferred: result.bytes_transferred });
             const destPath = nextItem.destinationPath;
             const destDir = destPath.substring(0, destPath.lastIndexOf("/")) || "/";
             toast.success(t('fileBrowser.toast.downloaded', { name: nextItem.fileName }), {
@@ -610,6 +634,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           }
         }
       } catch (err) {
+        if (!isActive()) return;
         dispatchTransfer({
           type: "FAIL",
           id: nextItem.id,
@@ -620,12 +645,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
         });
       } finally {
         processTransferRef.current = false;
+        if (transferMounted.current) setTransferRevision(value => value + 1);
       }
     };
 
     void doTransfer();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is a stable inline fn; adding it would cause infinite re-renders
-  }, [transfers, connectionId, adapter.supportsTransfer]);
+  }, [transfers, connectionId, adapter.supportsTransfer, transferRevision, transferScope]);
 
   const handleResizeStart = (columnName: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -934,7 +960,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
         for (const remoteDirectory of plan.directories) {
           try {
             await invoke<boolean>("create_directory", {
-              connectionId,
+            connectionId,
               path: remoteDirectory,
             });
             createdDirectoryCount += 1;

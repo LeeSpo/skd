@@ -55,10 +55,11 @@ function formatEta(item: TransferItem): string {
   if (
     item.status !== "transferring" ||
     item.speed === 0 ||
+    item.totalBytes === null ||
     item.totalBytes === 0
   )
     return "—";
-  const remaining = item.totalBytes - item.bytesTransferred;
+  const remaining = Math.max(0, item.totalBytes - item.bytesTransferred);
   const seconds = Math.ceil(remaining / item.speed);
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
@@ -177,28 +178,28 @@ export function TransferQueue({
 
                   {item.status === "transferring" && (
                     <>
-                      <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                      {item.totalBytes !== null && <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-[width] duration-300 motion-reduce:transition-none"
                           style={{ width: `${item.progress}%` }}
                         />
-                      </div>
-                      <span className="text-muted-foreground w-10 text-right">
-                        {item.progress}%
+                      </div>}
+                      <span className="text-muted-foreground min-w-10 text-right">
+                        {item.totalBytes === null ? formatSize(item.bytesTransferred) : `${item.progress}%`}
                       </span>
                       <span className="text-muted-foreground w-16 text-right">
                         {formatSpeed(item.speed)}
                       </span>
-                      <span className="text-muted-foreground w-10 text-right">
+                      {item.totalBytes !== null && <span className="text-muted-foreground w-10 text-right">
                         {formatEta(item)}
-                      </span>
+                      </span>}
                     </>
                   )}
 
                   {item.status === "completed" && (
                     <>
                       <span className="text-muted-foreground shrink-0">
-                        {formatSize(item.totalBytes)}
+                        {formatSize(item.totalBytes ?? item.bytesTransferred)}
                       </span>
                       {item.direction === "download" && (
                         <>

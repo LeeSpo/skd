@@ -2688,7 +2688,20 @@ pub async fn download_remote_file(
     remote_path: String,
     local_path: String,
     state: State<'_, Arc<ConnectionManager>>,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
+    webview: tauri::Webview,
 ) -> Result<FileTransferResponse, String> {
+    // Decode the optional channel ID because Tauri's Channel itself is not Deserialize.
+    // Omitted IDs keep existing invoke callers compatible.
+    let on_progress = on_progress
+        .map(|id| id.channel_on::<_, crate::sftp_transfer::TransferProgress>(webview));
+    let has_progress = on_progress.is_some();
+    let report = move |event| {
+        if let Some(channel) = &on_progress {
+            // A closed UI must not interrupt a file write.
+            let _ = channel.send(event);
+        }
+    };
     let conn_type = state.get_connection_type(&connection_id).await;
 
     let result = match conn_type.as_deref() {
@@ -2698,7 +2711,13 @@ pub async fn download_remote_file(
             let client = connections
                 .get(&connection_id)
                 .ok_or("SFTP connection not found".to_string())?;
-            client.download_file(&remote_path, &local_path).await
+            if has_progress {
+                client
+                    .download_file_with_progress(&remote_path, &local_path, Some(&report))
+                    .await
+            } else {
+                client.download_file(&remote_path, &local_path).await
+            }
         }
         Some("FTP") => {
             let ftp_map = state.get_ftp_connection().await;
@@ -2717,7 +2736,13 @@ pub async fn download_remote_file(
                 .await
                 .ok_or_else(|| format!("No connection found for '{}'", connection_id))?;
             let client = connection.read().await;
-            client.download_file(&remote_path, &local_path).await
+            if has_progress {
+                client
+                    .download_file_with_progress(&remote_path, &local_path, Some(&report))
+                    .await
+            } else {
+                client.download_file(&remote_path, &local_path).await
+            }
         }
     };
 
@@ -2743,7 +2768,20 @@ pub async fn upload_remote_file(
     local_path: String,
     remote_path: String,
     state: State<'_, Arc<ConnectionManager>>,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
+    webview: tauri::Webview,
 ) -> Result<FileTransferResponse, String> {
+    // Decode the optional channel ID because Tauri's Channel itself is not Deserialize.
+    // Omitted IDs keep existing invoke callers compatible.
+    let on_progress = on_progress
+        .map(|id| id.channel_on::<_, crate::sftp_transfer::TransferProgress>(webview));
+    let has_progress = on_progress.is_some();
+    let report = move |event| {
+        if let Some(channel) = &on_progress {
+            // A closed UI must not interrupt a file write.
+            let _ = channel.send(event);
+        }
+    };
     let conn_type = state.get_connection_type(&connection_id).await;
 
     let result = match conn_type.as_deref() {
@@ -2753,7 +2791,13 @@ pub async fn upload_remote_file(
             let client = connections
                 .get(&connection_id)
                 .ok_or("SFTP connection not found".to_string())?;
-            client.upload_file(&local_path, &remote_path).await
+            if has_progress {
+                client
+                    .upload_file_with_progress(&local_path, &remote_path, Some(&report))
+                    .await
+            } else {
+                client.upload_file(&local_path, &remote_path).await
+            }
         }
         Some("FTP") => {
             let ftp_map = state.get_ftp_connection().await;
@@ -2772,7 +2816,13 @@ pub async fn upload_remote_file(
                 .await
                 .ok_or_else(|| format!("No connection found for '{}'", connection_id))?;
             let client = connection.read().await;
-            client.upload_file(&local_path, &remote_path).await
+            if has_progress {
+                client
+                    .upload_file_with_progress(&local_path, &remote_path, Some(&report))
+                    .await
+            } else {
+                client.upload_file(&local_path, &remote_path).await
+            }
         }
     };
 
