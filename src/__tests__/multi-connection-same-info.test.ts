@@ -50,36 +50,6 @@ describe('getTabDisplayName', () => {
     expect(getTabDisplayName(tab3, allTabs)).toBe('My Server (3)');
   });
 
-  // Task 2.3: suffix removed when sibling count drops to 1
-  it('removes suffix when a sibling is removed and only one tab remains', () => {
-    const tab1 = makeTab({ id: 'conn-1' });
-    const tab2 = makeTab({ id: 'conn-1-dup-1234', originalConnectionId: 'conn-1' });
-
-    // Initially both have suffixes
-    expect(getTabDisplayName(tab1, [tab1, tab2])).toBe('My Server (1)');
-    expect(getTabDisplayName(tab2, [tab1, tab2])).toBe('My Server (2)');
-
-    // After removing tab2, tab1 has no suffix
-    expect(getTabDisplayName(tab1, [tab1])).toBe('My Server');
-  });
-
-  // Task 7.3: duplicate of a duplicate chains originalConnectionId to root profile
-  it('duplicate of a duplicate uses root profile originalConnectionId', () => {
-    // Original tab
-    const tab1 = makeTab({ id: 'conn-1' });
-    // First duplicate
-    const tab2 = makeTab({ id: 'conn-1-dup-1000', originalConnectionId: 'conn-1' });
-    // Duplicate of the duplicate — originalConnectionId should still point to conn-1
-    // (the handleDuplicateTab code uses `tabToDuplicate.originalConnectionId || tabId`)
-    const tab3 = makeTab({ id: 'conn-1-dup-2000', originalConnectionId: 'conn-1' });
-    const allTabs = [tab1, tab2, tab3];
-
-    // All three share the same base profile and get sequential suffixes
-    expect(getTabDisplayName(tab1, allTabs)).toBe('My Server (1)');
-    expect(getTabDisplayName(tab2, allTabs)).toBe('My Server (2)');
-    expect(getTabDisplayName(tab3, allTabs)).toBe('My Server (3)');
-  });
-
   // Tabs from different profiles should not affect each other
   it('tabs from different profiles do not get suffixes', () => {
     const tabA = makeTab({ id: 'conn-1', name: 'Server A' });

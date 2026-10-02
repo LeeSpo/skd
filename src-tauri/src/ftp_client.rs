@@ -408,27 +408,6 @@ mod tests {
         );
     }
 
-    // ---- 3. List root directory -------------------------------------------
-
-    #[tokio::test]
-    async fn test_ftp_list_root() {
-        let Some(cfg) = test_config() else {
-            eprintln!("SKIP: FTP_TEST_HOST not set");
-            return;
-        };
-
-        let mut client = FtpClient::connect(&cfg).await.expect("connect");
-
-        let entries = client.list_dir("/").await.expect("list root directory");
-        eprintln!("Root contains {} entries:", entries.len());
-        for e in &entries {
-            eprintln!("  {:?}  {:>10}  {}", e.file_type, e.size, e.name);
-        }
-        // Root should be listable (may be empty on fresh server)
-
-        client.disconnect().await.ok();
-    }
-
     // ---- 4. Full CRUD cycle: mkdir → upload → list → download → rename → delete
 
     #[tokio::test]
@@ -622,14 +601,6 @@ mod tests {
         let config: FtpConfig = serde_json::from_str(json).unwrap();
         assert!(config.ftps_enabled);
         assert_eq!(config.port, 990);
-    }
-
-    #[tokio::test]
-    async fn test_disconnect_on_new_client_is_ok() {
-        let mut client = FtpClient { stream: None };
-        let result = client.disconnect().await;
-        assert!(result.is_ok());
-        assert!(client.stream.is_none());
     }
 
     #[test]

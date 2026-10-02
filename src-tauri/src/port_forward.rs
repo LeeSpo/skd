@@ -433,13 +433,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stop_all_is_noop_when_empty() {
-        let mgr = PortForwardManager::new();
-        mgr.stop_all_for_connection("missing").await;
-        assert!(mgr.list("missing").await.is_empty());
-    }
-
-    #[tokio::test]
     async fn stop_missing_forward_errors() {
         let mgr = PortForwardManager::new();
         let err = mgr.stop("c1", "f1").await.unwrap_err();

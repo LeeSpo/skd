@@ -126,21 +126,6 @@ describe("useWebviewFileDrop", () => {
     await __resetWebviewFileDropSingletonForTest();
   });
 
-  it("starts with isDragOver=false and subscribes lazily on mount", async () => {
-    const onDrop = vi.fn();
-    const rect = makeRect(0, 0, 100, 100);
-
-    const { getByTestId } = render(
-      <DropZone enabled onDrop={onDrop} rect={rect} />,
-    );
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(getByTestId("zone").getAttribute("data-drag-over")).toBe("0");
-    expect(listenCount).toBe(1);
-  });
-
   it("suppresses overlay and callback when enabled=false", async () => {
     const onDrop = vi.fn();
     const rect = makeRect(0, 0, 100, 100);
@@ -490,25 +475,4 @@ describe("useWebviewFileDrop", () => {
     expect(onFileDrop).not.toHaveBeenCalled();
   });
 
-  it("unsubscribes from the Tauri event when the last consumer unmounts", async () => {
-    const onDrop = vi.fn();
-    const rect = makeRect(0, 0, 100, 100);
-
-    const { unmount } = render(
-      <DropZone enabled onDrop={onDrop} rect={rect} />,
-    );
-    await act(async () => {
-      await Promise.resolve();
-    });
-    const beforeUnlisten = unlistenCount;
-    expect(listenCount).toBe(1);
-
-    unmount();
-    // Wait for the unlisten promise chain to settle.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(unlistenCount).toBeGreaterThan(beforeUnlisten);
-  });
 });

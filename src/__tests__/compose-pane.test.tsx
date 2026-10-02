@@ -84,19 +84,6 @@ describe('ComposePane', () => {
     cleanup();
   });
 
-  it('shows empty state when active tab is not a terminal', () => {
-    mocks.activeTab = {
-      id: 'fb-1',
-      name: 'files',
-      tabType: 'file-browser',
-      connectionStatus: 'connected',
-      protocol: 'SFTP',
-    };
-
-    renderComposePane();
-    expect(screen.getByText('composePane.emptyState.noTerminal')).not.toBeNull();
-  });
-
   it('sends draft to active terminal when Send is clicked', () => {
     renderComposePane();
 

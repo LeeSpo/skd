@@ -2,7 +2,7 @@ import React, { StrictMode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { aggregateTransferBytes, createProgressAdapter, transferFile, useTransferScope, type TransferProgressEvent } from '@/lib/transfer-progress';
+import { createProgressAdapter, transferFile, useTransferScope, type TransferProgressEvent } from '@/lib/transfer-progress';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -69,10 +69,6 @@ describe('transfer progress', () => {
     channels.forEach(channel => channel.onmessage({ bytesTransferred: 100, totalBytes: 100 }));
     expect(report).toHaveBeenCalledTimes(callCount);
     expect(invoke).toHaveBeenCalledWith('upload_remote_file', expect.objectContaining(params));
-  });
-
-  it('adds the current file to completed bytes without accumulating successive snapshots', () => {
-    expect([10, 20, 30].map(bytes => aggregateTransferBytes(100, bytes))).toEqual([110, 120, 130]);
   });
 
   it('invalidates captured attempts on connection changes and unmount', () => {

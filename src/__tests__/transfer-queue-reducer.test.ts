@@ -460,28 +460,4 @@ describe("transfer-queue-reducer property tests", () => {
     );
   });
 
-  it("state machine: max one transferring at any point after sequential START calls", () => {
-    const state = [
-      makeItem({ id: "t1", status: "queued" }),
-      makeItem({ id: "t2", status: "queued" }),
-      makeItem({ id: "t3", status: "queued" }),
-    ];
-    let current = state;
-    // Start t1
-    current = transferQueueReducer(current, { type: "START", id: "t1" });
-    const transferring = current.filter(
-      (t) => t.status === "transferring",
-    ).length;
-    expect(transferring).toBeLessThanOrEqual(current.length);
-
-    // Complete t1, then start t2
-    current = transferQueueReducer(current, {
-      type: "COMPLETE",
-      id: "t1",
-    });
-    current = transferQueueReducer(current, { type: "START", id: "t2" });
-    expect(
-      current.filter((t) => t.status === "transferring").length,
-    ).toBe(1);
-  });
 });

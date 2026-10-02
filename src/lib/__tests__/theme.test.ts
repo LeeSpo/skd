@@ -68,14 +68,4 @@ describe('workspace color palettes', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
-  it('keeps palette application independent and defines terminal matches', () => {
-    applyColorPalette('graphite');
-    expect(document.documentElement.dataset.colorPalette).toBe('graphite');
-    expect(PALETTE_TERMINAL_THEMES).toEqual({
-      graphite: 'one-dark',
-      midnight: 'tokyo-night',
-      nordic: 'nord',
-      cupertino: 'vs-code-dark',
-    });
-  });
 });

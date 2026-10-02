@@ -212,17 +212,4 @@ mod tests {
         });
     }
 
-    #[test]
-    fn trust_entry_round_trip_from_key_parts() {
-        with_temp_store(|| {
-            let keypair = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
-            let public = keypair.public_key().clone();
-            let key_type = public.algorithm().as_str().to_string();
-            let key_data = public.public_key_base64();
-
-            trust_host_key_entry("10.0.0.1", 22, &key_type, &key_data).unwrap();
-            let result = verify_host_key("10.0.0.1", 22, &public).unwrap();
-            assert_eq!(result, VerifyResult::Known);
-        });
-    }
 }

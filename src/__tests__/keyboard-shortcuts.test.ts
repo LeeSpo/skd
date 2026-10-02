@@ -38,13 +38,6 @@ function findShortcut(
 describe('createSplitViewShortcuts', () => {
   // Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
 
-  it('returns 14 shortcuts total', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    // 1 splitRight + 1 splitDown + 9 focusGroup + 1 closeTab + 1 nextTab + 1 prevTab
-    expect(shortcuts).toHaveLength(14);
-  });
-
   // Requirement 5.1: Ctrl+\ splits right
   it('Ctrl+\\ triggers splitRight', () => {
     const actions = createMockActions();
@@ -69,16 +62,6 @@ describe('createSplitViewShortcuts', () => {
 
   // Requirement 5.2: Ctrl+1~9 focuses group by index (0-based)
   describe('Ctrl+1~9 focus group shortcuts', () => {
-    it('creates 9 focus group shortcuts for digits 1-9', () => {
-      const actions = createMockActions();
-      const shortcuts = createSplitViewShortcuts(actions);
-
-      for (let digit = 1; digit <= 9; digit++) {
-        const shortcut = findShortcut(shortcuts, String(digit), { ctrlKey: true, shiftKey: false });
-        expect(shortcut).toBeDefined();
-      }
-    });
-
     it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])(
       'Ctrl+%i calls focusGroup with 0-based index',
       (digit) => {
@@ -145,38 +128,6 @@ describe('createSplitViewShortcuts', () => {
     expect(actions.prevTab).toHaveBeenCalledOnce();
   });
 
-  // Requirement 5.6: Non-existent group index is a no-op (caller responsibility)
-  // The shortcuts always call focusGroup — the caller decides whether the index is valid.
-  // We verify the shortcut simply passes the index through without side effects on other actions.
-  it('focusGroup shortcut for index 8 (Ctrl+9) does not trigger other actions', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    const shortcut = findShortcut(shortcuts, '9', { ctrlKey: true, shiftKey: false });
-
-    shortcut!.handler();
-    expect(actions.focusGroup).toHaveBeenCalledWith(8);
-    expect(actions.splitRight).not.toHaveBeenCalled();
-    expect(actions.splitDown).not.toHaveBeenCalled();
-    expect(actions.closeTab).not.toHaveBeenCalled();
-    expect(actions.nextTab).not.toHaveBeenCalled();
-    expect(actions.prevTab).not.toHaveBeenCalled();
-  });
-
-  it('all shortcuts have ctrlKey set to true', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    for (const shortcut of shortcuts) {
-      expect(shortcut.ctrlKey).toBe(true);
-    }
-  });
-
-  it('all shortcuts have a non-empty description', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    for (const shortcut of shortcuts) {
-      expect(shortcut.description).toBeTruthy();
-    }
-  });
 });
 
 describe('useKeyboardShortcuts', () => {

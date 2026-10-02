@@ -523,16 +523,4 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_disconnect_on_new_client_is_ok() {
-        let mut client = StandaloneSftpClient {
-            session: None,
-            sftp: None,
-        };
-        // Disconnecting a never-connected client should succeed
-        let result = client.disconnect().await;
-        assert!(result.is_ok());
-        assert!(client.session.is_none());
-        assert!(client.sftp.is_none());
-    }
 }

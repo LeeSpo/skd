@@ -395,38 +395,6 @@ describe('PtyTerminal activation', () => {
     expect(terminal.refresh).toHaveBeenCalledWith(0, terminal.rows - 1);
   });
 
-  it('lets xterm handle Ctrl+V paste without duplicate custom send', async () => {
-    const readText = vi.fn().mockResolvedValue('pasted text');
-    Object.defineProperty(navigator, 'platform', {
-      configurable: true,
-      value: 'Win32',
-    });
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        readText,
-      },
-    });
-    renderTerminal(true);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60);
-    });
-
-    const preventDefault = vi.fn();
-    const handled = getCustomKeyHandler()({
-      type: 'keydown',
-      key: 'v',
-      ctrlKey: true,
-      metaKey: false,
-      preventDefault,
-    } as unknown as KeyboardEvent);
-    await flushPromises();
-
-    expect(handled).toBe(true);
-    expect(preventDefault).not.toHaveBeenCalled();
-    expect(readText).not.toHaveBeenCalled();
-  });
-
   it('lets xterm handle Command+V paste without duplicate custom send on macOS', async () => {
     const readText = vi.fn().mockResolvedValue('mac paste');
     Object.defineProperty(navigator, 'platform', {

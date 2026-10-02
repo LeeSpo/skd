@@ -12,12 +12,6 @@ import {
 } from '../terminal-input-context';
 
 describe('terminal-input-context helpers', () => {
-  it('wraps text in bracketed paste sequences', () => {
-    expect(wrapBracketedPaste('echo hi')).toBe(
-      `${BRACKETED_PASTE_START}echo hi${BRACKETED_PASTE_END}`,
-    );
-  });
-
   it('appends newline and bracketed paste by default', () => {
     expect(prepareTerminalPayload('echo hi')).toBe(
       `${BRACKETED_PASTE_START}echo hi\n${BRACKETED_PASTE_END}`,

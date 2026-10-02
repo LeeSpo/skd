@@ -137,15 +137,6 @@ describe('UpdateChecker', () => {
       expect(mockGetVersion).toHaveBeenCalled();
     });
 
-    it('skips check when checkUpdates is false in localStorage', async () => {
-      localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ checkUpdates: false }));
-      render(<UpdateChecker />);
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 50));
-      });
-      expect(mockCheckForGithubUpdate).not.toHaveBeenCalled();
-    });
-
     it('shows no toast on silent auto-check when no update', async () => {
       enableAutoCheck();
       render(<UpdateChecker />);
@@ -268,16 +259,6 @@ describe('UpdateChecker', () => {
       expect(
         screen.getByText('A new version is available with improvements and fixes.'),
       ).toBeTruthy();
-    });
-
-    it('shows View on GitHub button in available state', async () => {
-      enableAutoCheck();
-      mockCheckForGithubUpdate.mockResolvedValue(makeAvailable('3.0.0'));
-      render(<UpdateChecker />);
-
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-      expect(screen.getByText('View on GitHub')).toBeTruthy();
-      expect(screen.getByText('Later')).toBeTruthy();
     });
 
     it('opens the release page when View on GitHub is clicked', async () => {

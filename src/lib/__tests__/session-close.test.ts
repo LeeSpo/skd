@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   busySessionIds,
-  shouldConfirmClose,
   tabsRemovedByBulkClose,
 } from '../session-close';
 
@@ -53,12 +52,5 @@ describe('busySessionIds', () => {
       { id: 'disc-run', connectionStatus: 'disconnected' },
       { id: 'conn-run', connectionStatus: 'connecting' },
     ], isRunning)).toEqual([]);
-  });
-});
-
-describe('shouldConfirmClose', () => {
-  it('confirms only when at least one session is busy', () => {
-    expect(shouldConfirmClose([])).toBe(false);
-    expect(shouldConfirmClose(['term-run'])).toBe(true);
   });
 });

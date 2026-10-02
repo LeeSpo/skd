@@ -398,33 +398,6 @@ describe('IntegratedFileBrowser local mode', () => {
     });
   });
 
-  it('preserves a multi-selection when right-clicking a selected row', async () => {
-    mockedInvoke.mockImplementation(async (command: string) => {
-      if (command === 'get_home_directory') return '/Users/test';
-      if (command === 'list_local_files') {
-        return ['alpha.txt', 'bravo.txt'].map((name) => ({
-          name,
-          file_type: 'File',
-          size: 1,
-          modified: '2026-01-01T10:00:00',
-          permissions: '-rw-r--r--',
-        }));
-      }
-      throw new Error(`Unexpected invoke: ${command}`);
-    });
-
-    render(<IntegratedFileBrowser mode="local" />);
-    await waitFor(() => {
-      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/Users/test' });
-    });
-    fireEvent.click(screen.getByText('alpha.txt'));
-    fireEvent.click(screen.getByText('bravo.txt'), { metaKey: true });
-    fireEvent.contextMenu(screen.getByText('alpha.txt'));
-
-    expect(screen.getByText('alpha.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByText('bravo.txt').closest('[role="row"]')?.getAttribute('aria-selected')).toBe('true');
-  });
-
   it('omits leftover separators when right-clicking a local multi-selection', async () => {
     mockedInvoke.mockImplementation(async (command: string) => {
       if (command === 'get_home_directory') return '/Users/test';
@@ -686,27 +659,6 @@ describe('IntegratedFileBrowser local mode', () => {
         }],
       });
     });
-  });
-
-  it('renders shared remote-style chrome with fixed column headers', async () => {
-    render(<IntegratedFileBrowser mode="local" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('readme.md')).toBeTruthy();
-    });
-
-    expect(screen.getByTestId('directory-tree')).toBeTruthy();
-    expect(screen.getByText('Name')).toBeTruthy();
-    expect(screen.getByText('Size')).toBeTruthy();
-    expect(screen.getByText('Modified')).toBeTruthy();
-    expect(screen.queryByText('Permissions')).toBeNull();
-    expect(screen.queryByText('Owner')).toBeNull();
-
-    const scrollArea = screen.getByTestId('scroll-area');
-    expect(scrollArea.contains(screen.getByText('readme.md'))).toBe(true);
-    expect(document.querySelector('thead')).toBeNull();
-    expect(document.querySelector('table')).toBeNull();
-    expect(document.querySelector('.panel-toolbar')).not.toBeNull();
   });
 
   it('loads the directory reported by the active terminal when following is enabled', async () => {

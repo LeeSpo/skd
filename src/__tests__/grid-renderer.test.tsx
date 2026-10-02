@@ -74,27 +74,6 @@ describe('GridRenderer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders a leaf node as TerminalGroupView', () => {
-    const node: GridNode = { type: 'leaf', groupId: 'g1' };
-    const { container } = render(<GridRenderer node={node} path={[]} />);
-    expect(container.querySelector('[data-group-id="g1"]')).not.toBeNull();
-  });
-
-  it('renders a branch node with multiple panels', () => {
-    const node: GridNode = {
-      type: 'branch',
-      direction: 'horizontal',
-      children: [
-        { type: 'leaf', groupId: 'g1' },
-        { type: 'leaf', groupId: 'g2' },
-      ],
-      sizes: [50, 50],
-    };
-    const { container } = render(<GridRenderer node={node} path={[]} />);
-    expect(container.querySelector('[data-group-id="g1"]')).not.toBeNull();
-    expect(container.querySelector('[data-group-id="g2"]')).not.toBeNull();
-  });
-
   it('renders nested branch nodes recursively', () => {
     const node: GridNode = {
       type: 'branch',

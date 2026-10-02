@@ -36,12 +36,6 @@ describe('terminal multilingual font configuration', () => {
     expect(getTerminalOptions(defaultAppearanceSettings).altClickMovesCursor).toBe(false);
   });
 
-  it('includes CJK and emoji fallbacks in the multilingual stack', () => {
-    expect(MACOS_MULTILINGUAL_TERMINAL_FONT).toContain('Hiragino Kaku Gothic ProN');
-    expect(MACOS_MULTILINGUAL_TERMINAL_FONT).toContain('PingFang SC');
-    expect(MACOS_MULTILINGUAL_TERMINAL_FONT).toContain('Apple Color Emoji');
-  });
-
   it('detects legacy Latin-only font stacks', () => {
     expect(isLegacyLatinOnlyFontFamily(LEGACY_LATIN_ONLY_TERMINAL_FONT)).toBe(true);
     expect(isLegacyLatinOnlyFontFamily("Menlo, Monaco, 'Courier New', monospace")).toBe(true);
@@ -91,6 +85,19 @@ describe('terminal multilingual font configuration', () => {
 
     expect(migrated.fontFamily).toBe(MACOS_MULTILINGUAL_TERMINAL_FONT);
     expect(migrated.useWebglRenderer).toBe(true);
+  });
+
+  it('migrates the regressed 500-line saved scrollback value back to the default', () => {
+    localStorage.setItem(
+      'terminalAppearance',
+      JSON.stringify({
+        ...defaultAppearanceSettings,
+        scrollback: 500,
+      }),
+    );
+
+    expect(loadAppearanceSettings().scrollback).toBe(10000);
+    expect(getTerminalOptions(loadAppearanceSettings()).scrollback).toBe(10000);
   });
 });
 

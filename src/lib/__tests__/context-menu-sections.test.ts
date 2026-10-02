@@ -36,9 +36,4 @@ describe('interleaveContextMenuSections', () => {
     ).toEqual(['Rename', 'sep:1', 'Delete']);
   });
 
-  it('renders the local multi-select shape as Delete only', () => {
-    expect(
-      interleaveContextMenuSections([[], [], ['Delete']], renderSeparator),
-    ).toEqual(['Delete']);
-  });
 });

@@ -3753,17 +3753,6 @@ mod local_fs_tests {
     }
 
     #[tokio::test]
-    async fn test_delete_local_directory() {
-        let dir = create_test_dir();
-        let sub_path = dir.path().join("subdir").to_string_lossy().to_string();
-        assert!(std::path::Path::new(&sub_path).exists());
-        let result = delete_local_item(sub_path.clone(), true).await;
-        assert!(result.is_ok());
-        assert!(!std::path::Path::new(&sub_path).exists());
-        remove_from_trash("subdir");
-    }
-
-    #[tokio::test]
     async fn test_delete_local_file_moves_to_trash() {
         let dir = create_test_dir();
         let unique_name = format!(

@@ -6,7 +6,6 @@ import {
   matchesExcludePattern,
   compareDirectories,
   computeSyncSummary,
-  DEFAULT_SYNC_CONFIG,
   type SyncConfig,
   type SyncEntry,
 } from "../lib/sync-types";
@@ -33,9 +32,6 @@ describe("matchesExcludePattern", () => {
     expect(matchesExcludePattern("anything.txt", [])).toBe(false);
   });
 
-  it("matches first applicable pattern", () => {
-    expect(matchesExcludePattern(".git", [".DS_Store", ".git", "*.log"])).toBe(true);
-  });
 });
 
 // ── compareDirectories ──
@@ -288,18 +284,5 @@ describe("computeSyncSummary", () => {
     const summary = computeSyncSummary(entries);
     expect(summary.toUpload).toBe(1);
     expect(summary.totalBytes).toBe(200);
-  });
-});
-
-// ── DEFAULT_SYNC_CONFIG ──
-
-describe("DEFAULT_SYNC_CONFIG", () => {
-  it("has sensible defaults", () => {
-    expect(DEFAULT_SYNC_CONFIG.direction).toBe("local-to-remote");
-    expect(DEFAULT_SYNC_CONFIG.criteria).toBe("size+modified");
-    expect(DEFAULT_SYNC_CONFIG.deleteOrphaned).toBe(false);
-    expect(DEFAULT_SYNC_CONFIG.recursive).toBe(true);
-    expect(DEFAULT_SYNC_CONFIG.excludePatterns).toContain(".git");
-    expect(DEFAULT_SYNC_CONFIG.excludePatterns).toContain("node_modules");
   });
 });

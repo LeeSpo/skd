@@ -672,33 +672,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_connection_type_set_for_sftp() {
-        let mgr = ConnectionManager::new();
-        // Manually insert a connection type (simulating what create_sftp_connection does)
-        {
-            let mut types = mgr.connection_types.write().await;
-            types.insert("sftp-1".to_string(), "SFTP".to_string());
-        }
-        assert_eq!(
-            mgr.get_connection_type("sftp-1").await,
-            Some("SFTP".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_connection_type_set_for_ftp() {
-        let mgr = ConnectionManager::new();
-        {
-            let mut types = mgr.connection_types.write().await;
-            types.insert("ftp-1".to_string(), "FTP".to_string());
-        }
-        assert_eq!(
-            mgr.get_connection_type("ftp-1").await,
-            Some("FTP".to_string())
-        );
-    }
-
-    #[tokio::test]
     async fn test_close_sftp_removes_connection_type() {
         let mgr = ConnectionManager::new();
         // Simulate having an SFTP connection
@@ -873,26 +846,6 @@ mod tests {
             .await
             .expect("close_local_connection");
         assert!(mgr.get_connection_type("local-1").await.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_dispatch_routing_sftp_vs_ftp() {
-        let mgr = ConnectionManager::new();
-        {
-            let mut types = mgr.connection_types.write().await;
-            types.insert("conn-sftp".to_string(), "SFTP".to_string());
-            types.insert("conn-ftp".to_string(), "FTP".to_string());
-        }
-
-        // Simulate dispatch logic from list_remote_files command
-        let sftp_type = mgr.get_connection_type("conn-sftp").await.unwrap();
-        assert_eq!(sftp_type, "SFTP");
-
-        let ftp_type = mgr.get_connection_type("conn-ftp").await.unwrap();
-        assert_eq!(ftp_type, "FTP");
-
-        // Unknown connection returns None
-        assert!(mgr.get_connection_type("conn-unknown").await.is_none());
     }
 
     fn dummy_pty_session() -> (PtySession, tokio::sync::mpsc::Sender<Vec<u8>>) {

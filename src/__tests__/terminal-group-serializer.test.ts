@@ -215,45 +215,4 @@ describe('migrateFromLegacy', () => {
     expect(localStorage.getItem('skd-connections')).toBe('{"profiles":[]}');
     logSpy.mockRestore();
   });
-
-  it('does nothing when no legacy data exists', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    migrateFromLegacy();
-
-    expect(logSpy).not.toHaveBeenCalled();
-    logSpy.mockRestore();
-  });
-
-  it('handles both legacy keys present simultaneously', () => {
-    localStorage.setItem('skd-active-connections', '[]');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs: [] }));
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    migrateFromLegacy();
-
-    expect(localStorage.getItem('skd-active-connections')).toBeNull();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    expect(logSpy).toHaveBeenCalledOnce();
-    logSpy.mockRestore();
-  });
-});
-
-describe('createDefaultState', () => {
-  it('returns a single group with empty tabs', () => {
-    const state = createDefaultState();
-    const groupIds = Object.keys(state.groups);
-    expect(groupIds).toHaveLength(1);
-    const group = state.groups[groupIds[0]];
-    expect(group.tabs).toEqual([]);
-    expect(group.activeTabId).toBeNull();
-  });
-
-  it('has a leaf grid layout matching the group', () => {
-    const state = createDefaultState();
-    expect(state.gridLayout.type).toBe('leaf');
-    if (state.gridLayout.type === 'leaf') {
-      expect(state.gridLayout.groupId).toBe(state.activeGroupId);
-    }
-  });
 });

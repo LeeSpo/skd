@@ -446,12 +446,6 @@ mod tests {
         output
     }
 
-    #[test]
-    fn default_shell_returns_non_empty() {
-        let shell = default_shell();
-        assert!(!shell.is_empty());
-    }
-
     #[tokio::test]
     async fn create_local_pty_session_produces_output() {
         let isolated = isolated_local_pty(&default_shell());

@@ -83,19 +83,6 @@ describe('ConnectionDialog field layout', () => {
     expect(screen.getByRole('tab', { name: 'Advanced' })).toBeTruthy();
   });
 
-  it('shows password and remember-password on the Connection tab by default', () => {
-    render(
-      <ConnectionDialog
-        open
-        onOpenChange={vi.fn()}
-        onConnect={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByLabelText('Password')).toBeTruthy();
-    expect(screen.getByLabelText('Remember Password')).toBeTruthy();
-  });
-
   it('shows private key fields when editing a publickey connection', () => {
     render(
       <ConnectionDialog

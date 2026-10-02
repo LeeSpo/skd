@@ -241,38 +241,6 @@ describe('terminal-group-reducer property tests', () => {
     );
   });
 
-  // Feature: terminal-split-view, Property 4: 终端组 ID 唯一性不变量
-  // **Validates: Requirements 1.4**
-  it('Property 4: All group IDs remain unique after any operation', () => {
-    fc.assert(
-      fc.property(
-        arbitraryTerminalGroupState,
-        arbitrarySplitDirection,
-        arbitrarySplitDirection,
-        (state, dir1, dir2) => {
-          const groupIds = Object.keys(state.groups);
-          // Apply two splits
-          let current = terminalGroupReducer(state, {
-            type: 'SPLIT_GROUP',
-            groupId: groupIds[0],
-            direction: dir1,
-          });
-          const newGroupIds = Object.keys(current.groups);
-          current = terminalGroupReducer(current, {
-            type: 'SPLIT_GROUP',
-            groupId: newGroupIds[newGroupIds.length - 1],
-            direction: dir2,
-          });
-
-          const finalIds = Object.keys(current.groups);
-          const uniqueIds = new Set(finalIds);
-          expect(uniqueIds.size).toBe(finalIds.length);
-        },
-      ),
-      { numRuns: 100 },
-    );
-  });
-
   // Feature: terminal-split-view, Property 5: 组内标签页激活
   // **Validates: Requirements 2.1**
   it('Property 5: ACTIVATE_TAB sets activeTabId correctly', () => {

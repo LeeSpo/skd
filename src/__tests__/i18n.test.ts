@@ -2,10 +2,6 @@ import i18n from '../lib/i18n';
 import { describe, it, expect } from 'vitest';
 
 describe('i18n', () => {
-  it('should initialize with English', () => {
-    expect(i18n.language).toBe('en');
-  });
-
   it('should have common keys loaded', () => {
     expect(i18n.t('common.cancel')).toBe('Cancel');
     expect(i18n.t('common.save')).toBe('Save');

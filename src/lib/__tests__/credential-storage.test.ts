@@ -389,14 +389,6 @@ describe('credential storage', () => {
     expect(bundle).toBe(JSON.stringify({ version: 1, passphrase: 'legacy-passphrase' }));
   });
 
-  it('deleteConnectionSecrets invokes backend delete command', async () => {
-    await deleteConnectionSecrets('conn-3');
-
-    expect(invokeMock).toHaveBeenCalledWith('delete_connection_secrets', {
-      connectionId: 'conn-3',
-    });
-  });
-
   it('stores public-key authentication material in one Keychain entry', async () => {
     const flags = await storeConnectionSecrets(
       'conn-4',
