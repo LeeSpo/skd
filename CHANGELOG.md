@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-02
+
+### Added
+
+- **Application-Wide Transfer Queue**: Added a Rust-managed FIFO queue for all file transfers, ensuring serialized execution, cancellation support, and consistent state across native drag-and-drop and webview transfers.
+- **Streaming SFTP File Transfers**: Implemented chunk-based streaming for SFTP uploads and downloads, eliminating high memory consumption from buffering entire files and providing real-time progress callbacks.
+- **Directory Transfer & Sync Byte Progress**: Added real-time transferred/total byte progress metrics and progress bars to directory transfer and sync dialogs.
+- **Terminal Option-Drag Selection**: Added support for Option-drag text selection and copying in terminals even when applications enable mouse reporting mode (DECSET 1003 / SGR).
+
+### Changed
+
+- **Centralized File Transfer Architecture**: Unified transfer handling across the file browser, directory sync, file editor, and native drag-and-drop flows through a shared transfer queue service.
+
+### Security
+
+- **PTY WebSocket Bridge Authentication**: Secured the local WebSocket PTY bridge with an in-memory authentication token and strict Origin header validation to prevent unauthorized local web applications from connecting to terminal sessions.
+
+
 ## [0.3.0] - 2026-09-17
 
 ### Added
