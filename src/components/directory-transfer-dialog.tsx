@@ -9,6 +9,7 @@
  * 2. Create directory structure in destination
  * 3. Transfer all files one by one with progress
  */
+import { aggregateTransferBytes, transferFile, useTransferScope } from '@/lib/transfer-progress';
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import { invoke } from "@tauri-apps/api/core";
@@ -61,6 +62,8 @@ interface TransferProgress {
   processedDirs: number;
   bytesTransferred: number;
   totalBytes: number;
+  totalBytesKnown?: boolean;
+  speed?: number;
   currentItem?: string;
   errors: string[];
 }
@@ -91,6 +94,7 @@ export function DirectoryTransferDialog({
   const [progress, setProgress] = useState<TransferProgress>({
     ...initialProgress,
   });
+  const transferScope = useTransferScope(`${connectionId}:${open}:${direction}:${sourcePath}:${destPath}`);
   const cancelRef = useRef(false);
   const startedRef = useRef(false);
 
@@ -100,15 +104,18 @@ export function DirectoryTransferDialog({
       startedRef.current = true;
       cancelRef.current = false;
       setProgress({ ...initialProgress });
-      runTransfer();
+      void runTransfer();
     }
     if (!open) {
       startedRef.current = false;
     }
+    return () => { startedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, connectionId, direction, sourcePath, destPath, transferScope]);
 
   const runTransfer = useCallback(async () => {
+    const isCurrent = transferScope.capture();
+    let errorCount = 0;
     try {
       // Phase 1: Enumerate source directory
       setProgress((p) => ({ ...p, phase: "enumerating" }));
@@ -139,6 +146,7 @@ export function DirectoryTransferDialog({
         );
       }
 
+      if (!isCurrent()) return;
       if (cancelRef.current) {
         setProgress((p) => ({ ...p, phase: "cancelled" }));
         return;
@@ -146,7 +154,7 @@ export function DirectoryTransferDialog({
 
       const dirs = entries.filter((e) => e.file_type === "Directory");
       const files = entries.filter((e) => e.file_type !== "Directory");
-      const totalBytes = files.reduce((s, f) => s + f.size, 0);
+      let totalBytes = files.reduce((s, f) => s + f.size, 0);
 
       setProgress((p) => ({
         ...p,
@@ -180,8 +188,10 @@ export function DirectoryTransferDialog({
         }
       }
 
+      if (!isCurrent()) return;
       let processedDirs = 0;
       for (const dir of sortedDirs) {
+        if (!isCurrent()) return;
         if (cancelRef.current) {
           setProgress((p) => ({ ...p, phase: "cancelled" }));
           return;
@@ -210,18 +220,22 @@ export function DirectoryTransferDialog({
             });
           }
         } catch (err) {
+          if (!isCurrent()) return;
           // Directory may already exist — log but continue
           const msg = err instanceof Error ? err.message : String(err);
           if (!msg.includes("already exist")) {
+            errorCount++;
             setProgress((p) => ({
               ...p,
               errors: [...p.errors, `mkdir ${dir.relative_path}: ${msg}`],
             }));
           }
         }
+        if (!isCurrent()) return;
         processedDirs++;
       }
 
+      if (!isCurrent()) return;
       setProgress((p) => ({ ...p, processedDirs }));
 
       // Phase 3: Transfer all files
@@ -229,6 +243,7 @@ export function DirectoryTransferDialog({
       let bytesTransferred = 0;
 
       for (const file of files) {
+        if (!isCurrent()) return;
         if (cancelRef.current) {
           setProgress((p) => ({ ...p, phase: "cancelled" }));
           return;
@@ -250,44 +265,57 @@ export function DirectoryTransferDialog({
           bytesTransferred,
         }));
 
+        let currentBytes = 0;
+        let currentTotal = file.size;
         try {
-          if (direction === "upload") {
-            const result = await invoke<{
-              success: boolean;
-              error?: string;
-            }>("upload_remote_file", {
-              connectionId,
-              localPath: fileSrcPath,
-              remotePath: fileDestPath,
-            });
-            if (!result.success) {
-              throw new Error(result.error ?? "Upload failed");
+          const result = await transferFile(direction, {
+            connectionId,
+            localPath: direction === 'upload' ? fileSrcPath : fileDestPath,
+            remotePath: direction === 'upload' ? fileDestPath : fileSrcPath,
+          }, snapshot => {
+            currentBytes = snapshot.bytesTransferred;
+            if (snapshot.totalBytes !== null) {
+              totalBytes += snapshot.totalBytes - currentTotal;
+              currentTotal = snapshot.totalBytes;
             }
-          } else {
-            const result = await invoke<{
-              success: boolean;
-              error?: string;
-            }>("download_remote_file", {
-              connectionId,
-              remotePath: fileSrcPath,
-              localPath: fileDestPath,
-            });
-            if (!result.success) {
-              throw new Error(result.error ?? "Download failed");
-            }
+            setProgress(p => ({
+              ...p,
+              bytesTransferred: aggregateTransferBytes(bytesTransferred, currentBytes),
+              totalBytes,
+              totalBytesKnown: snapshot.totalBytes !== null,
+              speed: snapshot.speed,
+            }));
+          }, () => isCurrent() && !cancelRef.current);
+          if (!isCurrent()) return;
+          if (cancelRef.current) {
+            setProgress(p => ({ ...p, phase: 'cancelled' }));
+            return;
           }
-          bytesTransferred += file.size;
+          if (!result.success) throw new Error(result.error ?? t('transferQueue.failed'));
+          const actualBytes = result.bytes_transferred ?? currentBytes;
+          totalBytes += actualBytes - currentTotal;
+          bytesTransferred += actualBytes;
         } catch (err) {
-          setProgress((p) => ({
+          if (!isCurrent()) return;
+          if (cancelRef.current) {
+            setProgress(p => ({ ...p, phase: 'cancelled' }));
+            return;
+          }
+          bytesTransferred += currentBytes;
+          errorCount++;
+          setProgress(p => ({
             ...p,
-            errors: [
-              ...p.errors,
-              `${file.relative_path}: ${err instanceof Error ? err.message : String(err)}`,
-            ],
+            errors: [...p.errors, `${file.relative_path}: ${err instanceof Error ? err.message : String(err)}`],
           }));
         }
 
         processedFiles++;
+      }
+
+      if (!isCurrent()) return;
+      if (cancelRef.current) {
+        setProgress(p => ({ ...p, phase: "cancelled" }));
+        return;
       }
 
       // Done
@@ -297,16 +325,9 @@ export function DirectoryTransferDialog({
         processedFiles,
         processedDirs,
         bytesTransferred,
+        totalBytes,
+        totalBytesKnown: true,
       }));
-
-      const errorCount = (
-        await new Promise<TransferProgress>((resolve) =>
-          setProgress((p) => {
-            resolve(p);
-            return p;
-          }),
-        )
-      ).errors.length;
 
       if (errorCount === 0) {
         toast.success(
@@ -320,6 +341,11 @@ export function DirectoryTransferDialog({
 
       onComplete();
     } catch (err) {
+      if (!isCurrent()) return;
+      if (cancelRef.current) {
+        setProgress(p => ({ ...p, phase: "cancelled" }));
+        return;
+      }
       setProgress((p) => ({
         ...p,
         phase: "error",
@@ -332,15 +358,17 @@ export function DirectoryTransferDialog({
         description: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [direction, connectionId, sourcePath, destPath, onComplete]);
+  }, [direction, connectionId, sourcePath, destPath, onComplete, transferScope, t]);
 
   const isBusy =
     progress.phase === "enumerating" || progress.phase === "transferring";
   const isDone = progress.phase === "completed" || progress.phase === "cancelled" || progress.phase === "error";
   const totalItems = progress.totalFiles + progress.totalDirs;
   const processedItems = progress.processedFiles + progress.processedDirs;
-  const progressPercent =
-    totalItems > 0 ? Math.round((processedItems / totalItems) * 100) : 0;
+  const progressPercent = progress.phase === 'completed' ? 100
+    : progress.totalBytesKnown === false ? 0
+    : progress.totalBytes > 0 ? Math.min(99, Math.floor(progress.bytesTransferred / progress.totalBytes * 100))
+    : totalItems > 0 ? Math.min(99, Math.round(processedItems / totalItems * 100)) : 0;
 
   const _dirName = sourcePath.split("/").filter(Boolean).pop() ?? sourcePath;
 
@@ -428,7 +456,7 @@ export function DirectoryTransferDialog({
           {/* Progress bar */}
           {progress.phase === "transferring" && (
             <div className="space-y-1">
-              <Progress value={progressPercent} className="h-1.5" />
+              {progress.totalBytesKnown !== false && <Progress value={progressPercent} className="h-1.5" />}
               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                 <span>
                   {t('directoryTransferDialog.progress.counts', {
@@ -440,8 +468,11 @@ export function DirectoryTransferDialog({
                 </span>
                 <span>
                   {formatSize(progress.bytesTransferred)} /{" "}
-                  {formatSize(progress.totalBytes)}
+                  {progress.totalBytesKnown === false ? t('transferQueue.unknownSize') : formatSize(progress.totalBytes)}
                 </span>
+              </div>
+              <div className="text-[10px] text-muted-foreground text-right">
+                {t('transferQueue.speed', { speed: formatSize(progress.speed ?? 0) })}
               </div>
             </div>
           )}

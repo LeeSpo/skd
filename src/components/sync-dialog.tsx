@@ -6,7 +6,8 @@
  *
  * Flow: Configure → Compare → Review → Sync
  */
-import React, { useState, useCallback, useRef } from "react";
+import { aggregateTransferBytes, transferFile, useTransferScope } from '@/lib/transfer-progress';
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { invoke } from "@tauri-apps/api/core";
@@ -144,7 +145,13 @@ export function SyncDialog({
   const [progress, setProgress] = useState<SyncProgress>({
     ...INITIAL_SYNC_PROGRESS,
   });
+  const transferScope = useTransferScope(`${connectionId}:${open}:${localPath}:${remotePath}`);
   const cancelRef = useRef(false);
+  useEffect(() => {
+    setCompared(false);
+    setEntries([]);
+    setProgress({ ...INITIAL_SYNC_PROGRESS });
+  }, [connectionId, localPath, remotePath, open]);
 
   // Filter for result table
   const [showSkipped, setShowSkipped] = useState(false);
@@ -159,6 +166,7 @@ export function SyncDialog({
 
   // ── Compare directories ──
   const handleCompare = useCallback(async () => {
+    const isCurrent = transferScope.capture();
     cancelRef.current = false;
     setCompared(false);
     setEntries([]);
@@ -200,7 +208,11 @@ export function SyncDialog({
           }),
         ]);
 
-        if (cancelRef.current) return;
+        if (!isCurrent()) return;
+        if (cancelRef.current) {
+          setProgress(p => ({ ...p, phase: "cancelled" }));
+          return;
+        }
 
         // Build comparison from recursive flat lists
         const results = compareRecursiveEntries(
@@ -216,7 +228,11 @@ export function SyncDialog({
           onLoadRemoteDir(remotePath),
         ]);
 
-        if (cancelRef.current) return;
+        if (!isCurrent()) return;
+        if (cancelRef.current) {
+          setProgress(p => ({ ...p, phase: "cancelled" }));
+          return;
+        }
 
         const results = compareDirectories(
           localEntries,
@@ -230,6 +246,11 @@ export function SyncDialog({
       setCompared(true);
       setProgress((p) => ({ ...p, phase: "completed" }));
     } catch (err) {
+      if (!isCurrent()) return;
+      if (cancelRef.current) {
+        setProgress(p => ({ ...p, phase: 'cancelled' }));
+        return;
+      }
       toast.error(t('syncDialog.comparisonFailed'), {
         description: err instanceof Error ? err.message : String(err),
       });
@@ -247,10 +268,13 @@ export function SyncDialog({
     connectionId,
     onLoadLocalDir,
     onLoadRemoteDir,
+    transferScope,
+    t,
   ]);
 
   // ── Execute sync ──
   const handleSync = useCallback(async () => {
+    const isCurrent = transferScope.capture();
     const checkedEntries = entries.filter((e) => e.checked);
     if (checkedEntries.length === 0) {
       toast.info(t('syncDialog.noItemsSelected'));
@@ -270,8 +294,8 @@ export function SyncDialog({
       return a.relativePath.localeCompare(b.relativePath);
     });
 
-    const totalBytes = sorted.reduce(
-      (s, e) => s + (e.action === "upload" ? (e.localSize ?? 0) : 0),
+    let totalBytes = sorted.reduce(
+      (s, e) => s + (e.action === "upload" ? (e.localSize ?? 0) : e.action === "download" ? (e.remoteSize ?? 0) : 0),
       0,
     );
     setProgress({
@@ -287,6 +311,7 @@ export function SyncDialog({
     let errorCount = 0;
 
     for (const entry of sorted) {
+      if (!isCurrent()) return;
       if (cancelRef.current) {
         setProgress((p) => ({ ...p, phase: "cancelled" }));
         toast.info(t('syncDialog.syncCancelled'));
@@ -300,6 +325,22 @@ export function SyncDialog({
         bytesTransferred,
       }));
 
+      let currentBytes = 0;
+      let currentTotal = entry.action === 'upload' ? entry.localSize ?? 0 : entry.remoteSize ?? 0;
+      const report = (snapshot: import('@/lib/transfer-progress').TransferProgressSnapshot) => {
+        currentBytes = snapshot.bytesTransferred;
+        if (snapshot.totalBytes !== null) {
+          totalBytes += snapshot.totalBytes - currentTotal;
+          currentTotal = snapshot.totalBytes;
+        }
+        setProgress(p => ({
+          ...p,
+          bytesTransferred: aggregateTransferBytes(bytesTransferred, currentBytes),
+          totalBytes,
+          totalBytesKnown: snapshot.totalBytes !== null,
+          speed: snapshot.speed,
+        }));
+      };
       try {
         switch (entry.action) {
           case "create-dir": {
@@ -310,18 +351,22 @@ export function SyncDialog({
           case "upload": {
             const srcPath = pathJoin(localPath, entry.relativePath);
             const destPath = pathJoin(remotePath, entry.relativePath);
-            const result = await invoke<{
-              success: boolean;
-              error?: string;
-            }>("upload_remote_file", {
+            const result = await transferFile("upload", {
               connectionId,
               localPath: srcPath,
               remotePath: destPath,
-            });
+            }, report, () => isCurrent() && !cancelRef.current);
+            if (!isCurrent()) return;
+            if (cancelRef.current) {
+              setProgress(p => ({ ...p, phase: "cancelled" }));
+              return;
+            }
             if (!result.success) {
               throw new Error(result.error ?? "Upload failed");
             }
-            bytesTransferred += entry.localSize ?? 0;
+            const actualBytes = result.bytes_transferred ?? currentBytes;
+            totalBytes += actualBytes - currentTotal;
+            bytesTransferred += actualBytes;
             break;
           }
           case "delete-remote": {
@@ -332,28 +377,43 @@ export function SyncDialog({
           case "download": {
             const srcPath = pathJoin(remotePath, entry.relativePath);
             const destPath = pathJoin(localPath, entry.relativePath);
-            const result = await invoke<{
-              success: boolean;
-              error?: string;
-            }>("download_remote_file", {
+            const result = await transferFile("download", {
               connectionId,
               remotePath: srcPath,
               localPath: destPath,
-            });
+            }, report, () => isCurrent() && !cancelRef.current);
+            if (!isCurrent()) return;
+            if (cancelRef.current) {
+              setProgress(p => ({ ...p, phase: "cancelled" }));
+              return;
+            }
             if (!result.success) {
               throw new Error(result.error ?? "Download failed");
             }
-            bytesTransferred += entry.remoteSize ?? 0;
+            const actualBytes = result.bytes_transferred ?? currentBytes;
+            totalBytes += actualBytes - currentTotal;
+            bytesTransferred += actualBytes;
             break;
           }
         }
       } catch (err) {
+        if (!isCurrent()) return;
+        if (cancelRef.current) {
+          setProgress(p => ({ ...p, phase: "cancelled" }));
+          return;
+        }
+        bytesTransferred += currentBytes;
         errorCount++;
         toast.error(`Failed: ${entry.relativePath}`, {
           description: err instanceof Error ? err.message : String(err),
         });
       }
 
+      if (!isCurrent()) return;
+      if (cancelRef.current) {
+        setProgress(p => ({ ...p, phase: "cancelled" }));
+        return;
+      }
       processedItems++;
     }
 
@@ -362,6 +422,8 @@ export function SyncDialog({
       phase: "completed",
       processedItems,
       bytesTransferred,
+      totalBytes,
+      totalBytesKnown: true,
     }));
 
     if (errorCount === 0) {
@@ -383,6 +445,8 @@ export function SyncDialog({
     onCreateRemoteDir,
     onDeleteRemoteItem,
     onSyncComplete,
+    transferScope,
+    t,
   ]);
 
   // ── Toggle check on entry ──
@@ -410,10 +474,10 @@ export function SyncDialog({
   const summary: SyncSummary = computeSyncSummary(entries);
   const isBusy =
     progress.phase === "comparing" || progress.phase === "syncing";
-  const progressPercent =
-    progress.totalItems > 0
-      ? Math.round((progress.processedItems / progress.totalItems) * 100)
-      : 0;
+  const progressPercent = progress.phase === 'completed' ? 100
+    : progress.totalBytesKnown === false ? 0
+    : progress.totalBytes > 0 ? Math.min(99, Math.floor(progress.bytesTransferred / progress.totalBytes * 100))
+    : progress.totalItems > 0 ? Math.min(99, Math.round(progress.processedItems / progress.totalItems * 100)) : 0;
 
   return (
     <Dialog open={open} onOpenChange={isBusy ? undefined : onOpenChange}>
@@ -771,7 +835,14 @@ export function SyncDialog({
                 {progress.processedItems}/{progress.totalItems}
               </span>
             </div>
-            <Progress value={progressPercent} className="h-1.5" />
+            {progress.totalBytesKnown !== false && <Progress value={progressPercent} className="h-1.5" />}
+            {progress.phase === 'syncing' && <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>{t('transferQueue.byteProgress', {
+                transferred: formatSize(progress.bytesTransferred),
+                total: progress.totalBytesKnown === false ? t('transferQueue.unknownSize') : formatSize(progress.totalBytes),
+              })}</span>
+              <span>{t('transferQueue.speed', { speed: formatSize(progress.speed ?? 0) })}</span>
+            </div>}
           </div>
         )}
 

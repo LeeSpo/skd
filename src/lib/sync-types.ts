@@ -79,6 +79,8 @@ export interface SyncProgress {
   bytesTransferred: number;
   /** Total bytes to transfer */
   totalBytes: number;
+  totalBytesKnown?: boolean;
+  speed?: number;
   /** Any error message */
   error?: string;
 }
