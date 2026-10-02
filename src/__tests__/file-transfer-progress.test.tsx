@@ -1,3 +1,6 @@
+import { listen } from '@tauri-apps/api/event';
+import { createTransferQueueFixture } from './helpers/transfer-queue-fixture';
+import { __resetTransferQueueForTests } from '@/lib/transfer-queue-service';
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +9,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { FileBrowserView } from '@/components/file-browser-view';
 import type { TransferProgressEvent, FileTransferResponse } from '@/lib/transfer-progress';
 
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
   Channel: class<T> { onmessage: (message: T) => void = () => {}; },
@@ -26,14 +30,18 @@ interface Pending {
   resolve: (response: FileTransferResponse) => void;
 }
 let pending: Pending[];
+let fixture: ReturnType<typeof createTransferQueueFixture>;
 
 beforeEach(() => {
-  pending = [];
+  __resetTransferQueueForTests();
+  fixture = createTransferQueueFixture();
+  pending = fixture.pending;
+  vi.mocked(listen).mockImplementation(fixture.listen as never);
   vi.mocked(toast.success).mockClear();
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockImplementation((command, args) => {
-    if (command === 'upload_remote_file' || command === 'download_remote_file') {
-      return new Promise(resolve => pending.push({ channel: (args as { onProgress: Channel<TransferProgressEvent> }).onProgress, resolve }));
+    if (['get_transfer_queue', 'enqueue_file_transfers', 'cancel_transfer', 'retry_transfer', 'clear_completed_transfers'].includes(command)) {
+      return fixture.invoke(command, args as Record<string, unknown>);
     }
     return Promise.resolve(undefined);
   });
@@ -86,7 +94,7 @@ describe('file transfer queue progress', () => {
     await waitFor(() => expect(pending).toHaveLength(1));
     await act(async () => pending[0].resolve({ success: false, error: 'Disconnected' }));
     await waitFor(() => expect(pending).toHaveLength(2));
-    expect(invoke).toHaveBeenLastCalledWith('upload_remote_file', expect.objectContaining({ localPath: '/local/b' }));
+    expect(fixture.pending[1].input.sourcePath).toBe('/local/b');
   });
 
   it('ignores completion/progress of cancelled items and processes queued work', async () => {
@@ -109,12 +117,13 @@ describe('file transfer queue progress', () => {
     await waitFor(() => expect(pending).toHaveLength(1));
     showQueue();
     fireEvent.click(screen.getByRole('button', { name: 'transferQueue.cancel' }));
-    fireEvent.click(screen.getByRole('button', { name: 'transferQueue.retry' }));
     act(() => pending[0].channel.onmessage({ bytesTransferred: 900, totalBytes: 1000 }));
     expect(screen.queryByText('90%')).toBeNull();
     expect(pending).toHaveLength(1);
     await act(async () => pending[0].resolve({ success: true, bytes_transferred: 1000 }));
+    fireEvent.click(screen.getByRole('button', { name: 'transferQueue.retry' }));
     await waitFor(() => expect(pending).toHaveLength(2));
+    expect(fixture.pending[0].id).not.toBe(fixture.pending[1].id);
     expect(screen.queryByText('transferQueue.done')).toBeNull();
     expect(toast.success).not.toHaveBeenCalled();
     act(() => pending[0].channel.onmessage({ bytesTransferred: 1000, totalBytes: 1000 }));
@@ -122,18 +131,18 @@ describe('file transfer queue progress', () => {
     expect(screen.getByText('40%')).toBeDefined();
   });
 
-  it('ignores progress after switching the connection or unmounting', async () => {
+  it('keeps browser tasks running after switching the connection or unmounting', async () => {
     const view = render(<FileBrowserView connectionId="one" connectionName="host" isConnected />);
     enqueue(['a']);
     await waitFor(() => expect(pending).toHaveLength(1));
     showQueue();
     view.rerender(<FileBrowserView connectionId="two" connectionName="other" isConnected />);
     act(() => pending[0].channel.onmessage({ bytesTransferred: 500, totalBytes: 1000 }));
-    expect(screen.queryByText('50%')).toBeNull();
+    expect(screen.getByText('50%')).toBeDefined();
     await act(async () => pending[0].resolve({ success: true, bytes_transferred: 1000 }));
     enqueue(['new']);
     await waitFor(() => expect(pending).toHaveLength(2));
-    expect(invoke).toHaveBeenLastCalledWith('upload_remote_file', expect.objectContaining({ connectionId: 'two', localPath: '/local/new' }));
+    expect(fixture.pending[1].input).toMatchObject({ connectionId: 'two', sourcePath: '/local/new' });
     view.unmount();
     act(() => pending[1].channel.onmessage({ bytesTransferred: 500, totalBytes: 1000 }));
     await act(async () => pending[1].resolve({ success: true, bytes_transferred: 1000 }));

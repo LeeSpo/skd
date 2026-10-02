@@ -1,3 +1,4 @@
+import { transferFile, useTransferScope } from '@/lib/transfer-progress';
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -53,6 +54,9 @@ export function FileEditorView({
 
   // Download-to-open state (for binary/image files)
   const [downloading, setDownloading] = useState(false);
+  const downloadScope = useTransferScope(`${connectionId}:${filePath}`);
+  const downloadAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { downloadAbort.current?.abort(); }, [connectionId, filePath]);
 
   const loadFile = useCallback(async () => {
     if (fileKind === "text") {
@@ -117,27 +121,33 @@ export function FileEditorView({
 
   // Download to temp directory and open with OS default app
   const handleDownloadAndOpen = useCallback(async () => {
+    const isCurrent = downloadScope.capture();
+    const abort = new AbortController();
+    downloadAbort.current?.abort();
+    downloadAbort.current = abort;
     setDownloading(true);
     try {
       // Use the user's home directory as a base for the temp download
       const homeDir = await invoke<string>("get_home_directory");
       const localPath = `${homeDir}/.skd-preview-${fileName}`;
-      const result = await invoke<{ success: boolean; error?: string }>(
-        "download_remote_file",
-        { connectionId, remotePath: filePath, localPath },
-      );
+      if (!isCurrent() || abort.signal.aborted) return;
+      const result = await transferFile('download', { connectionId, remotePath: filePath, localPath },
+        () => {}, () => isCurrent() && !abort.signal.aborted, { source: 'editor', signal: abort.signal, ownerId: crypto.randomUUID() });
+      if (!isCurrent() || abort.signal.aborted || result.cancelled) return;
       if (!result.success) {
         throw new Error(result.error ?? "Download failed");
       }
       await invoke<void>("open_in_os", { path: localPath });
+      if (!isCurrent() || abort.signal.aborted) return;
       toast.success(t('fileEditorView.openedWithOs', { fileName }));
     } catch (err) {
+      if (!isCurrent() || abort.signal.aborted) return;
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(t('fileEditorView.failedToOpenWithOs'), { description: msg });
     } finally {
-      setDownloading(false);
+      if (isCurrent()) setDownloading(false);
     }
-  }, [connectionId, filePath, fileName]);
+  }, [connectionId, filePath, fileName, downloadScope]);
 
   // Ctrl+S / Cmd+S to save (only for editable text files)
   useEffect(() => {

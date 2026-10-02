@@ -2,7 +2,7 @@ import React, { StrictMode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { createProgressAdapter, transferFile, useTransferScope, type TransferProgressEvent } from '@/lib/transfer-progress';
+import { createProgressAdapter, transferFileLegacy as transferFile, useTransferScope, type TransferProgressEvent } from '@/lib/transfer-progress';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),

@@ -4,6 +4,7 @@
 export type TransferStatus =
   | "queued"
   | "transferring"
+  | "cancelling"
   | "completed"
   | "failed"
   | "cancelled";
@@ -12,6 +13,11 @@ export type TransferDirection = "upload" | "download";
 
 export interface TransferItem {
   id: string;
+  connectionId?: string;
+  connectionName?: string | null;
+  source?: import('./transfer-queue-service').TransferSource;
+  ownerId?: string | null;
+  ownerWindow?: string | null;
   fileName: string;
   direction: TransferDirection;
   sourcePath: string;
@@ -30,6 +36,8 @@ export type TransferAction =
   | {
       type: "ENQUEUE";
       items: Array<{
+        connectionId?: string;
+        connectionName?: string;
         fileName: string;
         direction: TransferDirection;
         sourcePath: string;
@@ -72,6 +80,7 @@ export function transferQueueReducer(
   switch (action.type) {
     case "ENQUEUE": {
       const newItems: TransferItem[] = action.items.map((item) => ({
+        connectionId: item.connectionId, connectionName: item.connectionName,
         id: generateTransferId(),
         fileName: item.fileName,
         direction: item.direction,
@@ -185,7 +194,7 @@ export function transferQueueReducer(
 
 export function getActiveTransferCount(state: TransferItem[]): number {
   return state.filter(
-    (item) => item.status === "queued" || item.status === "transferring",
+    (item) => item.status === "queued" || item.status === "transferring" || item.status === "cancelling",
   ).length;
 }
 

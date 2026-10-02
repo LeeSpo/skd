@@ -118,19 +118,12 @@ impl StandaloneSftpClient {
         self.sftp.take();
         // Disconnect SSH session
         if let Some(session) = self.session.take() {
-            match Arc::try_unwrap(session) {
-                Ok(session) => {
-                    let _ = session
-                        .disconnect(Disconnect::ByApplication, "", "English")
-                        .await;
-                }
-                Err(arc_session) => {
-                    drop(arc_session);
-                }
-            }
+            session.disconnect(Disconnect::ByApplication, "", "English").await?;
         }
         Ok(())
     }
+
+    pub fn session_handle(&self) -> Option<Arc<client::Handle<SshHandler>>> { self.session.clone() }
 
     // ===== File Operations =====
 
@@ -241,29 +234,35 @@ impl StandaloneSftpClient {
     }
 
     /// Download a remote file to a local path. Returns bytes downloaded.
+    #[allow(dead_code)] // Compatibility wrapper; IPC paths use the application queue.
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<u64> {
         self.download_file_with_progress(remote_path, local_path, None).await
     }
 
+    #[allow(dead_code)] // Compatibility wrapper; IPC paths use the application queue.
     pub async fn download_file_with_progress(
         &self, remote_path: &str, local_path: &str,
         progress: Option<&crate::sftp_transfer::ProgressCallback>,
     ) -> Result<u64> {
-        let sftp = self.sftp.as_ref().ok_or_else(|| anyhow::anyhow!("SFTP session not connected"))?;
-        crate::sftp_transfer::download(sftp, remote_path, local_path, progress).await
+        let session = self.session.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        crate::sftp_transfer::transfer(session, false, local_path, remote_path, progress,
+            &tokio_util::sync::CancellationToken::new()).await
     }
 
     /// Upload a local file to a remote path. Returns bytes uploaded.
+    #[allow(dead_code)] // Compatibility wrapper; IPC paths use the application queue.
     pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<u64> {
         self.upload_file_with_progress(local_path, remote_path, None).await
     }
 
+    #[allow(dead_code)] // Compatibility wrapper; IPC paths use the application queue.
     pub async fn upload_file_with_progress(
         &self, local_path: &str, remote_path: &str,
         progress: Option<&crate::sftp_transfer::ProgressCallback>,
     ) -> Result<u64> {
-        let sftp = self.sftp.as_ref().ok_or_else(|| anyhow::anyhow!("SFTP session not connected"))?;
-        crate::sftp_transfer::upload(sftp, local_path, remote_path, progress).await
+        let session = self.session.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        crate::sftp_transfer::transfer(session, true, local_path, remote_path, progress,
+            &tokio_util::sync::CancellationToken::new()).await
     }
 
     /// Create a directory on the remote server.

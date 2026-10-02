@@ -22,6 +22,7 @@ use tokio::sync::{oneshot, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub struct ConnectionManager {
+    pub transfers: Arc<crate::transfer_queue::TransferQueue>,
     connections: Arc<RwLock<HashMap<String, Arc<RwLock<SshClient>>>>>,
     pty_sessions: Arc<RwLock<HashMap<String, Arc<PtySession>>>>,
     /// Generation counter per connection_id — incremented on each StartPty.
@@ -218,6 +219,7 @@ fn emit_connect_progress(app: &Option<AppHandle>, connection_id: &str, stage: Co
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
+            transfers: Arc::new(crate::transfer_queue::TransferQueue::default()),
             connections: Arc::new(RwLock::new(HashMap::new())),
             pty_sessions: Arc::new(RwLock::new(HashMap::new())),
             pty_generations: Arc::new(RwLock::new(HashMap::new())),
@@ -269,7 +271,11 @@ impl ConnectionManager {
         connect_result?;
 
         let mut connections = self.connections.write().await;
-        connections.insert(connection_id, Arc::new(RwLock::new(client)));
+        let session = client.session_handle().ok_or_else(|| anyhow!("SSH session missing"))?;
+        let old = connections.insert(connection_id.clone(), Arc::new(RwLock::new(client)));
+        self.transfers.bind(connection_id, session);
+        drop(connections);
+        if let Some(old) = old { let _ = old.write().await.disconnect().await; }
 
         Ok(())
     }
@@ -313,13 +319,13 @@ impl ConnectionManager {
     }
 
     pub async fn close_connection(&self, connection_id: &str) -> Result<()> {
-        // Stop listeners before tearing down the SSH session so accept loops exit cleanly.
-        self.port_forwards
-            .stop_all_for_connection(connection_id)
-            .await;
-
         let mut connections = self.connections.write().await;
-        if let Some(client) = connections.remove(connection_id) {
+        let client = connections.remove(connection_id);
+        self.transfers.unbind(connection_id);
+        drop(connections);
+        // Cancel transfers before awaiting any other connection cleanup.
+        self.port_forwards.stop_all_for_connection(connection_id).await;
+        if let Some(client) = client {
             let mut client = client.write().await;
             client.disconnect().await?;
         }
@@ -595,7 +601,11 @@ impl ConnectionManager {
         emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
 
         let mut sftp_connections = self.sftp_connections.write().await;
-        sftp_connections.insert(connection_id.clone(), client);
+        let session = client.session_handle().ok_or_else(|| anyhow!("SFTP session missing"))?;
+        let old = sftp_connections.insert(connection_id.clone(), client);
+        self.transfers.bind(connection_id.clone(), session);
+        drop(sftp_connections);
+        if let Some(mut old) = old { let _ = old.disconnect().await; }
         let mut types = self.connection_types.write().await;
         types.insert(connection_id, "SFTP".to_string());
         Ok(())
@@ -607,9 +617,10 @@ impl ConnectionManager {
 
     pub async fn close_sftp_connection(&self, connection_id: &str) -> Result<()> {
         let mut sftp_connections = self.sftp_connections.write().await;
-        if let Some(mut client) = sftp_connections.remove(connection_id) {
-            client.disconnect().await?;
-        }
+        let client = sftp_connections.remove(connection_id);
+        self.transfers.unbind(connection_id);
+        drop(sftp_connections);
+        if let Some(mut client) = client { client.disconnect().await?; }
         let mut types = self.connection_types.write().await;
         types.remove(connection_id);
         Ok(())

@@ -13,6 +13,7 @@ mod pty_session;
 mod shell_integration;
 mod sftp_client;
 mod sftp_transfer;
+mod transfer_queue;
 mod ssh;
 mod websocket_server;
 
@@ -243,6 +244,7 @@ pub fn run() {
         .setup({
             let connection_manager_clone = connection_manager.clone();
             move |app| {
+                connection_manager_clone.transfers.set_app(app.handle().clone());
                 // Register native macOS menu and forward item events to the frontend
                 match build_app_menu(&app.handle(), default_menu_text) {
                     Ok(menu) => {
@@ -262,6 +264,11 @@ pub fn run() {
                     }
                 });
                 Ok(())
+            }
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window.state::<Arc<ConnectionManager>>().transfers.cancel_window(window.label());
             }
         })
         .on_menu_event(|app, event| {
@@ -340,6 +347,11 @@ pub fn run() {
             commands::ftp_disconnect,
             // Unified file operation commands
             commands::list_remote_files,
+            commands::enqueue_file_transfers,
+            commands::get_transfer_queue,
+            commands::cancel_transfer,
+            commands::retry_transfer,
+            commands::clear_completed_transfers,
             commands::download_remote_file,
             commands::upload_remote_file,
             commands::delete_remote_item,

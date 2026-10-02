@@ -68,6 +68,7 @@ import {
 export interface SyncDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  protocol?: string;
   connectionId: string;
   localPath: string;
   remotePath: string;
@@ -121,6 +122,7 @@ function actionLabel(action: SyncEntry["action"], t: TFunction<"translation", un
 export function SyncDialog({
   open,
   onOpenChange,
+  protocol,
   connectionId,
   localPath,
   remotePath,
@@ -147,6 +149,8 @@ export function SyncDialog({
   });
   const transferScope = useTransferScope(`${connectionId}:${open}:${localPath}:${remotePath}`);
   const cancelRef = useRef(false);
+  const activeAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { activeAbort.current?.abort(); }, [connectionId, open, localPath, remotePath]);
   useEffect(() => {
     setCompared(false);
     setEntries([]);
@@ -275,6 +279,9 @@ export function SyncDialog({
   // ── Execute sync ──
   const handleSync = useCallback(async () => {
     const isCurrent = transferScope.capture();
+    const abort = new AbortController();
+    const ownerId = crypto.randomUUID();
+    activeAbort.current = abort;
     const checkedEntries = entries.filter((e) => e.checked);
     if (checkedEntries.length === 0) {
       toast.info(t('syncDialog.noItemsSelected'));
@@ -323,6 +330,7 @@ export function SyncDialog({
         processedItems,
         currentItem: entry.relativePath,
         bytesTransferred,
+        speed: 0,
       }));
 
       let currentBytes = 0;
@@ -355,8 +363,9 @@ export function SyncDialog({
               connectionId,
               localPath: srcPath,
               remotePath: destPath,
-            }, report, () => isCurrent() && !cancelRef.current);
+            }, report, () => isCurrent() && !cancelRef.current, { source: 'sync', signal: abort.signal, ownerId, protocol });
             if (!isCurrent()) return;
+            if (result.cancelled) cancelRef.current = true;
             if (cancelRef.current) {
               setProgress(p => ({ ...p, phase: "cancelled" }));
               return;
@@ -381,8 +390,9 @@ export function SyncDialog({
               connectionId,
               remotePath: srcPath,
               localPath: destPath,
-            }, report, () => isCurrent() && !cancelRef.current);
+            }, report, () => isCurrent() && !cancelRef.current, { source: 'sync', signal: abort.signal, ownerId, protocol });
             if (!isCurrent()) return;
+            if (result.cancelled) cancelRef.current = true;
             if (cancelRef.current) {
               setProgress(p => ({ ...p, phase: "cancelled" }));
               return;
@@ -445,6 +455,7 @@ export function SyncDialog({
     onCreateRemoteDir,
     onDeleteRemoteItem,
     onSyncComplete,
+    protocol,
     transferScope,
     t,
   ]);
@@ -854,10 +865,11 @@ export function SyncDialog({
               size="sm"
               onClick={() => {
                 cancelRef.current = true;
+                activeAbort.current?.abort();
               }}
             >
               <X className="h-4 w-4 mr-1" />
-              Cancel
+              {t('common.cancel')}
             </Button>
           )}
           <Button

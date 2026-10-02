@@ -1,3 +1,4 @@
+import { initializeTransferQueue, onItemSettled, setTransferConnectionNames } from '@/lib/transfer-queue-service';
 import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -108,6 +109,17 @@ interface ConnectionNode {
 
 function AppContent() {
   const { t } = useTranslation();
+  useEffect(() => {
+    void initializeTransferQueue().catch(() => {});
+    return onItemSettled(item => {
+      if (item.source !== 'browser') return;
+      if (item.status === 'failed') {
+        toast.error(t('fileBrowser.toast.transferFailed', { name: item.fileName }), { description: item.error });
+      } else if (item.status === 'completed') {
+        toast.success(t(item.direction === 'upload' ? 'fileBrowser.toast.uploaded' : 'fileBrowser.toast.downloaded', { name: item.fileName }));
+      }
+    });
+  }, [t]);
   const [selectedConnection, setSelectedConnection] = useState<ConnectionNode | null>(null);
 
   // Terminal group state from context
@@ -228,6 +240,7 @@ function AppContent() {
   const allTabs = useMemo(() => {
     return Object.values(state.groups).flatMap(g => g.tabs);
   }, [state.groups]);
+  useEffect(() => { setTransferConnectionNames(allTabs); }, [allTabs]);
   const autoStartedForwardConnectionsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -285,9 +298,11 @@ function AppContent() {
     try {
       if (tab.protocol === 'Local') {
         await invoke('local_shell_disconnect', { connection_id: tabId });
+      } else if (tab.tabType === 'terminal' || (!tab.tabType && tab.protocol !== 'Local')) {
+        await invoke('ssh_disconnect', { connectionId: tabId });
       } else if (tab.tabType === 'file-browser') {
         if (tab.protocol === 'SFTP') {
-          await invoke('sftp_standalone_disconnect', { connection_id: tabId });
+          await invoke('sftp_standalone_disconnect', { connectionId: tabId });
         } else if (tab.protocol === 'FTP') {
           await invoke('ftp_disconnect', { connection_id: tabId });
         }
@@ -619,7 +634,7 @@ function AppContent() {
         if (tab.tabType === 'file-browser') {
           try {
             if (tab.protocol === 'SFTP') {
-              await invoke('sftp_standalone_disconnect', { connection_id: tabId });
+              await invoke('sftp_standalone_disconnect', { connectionId: tabId });
             } else if (tab.protocol === 'FTP') {
               await invoke('ftp_disconnect', { connection_id: tabId });
             }
@@ -855,7 +870,7 @@ function AppContent() {
         // SFTP/FTP reconnect
         try {
           if (isSftp) {
-            await invoke('sftp_standalone_disconnect', { connection_id: tabId });
+            await invoke('sftp_standalone_disconnect', { connectionId: tabId });
           } else {
             await invoke('ftp_disconnect', { connection_id: tabId });
           }
@@ -902,7 +917,7 @@ function AppContent() {
       } else {
         // SSH reconnect (existing behavior)
         try {
-          await invoke('ssh_disconnect', { connection_id: tabId });
+          await invoke('ssh_disconnect', { connectionId: tabId });
         } catch {
           // Ignore errors when disconnecting
         }

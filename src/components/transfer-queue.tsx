@@ -70,6 +70,7 @@ function statusIcon(status: TransferItem["status"]) {
   switch (status) {
     case "queued":
       return <Clock className="h-3.5 w-3.5 text-muted-foreground" />;
+    case "cancelling":
     case "transferring":
       return <Loader2 className="h-3.5 w-3.5 animate-spin text-status-pending" />;
     case "completed":
@@ -169,6 +170,11 @@ export function TransferQueue({
                     <Download className="h-3 w-3 text-primary shrink-0" />
                   )}
                   {statusIcon(item.status)}
+                  {item.connectionId && <span className="text-muted-foreground max-w-28 truncate" title={item.connectionName ?? item.connectionId}>
+                    {item.connectionName ?? item.connectionId}
+                  </span>}
+                  {item.source && <span className="text-muted-foreground shrink-0">{t(`transferQueue.source.${item.source}`)}</span>}
+                  {item.status === 'cancelling' && <span>{t('transferQueue.cancelling')}</span>}
                   <span
                     className="truncate flex-1 min-w-0"
                     title={item.fileName}

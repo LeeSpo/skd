@@ -42,6 +42,7 @@ import { formatSize } from "@/lib/file-entry-types";
 export interface DirectoryTransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  protocol?: string;
   /** "upload" = local dir → remote, "download" = remote dir → local */
   direction: "upload" | "download";
   /** Connection ID for remote operations */
@@ -84,6 +85,7 @@ const initialProgress: TransferProgress = {
 export function DirectoryTransferDialog({
   open,
   onOpenChange,
+  protocol,
   direction,
   connectionId,
   sourcePath,
@@ -96,6 +98,8 @@ export function DirectoryTransferDialog({
   });
   const transferScope = useTransferScope(`${connectionId}:${open}:${direction}:${sourcePath}:${destPath}`);
   const cancelRef = useRef(false);
+  const activeAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { activeAbort.current?.abort(); }, [connectionId, open, direction, sourcePath, destPath]);
   const startedRef = useRef(false);
 
   // Auto-start transfer when dialog opens
@@ -115,6 +119,9 @@ export function DirectoryTransferDialog({
 
   const runTransfer = useCallback(async () => {
     const isCurrent = transferScope.capture();
+    const abort = new AbortController();
+    const ownerId = crypto.randomUUID();
+    activeAbort.current = abort;
     let errorCount = 0;
     try {
       // Phase 1: Enumerate source directory
@@ -263,6 +270,7 @@ export function DirectoryTransferDialog({
           currentItem: file.relative_path,
           processedFiles,
           bytesTransferred,
+          speed: 0,
         }));
 
         let currentBytes = 0;
@@ -285,8 +293,9 @@ export function DirectoryTransferDialog({
               totalBytesKnown: snapshot.totalBytes !== null,
               speed: snapshot.speed,
             }));
-          }, () => isCurrent() && !cancelRef.current);
+          }, () => isCurrent() && !cancelRef.current, { source: 'directory', signal: abort.signal, ownerId, protocol });
           if (!isCurrent()) return;
+          if (result.cancelled) cancelRef.current = true;
           if (cancelRef.current) {
             setProgress(p => ({ ...p, phase: 'cancelled' }));
             return;
@@ -358,7 +367,7 @@ export function DirectoryTransferDialog({
         description: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [direction, connectionId, sourcePath, destPath, onComplete, transferScope, t]);
+  }, [direction, connectionId, sourcePath, destPath, onComplete, transferScope, protocol, t]);
 
   const isBusy =
     progress.phase === "enumerating" || progress.phase === "transferring";
@@ -520,6 +529,7 @@ export function DirectoryTransferDialog({
               size="sm"
               onClick={() => {
                 cancelRef.current = true;
+                activeAbort.current?.abort();
               }}
             >
               <X className="h-4 w-4 mr-1" />

@@ -1044,7 +1044,16 @@
     "openFile": "Open file",
     "showInFolder": "Show in folder",
     "unknownSize": "Unknown size",
-    "byteProgress": "{{transferred}} / {{total}}"
+    "byteProgress": "{{transferred}} / {{total}}",
+    "cancelling": "Cancelling…",
+    "source": {
+      "browser": "Files",
+      "directory": "Directory",
+      "sync": "Sync",
+      "editor": "Editor",
+      "finder": "Finder",
+      "legacy": "File"
+    }
   },
   "transferControls": {
     "upload": "Upload",

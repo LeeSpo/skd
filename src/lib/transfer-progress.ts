@@ -15,6 +15,7 @@ export interface FileTransferResponse {
   success: boolean;
   bytes_transferred?: number | null;
   error?: string | null;
+  cancelled?: boolean;
 }
 
 /** Each run captures a generation, including across StrictMode effect replay. */
@@ -65,7 +66,7 @@ export function createProgressAdapter(
   };
 }
 
-export async function transferFile(
+export async function transferFileLegacy(
   direction: 'upload' | 'download',
   params: { connectionId: string; localPath: string; remotePath: string },
   onProgress: (snapshot: TransferProgressSnapshot) => void,
@@ -84,6 +85,29 @@ export async function transferFile(
     // A queued native message may still arrive after invoke has settled.
     channel.onmessage = () => {};
   }
+}
+
+export async function transferFile(
+  direction: 'upload' | 'download',
+  params: { connectionId: string; localPath: string; remotePath: string },
+  onProgress: (snapshot: TransferProgressSnapshot) => void,
+  isActive: () => boolean = () => true,
+  options?: { source?: 'directory' | 'sync' | 'editor'; signal?: AbortSignal; ownerId?: string; protocol?: string },
+): Promise<FileTransferResponse> {
+  if (options?.protocol === 'FTP') return transferFileLegacy(direction, params, onProgress, isActive);
+  const { submit } = await import('./transfer-queue-service');
+  const transfer = submit({
+    connectionId: params.connectionId,
+    fileName: params.remotePath.split('/').pop() ?? params.remotePath,
+    direction, sourcePath: direction === 'upload' ? params.localPath : params.remotePath,
+    destinationPath: direction === 'upload' ? params.remotePath : params.localPath,
+    totalBytes: null, source: options?.source ?? 'browser', ownerId: options?.ownerId,
+  }, { signal: options?.signal, onProgress: snapshot => { if (isActive()) onProgress(snapshot); } });
+  const result = await transfer.done;
+  // FTP retains its original path and cancellation behavior.
+  if (result.error === 'FTP_LEGACY_TRANSFER') return transferFileLegacy(direction, params, onProgress, isActive);
+  return { success: result.status === 'completed', bytes_transferred: result.bytesTransferred,
+    error: result.error, cancelled: result.status === 'cancelled' };
 }
 
 export function aggregateTransferBytes(completedBytes: number, currentBytes: number): number {

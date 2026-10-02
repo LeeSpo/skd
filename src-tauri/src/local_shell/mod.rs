@@ -396,22 +396,36 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
+    const PTY_TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
     struct IsolatedPty {
         session: PtySession,
         histfile: PathBuf,
         _dir: tempfile::TempDir,
     }
 
+    impl Drop for IsolatedPty {
+        fn drop(&mut self) {
+            self.session.cancel.cancel();
+        }
+    }
+
     fn isolated_local_pty(shell: &str) -> IsolatedPty {
-        let dir = tempfile::tempdir().expect("isolated hist dir");
+        let dir = tempfile::tempdir().expect("isolated shell home");
         let histfile = dir.path().join(".zsh_history");
         std::fs::write(&histfile, "").expect("isolated histfile");
         let hist = histfile.to_string_lossy().to_string();
+        let home = dir.path().to_string_lossy().to_string();
         let session = spawn_local_pty_session(
             shell.to_string(),
             80,
             24,
             &[
+                // Exercise skd's real startup wrappers without loading personal
+                // shell plugins, startup commands, or history from this Mac.
+                ("HOME".to_string(), home.clone()),
+                ("SKD_USER_HOME".to_string(), home.clone()),
+                ("SKD_USER_ZDOTDIR".to_string(), home),
                 ("HISTFILE".to_string(), hist.clone()),
                 ("SKD_USER_HISTFILE".to_string(), hist),
             ],
@@ -446,49 +460,61 @@ mod tests {
         output
     }
 
+    async fn wait_for_shell_prompt(session: &PtySession) {
+        let output = collect_until(session, "\x1b]633;A\x07", PTY_TEST_TIMEOUT).await;
+        assert!(
+            output.contains("\x1b]633;A\x07"),
+            "shell did not finish starting: {output:?}"
+        );
+    }
+
+    async fn wait_for_output_backpressure(session: &PtySession) {
+        tokio::time::timeout(PTY_TEST_TIMEOUT, async {
+            loop {
+                let full = {
+                    let rx = session.output_rx.lock().await;
+                    rx.len() == rx.max_capacity()
+                };
+                if full {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("bulk output did not fill the PTY output channel");
+    }
+
     #[tokio::test]
     async fn create_local_pty_session_produces_output() {
-        let isolated = isolated_local_pty(&default_shell());
+        let isolated = isolated_local_pty("/bin/zsh");
         let session = &isolated.session;
 
-        // Give the shell a moment to start
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        wait_for_shell_prompt(session).await;
 
+        // The echoed input does not contain the assembled result, so only
+        // actual command execution can satisfy the assertion.
         session
             .input_tx
-            .send(b"echo LOCAL_PTY_TEST\n".to_vec())
+            .send(b"printf 'LOCAL_%s\\n' 'PTY_TEST'\n".to_vec())
             .await
             .expect("failed to send input");
 
-        let mut output = String::new();
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-        while tokio::time::Instant::now() < deadline {
-            let data = {
-                let mut rx = session.output_rx.lock().await;
-                rx.recv().await
-            };
-            if let Some(bytes) = data {
-                output.push_str(&String::from_utf8_lossy(&bytes));
-                if output.contains("LOCAL_PTY_TEST") {
-                    session.cancel.cancel();
-                    return;
-                }
-            } else {
-                break;
-            }
-        }
-
+        let output = collect_until(session, "LOCAL_PTY_TEST", PTY_TEST_TIMEOUT).await;
         session.cancel.cancel();
-        panic!("expected shell to echo LOCAL_PTY_TEST, got: {output}");
+        assert!(
+            output.contains("LOCAL_PTY_TEST"),
+            "expected command output LOCAL_PTY_TEST, got: {output:?}"
+        );
     }
 
     #[tokio::test]
     async fn cancelling_local_pty_session_closes_output_channel() {
-        let isolated = isolated_local_pty(&default_shell());
+        let isolated = isolated_local_pty("/bin/zsh");
         let session = &isolated.session;
 
         session.cancel.cancel();
-        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+        let closed = tokio::time::timeout(PTY_TEST_TIMEOUT, async {
             let mut output_rx = session.output_rx.lock().await;
             while output_rx.recv().await.is_some() {}
         })
@@ -504,54 +530,52 @@ mod tests {
     async fn local_pty_reader_recovers_from_output_backpressure() {
         const OUTPUT_BYTES: usize = 3 * 1024 * 1024;
 
-        let isolated = isolated_local_pty(&default_shell());
+        let isolated = isolated_local_pty("/bin/zsh");
         let session = &isolated.session;
+        wait_for_shell_prompt(session).await;
         session
             .input_tx
-            .send(format!("yes x | head -c {OUTPUT_BYTES}\n").into_bytes())
+            .send(
+                format!(
+                    "printf '\\036'; head -c {OUTPUT_BYTES} /dev/zero | tr '\\000' x; printf '\\037'\n"
+                )
+                .into_bytes(),
+            )
             .await
             .expect("failed to start bulk-output command");
 
-        // Let the bounded output channel fill before consuming it. The reader
-        // must resume once capacity becomes available instead of losing bytes.
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let received = tokio::time::timeout(Duration::from_secs(5), async {
-            let mut received = 0;
-            let mut output_rx = session.output_rx.lock().await;
-            while received < OUTPUT_BYTES {
-                let data = output_rx
-                    .recv()
-                    .await
-                    .expect("local PTY output closed early");
-                received += data.len();
-            }
-            received
-        })
-        .await
-        .expect("local PTY reader stalled after bounded-channel backpressure");
-
+        wait_for_output_backpressure(session).await;
+        let output = collect_until(session, "\x1f", PTY_TEST_TIMEOUT).await;
         session.cancel.cancel();
-        assert!(received >= OUTPUT_BYTES);
+
+        // Frame the payload so input echo, prompt escapes, and terminal newline
+        // conversion cannot disguise lost or duplicated output bytes.
+        let payload = output
+            .split_once('\x1e')
+            .and_then(|(_, rest)| rest.split_once('\x1f'))
+            .map(|(payload, _)| payload)
+            .expect("bulk command did not finish its framed output after backpressure");
+        assert_eq!(payload.len(), OUTPUT_BYTES);
+        assert!(payload.bytes().all(|byte| byte == b'x'));
     }
 
     #[tokio::test]
     async fn cancelling_local_pty_reader_releases_output_backpressure() {
         const OUTPUT_BYTES: usize = 3 * 1024 * 1024;
 
-        let isolated = isolated_local_pty(&default_shell());
+        let isolated = isolated_local_pty("/bin/zsh");
         let session = &isolated.session;
+        wait_for_shell_prompt(session).await;
         session
             .input_tx
             .send(format!("yes x | head -c {OUTPUT_BYTES}\n").into_bytes())
             .await
             .expect("failed to start bulk-output command");
 
-        // The 128 × 16 KiB queue fills before this command completes, leaving
-        // the reader blocked in blocking_send until cancellation closes it.
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        wait_for_output_backpressure(session).await;
         session.cancel.cancel();
 
-        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+        let closed = tokio::time::timeout(PTY_TEST_TIMEOUT, async {
             let mut output_rx = session.output_rx.lock().await;
             while output_rx.recv().await.is_some() {}
         })
@@ -565,15 +589,18 @@ mod tests {
 
     #[tokio::test]
     async fn exiting_local_shell_closes_output_without_masking_eof() {
-        let isolated = isolated_local_pty(&default_shell());
+        let isolated = isolated_local_pty("/bin/zsh");
         let session = &isolated.session;
+        wait_for_shell_prompt(session).await;
         session
             .input_tx
             .send(b"exit\n".to_vec())
             .await
             .expect("failed to exit local shell");
 
-        tokio::time::timeout(Duration::from_secs(1), async {
+        // Measure shutdown after startup has completed, rather than charging
+        // shell initialization and machine load against a one-second deadline.
+        tokio::time::timeout(PTY_TEST_TIMEOUT, async {
             let mut output_rx = session.output_rx.lock().await;
             while output_rx.recv().await.is_some() {}
         })

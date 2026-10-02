@@ -1,4 +1,5 @@
-import { transferFile, useTransferScope, type TransferProgressSnapshot } from '@/lib/transfer-progress';
+import { transferFileLegacy as transferFile, useTransferScope, type TransferProgressSnapshot } from '@/lib/transfer-progress';
+import { useTransferQueue, onItemSettled } from '@/lib/transfer-queue-service';
 import React, { useState, useEffect, useCallback, useReducer, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { invoke } from "@tauri-apps/api/core";
@@ -62,7 +63,10 @@ export function FileBrowserView({
 }: FileBrowserViewProps) {
   const { t } = useTranslation();
   const [activePanel, setActivePanel] = useState<"local" | "remote">("local");
-  const [transfers, dispatchTransfer] = useReducer(transferQueueReducer, []);
+  const [legacyTransfers, dispatchLegacy] = useReducer(transferQueueReducer, []);
+  const globalQueue = useTransferQueue(connectionId, connectionName);
+  const transfers = protocol === 'FTP' ? legacyTransfers : globalQueue.transfers;
+  const dispatchTransfer = protocol === 'FTP' ? dispatchLegacy : globalQueue.dispatch;
   const [queueExpanded, setQueueExpanded] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [dirTransfer, setDirTransfer] = useState<{
@@ -75,6 +79,7 @@ export function FileBrowserView({
     undefined,
   );
 
+  const browserRoot = useRef<HTMLDivElement>(null);
   const localPanelRef = useRef<FilePanelRef>(null);
   const remotePanelRef = useRef<FilePanelRef>(null);
 
@@ -169,18 +174,26 @@ export function FileBrowserView({
   const latestTransfers = useRef(transfers);
   useEffect(() => { latestTransfers.current = transfers; }, [transfers]);
   useEffect(() => () => {
-    // Work queued for one connection must not run against another connection.
+    if (protocol !== "FTP") return;
+    // FTP retains panel-local scheduling.
     for (const item of latestTransfers.current) {
       if (item.status === 'queued' || item.status === 'transferring') {
         dispatchTransfer({ type: 'CANCEL', id: item.id });
       }
     }
-  }, [connectionId]);
+  }, [connectionId, protocol]);
 
-  // ------ Transfer execution ------
+  useEffect(() => onItemSettled(item => {
+    if (item.connectionId !== connectionId || item.status !== "completed") return;
+    if (item.direction === "upload") remotePanelRef.current?.refresh();
+    else localPanelRef.current?.refresh();
+  }), [connectionId]);
+
+  // ------ Legacy FTP execution ------
   const processTransferRef = useRef(false);
 
   useEffect(() => {
+    if (protocol !== "FTP") return;
     const nextItem = getNextQueuedTransfer(transfers);
     if (!nextItem || processTransferRef.current) return;
 
@@ -260,7 +273,7 @@ export function FileBrowserView({
     };
 
     void doTransfer();
-  }, [transfers, connectionId, transferRevision, transferScope]);
+  }, [transfers, connectionId, protocol, transferRevision, transferScope, dispatchTransfer]);
 
   // ------ Transfer initiation helpers ------
   const enqueueUpload = useCallback(
@@ -280,7 +293,7 @@ export function FileBrowserView({
       });
       toast.info(t('fileBrowser.toast.queuedUpload', { count: fileItems.length }));
     },
-    [],
+    [dispatchTransfer, t],
   );
 
   // ------ OS-native file drop onto the remote panel ------
@@ -390,7 +403,7 @@ export function FileBrowserView({
         });
       }
     },
-    [connectionId, isConnected],
+    [connectionId, isConnected, dispatchTransfer, t],
   );
 
   const enqueueDownload = useCallback(
@@ -410,7 +423,7 @@ export function FileBrowserView({
       });
       toast.info(t('fileBrowser.toast.queuedDownload', { count: fileItems.length }));
     },
-    [],
+    [dispatchTransfer, t],
   );
 
   const handleUploadButton = useCallback(() => {
@@ -432,6 +445,7 @@ export function FileBrowserView({
   // ------ Drop transfer handler ------
   useEffect(() => {
     const handler = (e: Event) => {
+      if (e.target !== document && e.target instanceof Node && !browserRoot.current?.contains(e.target)) return;
       const detail = (e as CustomEvent).detail;
       if (!detail) return;
       const { targetMode, targetPath, sourcePath, files } = detail;
@@ -469,7 +483,7 @@ export function FileBrowserView({
 
     document.addEventListener("skd-drop-transfer", handler);
     return () => document.removeEventListener("skd-drop-transfer", handler);
-  }, []);
+  }, [dispatchTransfer]);
 
   // ------ Directory transfer callbacks ------
   const handleUploadDirectory = useCallback(
@@ -561,6 +575,7 @@ export function FileBrowserView({
   // ------ Render ------
   return (
     <div
+      ref={browserRoot}
       className="h-full w-full flex flex-col bg-background text-foreground"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
@@ -660,6 +675,7 @@ export function FileBrowserView({
 
       {/* Sync Dialog */}
       <SyncDialog
+        protocol={protocol}
         open={syncDialogOpen}
         onOpenChange={setSyncDialogOpen}
         connectionId={connectionId}
@@ -675,6 +691,7 @@ export function FileBrowserView({
       {/* Directory Transfer Dialog */}
       {dirTransfer && (
         <DirectoryTransferDialog
+          protocol={protocol}
           open={dirTransfer.open}
           onOpenChange={(open) => {
             if (!open) setDirTransfer(null);
