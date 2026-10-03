@@ -16,6 +16,11 @@ import type {
 
 // ── Helpers ──
 
+function collectLeafIds(node: GridNode): string[] {
+  if (node.type === 'leaf') return [node.groupId];
+  return node.children.flatMap(collectLeafIds);
+}
+
 function makeTab(id: string, name?: string): TerminalTab {
   return {
     id,
@@ -30,6 +35,7 @@ function stateWithTabs(groupId: string, tabs: TerminalTab[], activeTabId?: strin
   for (const tab of tabs) {
     tabToGroupMap[tab.id] = groupId;
   }
+  const gridLayout: GridNode = { type: 'leaf', groupId };
   return {
     groups: {
       [groupId]: {
@@ -39,9 +45,12 @@ function stateWithTabs(groupId: string, tabs: TerminalTab[], activeTabId?: strin
       },
     },
     activeGroupId: groupId,
-    gridLayout: { type: 'leaf', groupId },
+    gridLayout,
     nextGroupId: 2,
     tabToGroupMap,
+    pages: [{ id: '1', gridLayout, activeGroupId: groupId }],
+    activePageId: '1',
+    nextPageId: 2,
   };
 }
 
@@ -250,6 +259,86 @@ describe('ADD_TAB', () => {
     const next = terminalGroupReducer(state, { type: 'ADD_TAB', groupId: '1', tab });
     expect(next.groups['1'].tabs).toHaveLength(1);
     expect(next.groups['1'].activeTabId).toBe('t1');
+    expect(next.pages).toHaveLength(1);
+  });
+
+  it('fills the empty half of a split instead of opening another page', () => {
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
+    const splitPageId = state.activePageId;
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('peer'),
+    });
+    expect(state.pages).toHaveLength(1);
+    expect(state.activePageId).toBe(splitPageId);
+    expect(state.gridLayout.type).toBe('branch');
+    expect(state.groups['2'].tabs.map((tab) => tab.id)).toEqual(['peer']);
+  });
+
+  it('opens a full-screen page when the focused pane already has a session', () => {
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('peer'),
+    });
+    const splitPageId = state.activePageId;
+    const splitGrid = state.gridLayout;
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('local'),
+    });
+
+    expect(state.pages).toHaveLength(2);
+    expect(state.activePageId).not.toBe(splitPageId);
+    expect(state.gridLayout).toEqual({ type: 'leaf', groupId: state.activeGroupId });
+    expect(state.groups[state.activeGroupId].tabs.map((tab) => tab.id)).toEqual(['local']);
+    const splitPage = state.pages.find((page) => page.id === splitPageId);
+    expect(splitPage?.gridLayout).toEqual(splitGrid);
+
+    const onSplit = terminalGroupReducer(state, { type: 'ACTIVATE_PAGE', pageId: splitPageId });
+    expect(onSplit.gridLayout).toEqual(splitGrid);
+    expect(collectLeafIds(onSplit.gridLayout)).toEqual(['1', '2']);
+
+    const onLocal = terminalGroupReducer(onSplit, { type: 'ACTIVATE_PAGE', pageId: state.activePageId });
+    expect(onLocal.gridLayout.type).toBe('leaf');
+    expect(collectLeafIds(onLocal.gridLayout)).toEqual([state.activeGroupId]);
+  });
+
+  it('does not change another page when the current page is split', () => {
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('local'),
+    });
+    const localPageId = state.activePageId;
+    const localGrid = state.gridLayout;
+    const firstPageId = state.pages.find((page) => page.id !== localPageId)?.id;
+    expect(firstPageId).toBeTruthy();
+    state = terminalGroupReducer(state, { type: 'ACTIVATE_PAGE', pageId: firstPageId! });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: state.activeGroupId, direction: 'right' });
+
+    const localPage = state.pages.find((page) => page.id === localPageId);
+    expect(localPage?.gridLayout).toEqual(localGrid);
+    expect(state.gridLayout.type).toBe('branch');
+    expect(state.activePageId).toBe(firstPageId);
   });
 });
 
@@ -266,6 +355,40 @@ describe('REMOVE_TAB', () => {
     const state = stateWithTabs('1', [makeTab('a'), makeTab('b')], 'b');
     const next = terminalGroupReducer(state, { type: 'REMOVE_TAB', groupId: '1', tabId: 'b' });
     expect(next.groups['1'].activeTabId).toBe('a');
+  });
+
+  it('drops a page when its last session closes and focuses the neighbor', () => {
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, { type: 'ADD_TAB', groupId: '1', tab: makeTab('local') });
+    const localGroupId = state.activeGroupId;
+    const hostPageId = state.pages.find((page) => page.id !== state.activePageId)!.id;
+    state = terminalGroupReducer(state, { type: 'REMOVE_TAB', groupId: localGroupId, tabId: 'local' });
+    expect(state.pages.map((page) => page.id)).toEqual([hostPageId]);
+    expect(state.activePageId).toBe(hostPageId);
+    expect(state.gridLayout).toEqual({ type: 'leaf', groupId: '1' });
+    expect(state.groups[localGroupId]).toBeUndefined();
+  });
+
+  it('keeps the page when one side of its split closes', () => {
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('peer'),
+    });
+    state = terminalGroupReducer(state, { type: 'REMOVE_TAB', groupId: '2', tabId: 'peer' });
+    expect(state.pages).toHaveLength(1);
+    expect(state.gridLayout).toEqual({ type: 'leaf', groupId: '1' });
+    expect(state.groups['1'].tabs.map((tab) => tab.id)).toEqual(['host']);
   });
 
   it('auto-removes empty non-last group', () => {
@@ -563,6 +686,9 @@ describe('RESTORE_LAYOUT', () => {
       activeGroupId: '99',
       groups: { '99': { id: '99', tabs: [], activeTabId: null } },
       gridLayout: { type: 'leaf', groupId: '99' },
+      pages: [{ id: '1', gridLayout: { type: 'leaf', groupId: '99' }, activeGroupId: '99' }],
+      activePageId: '1',
+      nextPageId: 2,
     };
     const next = terminalGroupReducer(state, { type: 'RESTORE_LAYOUT', state: custom });
     expect(next).toBe(custom);

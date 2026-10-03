@@ -1,5 +1,8 @@
 use base64::Engine as _;
-use crate::connection_diagnostics::{classify_connect_error, ConnectErrorKind, ConnectStage};
+use crate::connection_diagnostics::{
+    classify_connect_error, clamp_keepalive_interval_secs, clamp_tcp_timeout_secs, ConnectErrorKind,
+    ConnectStage,
+};
 use crate::connection_manager::ConnectionManager;
 use crate::ftp_client::FtpConfig;
 use crate::file_move::{
@@ -26,6 +29,10 @@ pub struct ConnectRequest {
     pub key_content: Option<String>,
     pub passphrase: Option<String>,
     pub host_key_verification: Option<bool>,
+    #[serde(default)]
+    pub tcp_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub keepalive_interval_secs: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -121,6 +128,7 @@ pub async fn ssh_connect(
         username: request.username,
         auth_method,
         host_key_verification: request.host_key_verification.unwrap_or(true),
+        keepalive_interval_secs: clamp_keepalive_interval_secs(request.keepalive_interval_secs),
     };
 
     match state
@@ -128,7 +136,9 @@ pub async fn ssh_connect(
             request.connection_id.clone(),
             config,
             Some(app),
-            None,
+            Some(std::time::Duration::from_secs(clamp_tcp_timeout_secs(
+                request.tcp_timeout_secs,
+            ))),
         )
         .await
     {
@@ -2474,6 +2484,10 @@ pub struct SftpConnectRequest {
     pub key_content: Option<String>,
     pub passphrase: Option<String>,
     pub host_key_verification: Option<bool>,
+    #[serde(default)]
+    pub tcp_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub keepalive_interval_secs: Option<u64>,
 }
 
 #[tauri::command]
@@ -2499,6 +2513,8 @@ pub async fn sftp_connect(
         username: request.username,
         auth_method: auth,
         host_key_verification: request.host_key_verification.unwrap_or(true),
+        tcp_timeout_secs: clamp_tcp_timeout_secs(request.tcp_timeout_secs),
+        keepalive_interval_secs: clamp_keepalive_interval_secs(request.keepalive_interval_secs),
     };
 
     match state
@@ -3720,4 +3736,17 @@ mod local_fs_tests {
         let s = format_unix_timestamp(1704067200);
         assert_eq!(s, "2024-01-01 00:00:00");
     }
+}
+
+/// Query AppKit on its main thread; used for window chrome materials and accent.
+#[tauri::command]
+pub async fn get_window_appearance(
+    app: AppHandle,
+) -> Result<crate::window_appearance::WindowAppearance, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(crate::window_appearance::appearance());
+    })
+    .map_err(|error| error.to_string())?;
+    receiver.await.map_err(|error| error.to_string())
 }

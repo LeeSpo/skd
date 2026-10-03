@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import type { TerminalTab } from '../../lib/terminal-group-types';
@@ -13,9 +14,12 @@ import {
 } from '../../lib/tab-drag-state';
 import { DropZoneOverlay } from './drop-zone-overlay';
 import { GroupTabBar } from './group-tab-bar';
+import { WorkspaceTabBar } from './workspace-tab-bar';
 import { PanelSurfaceFallback } from '../ui/panel-chrome';
 import { WelcomeScreen } from '../welcome-screen';
 import { useConnectionAttempts } from '../../lib/connection-attempt-context';
+import { useTitlebarSlot } from '../../lib/titlebar-slot-context';
+
 import { ConnectionFailureView, ConnectionProgressSegments } from '../connection-progress';
 
 interface TerminalGroupViewProps {
@@ -153,11 +157,22 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
     onNewLocalTab,
     onOpenSavedConnection,
     onReconnectTab,
+    onOpenSettings,
   } = useTerminalCallbacks();
   const group = state.groups[groupId];
   const isActive = state.activeGroupId === groupId;
   const themeKey = useTerminalThemeKey();
   const contentRef = useRef<HTMLDivElement>(null);
+  const titlebarSlot = useTitlebarSlot();
+  const [paneSlot, setPaneSlot] = useState<HTMLDivElement | null>(null);
+  // React remounts a portal when its container element changes. Keep one host
+  // node and move that node, so the tab bar's drag state survives a split.
+  const [portalHost] = useState(() => {
+    const host = document.createElement('div');
+    host.dataset.tabPortalHost = 'true';
+    host.style.display = 'contents';
+    return host;
+  });
   const activeDrag = useActiveDrag();
   const contentDropHover = useContentDropHover();
 
@@ -209,10 +224,42 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
     [handleMouseDown]
   );
 
+  const isLastGroup = Object.keys(state.groups).length === 1;
+  const anyTabs = Object.values(state.groups).some((entry) => entry.tabs.length > 0);
+  // The active group moves one workspace bar into the titlebar. That bar lists
+  // pages, so a split stays on its own segment and another page can be full-screen.
+  // Pane hosts stay hidden whenever the slot exists, and this host node is moved
+  // rather than swapped, so an in-progress drag is not remounted.
+  const hoistWorkspace = Boolean(group && isActive && titlebarSlot && anyTabs);
+
+  useLayoutEffect(() => {
+    const parent = hoistWorkspace && titlebarSlot ? titlebarSlot : paneSlot;
+    if (!parent || portalHost.parentElement === parent) return;
+    parent.appendChild(portalHost);
+  }, [hoistWorkspace, paneSlot, portalHost, titlebarSlot]);
+
+  useEffect(() => () => portalHost.remove(), [portalHost]);
+
   if (!group) return null;
 
-  const isLastGroup = Object.keys(state.groups).length === 1;
   const showWelcome = group.tabs.length === 0 && isLastGroup;
+  const tabBar = hoistWorkspace ? (
+    <WorkspaceTabBar />
+  ) : (
+    <GroupTabBar
+      variant="pane"
+      focused={isActive}
+      showNewTab={isActive || isLastGroup}
+      groupId={groupId}
+      tabs={group.tabs}
+      activeTabId={group.activeTabId}
+      onReconnect={handleReconnect}
+      onDuplicateTab={onDuplicateTab}
+      onNewConnection={onNewTab}
+      onNewLocalTerminal={onNewLocalTab}
+      onOpenSavedConnection={onOpenSavedConnection}
+    />
+  );
 
   return (
     <section
@@ -224,26 +271,20 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
       aria-label={`Terminal group ${groupId}`}
     >
       <div className={renderTabContents ? '' : 'pointer-events-auto'}>
-        <GroupTabBar
-          groupId={groupId}
-          tabs={group.tabs}
-          activeTabId={group.activeTabId}
-          onReconnect={handleReconnect}
-          onDuplicateTab={onDuplicateTab}
-          onNewConnection={onNewTab}
-          onNewLocalTerminal={onNewLocalTab}
-          onOpenSavedConnection={onOpenSavedConnection}
-        />
+        <div ref={setPaneSlot} hidden={titlebarSlot != null} data-tab-bar-host="pane" />
+        {createPortal(tabBar, portalHost)}
       </div>
       <div
         ref={contentRef}
         data-group-content={groupId}
-        className={`relative min-h-0 flex-1 overflow-hidden ${
-          isActive ? 'ring-inset ring-1 ring-border/50' : ''
-        }`}
+        className="relative min-h-0 flex-1 overflow-hidden"
       >
         {showWelcome ? (
-          <WelcomeScreen onNewConnection={() => {}} onOpenSettings={() => {}} />
+          <WelcomeScreen
+            onNewConnection={onNewTab ?? (() => {})}
+            onNewLocalTerminal={onNewLocalTab}
+            onOpenSettings={onOpenSettings ?? (() => {})}
+          />
         ) : renderTabContents ? (
           group.tabs.map((tab) => {
             return (

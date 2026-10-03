@@ -41,7 +41,7 @@ const DialogOverlay = React.forwardRef<
       ref={ref}
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-overlay",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/15",
         className,
       )}
       {...props}
@@ -51,20 +51,20 @@ const DialogOverlay = React.forwardRef<
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const dialogContentVariants = cva(
-  "bg-popover text-popover-foreground motion-reduce:animate-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed z-50 w-full max-w-[calc(100%-2rem)] rounded-xl border border-border shadow-lg duration-200",
+  "macos-sheet bg-popover text-popover-foreground motion-reduce:animate-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed z-50 w-full max-w-[calc(100%-2rem)] rounded-[12px] border border-border shadow-dialog duration-150",
   {
     variants: {
       position: {
         default:
-          "top-[50%] left-[50%] grid translate-x-[-50%] translate-y-[-50%] gap-4 p-6 sm:max-w-lg",
+          "top-[50%] left-[50%] grid translate-x-[-50%] translate-y-[-50%] gap-4 p-5 sm:max-w-lg",
         tauri:
-          "inset-0 m-auto top-0 left-0 flex max-h-[85vh] translate-x-0 translate-y-0 flex-col gap-4 p-6 sm:max-w-lg",
+          "inset-0 m-auto top-0 left-0 flex max-h-[85vh] translate-x-0 translate-y-0 flex-col gap-4 p-5 sm:max-w-lg",
         tauriTall:
-          "inset-0 m-auto top-0 left-0 flex h-[85vh] max-h-[85vh] translate-x-0 translate-y-0 flex-col gap-4 p-6 sm:max-w-lg",
+          "inset-0 m-auto top-0 left-0 flex h-[85vh] max-h-[85vh] translate-x-0 translate-y-0 flex-col gap-4 p-5 sm:max-w-lg",
         tauriTop:
-          "top-8 right-auto bottom-auto left-1/2 flex max-h-[calc(100vh-4rem)] -translate-x-1/2 translate-y-0 flex-col gap-4 p-6 sm:max-w-lg",
+          "top-8 right-auto bottom-auto left-1/2 flex max-h-[calc(100vh-4rem)] -translate-x-1/2 translate-y-0 flex-col gap-4 p-5 sm:max-w-lg",
         tauriTopTall:
-          "top-8 right-auto bottom-auto left-1/2 flex h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] -translate-x-1/2 translate-y-0 flex-col gap-4 p-6 sm:max-w-lg",
+          "top-8 right-auto bottom-auto left-1/2 flex h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] -translate-x-1/2 translate-y-0 flex-col gap-4 p-5 sm:max-w-lg",
       },
     },
     defaultVariants: {
@@ -90,7 +90,7 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+        <DialogPrimitive.Close className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0">
           <XIcon />
           <span className="sr-only">{t('common.close')}</span>
         </DialogPrimitive.Close>
@@ -129,7 +129,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-[15px] leading-tight font-semibold", className)}
       {...props}
     />
   );
@@ -142,7 +142,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-[13px] leading-relaxed", className)}
       {...props}
     />
   );

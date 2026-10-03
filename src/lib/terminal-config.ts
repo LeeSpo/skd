@@ -65,12 +65,28 @@ export function isLegacyLatinOnlyFontFamily(fontFamily: string): boolean {
   return LEGACY_LATIN_ONLY_FONT_VARIANTS.has(fontFamily);
 }
 
+/** Explicit Menlo choice. Distinct from the legacy default stack, which still migrates. */
+export const MENLO_TERMINAL_FONT = 'Menlo, monospace';
+export const MONACO_TERMINAL_FONT = 'Monaco, monospace';
+export const COURIER_NEW_TERMINAL_FONT = "'Courier New', monospace";
+
+const SUPPORTED_TERMINAL_FONTS = new Set<string>([
+  MACOS_MULTILINGUAL_TERMINAL_FONT,
+  MENLO_TERMINAL_FONT,
+  MONACO_TERMINAL_FONT,
+  COURIER_NEW_TERMINAL_FONT,
+]);
+
+export function isSupportedTerminalFont(fontFamily: string): boolean {
+  return SUPPORTED_TERMINAL_FONTS.has(fontFamily);
+}
+
 export function migrateAppearanceSettings(
   settings: TerminalAppearanceSettings,
 ): TerminalAppearanceSettings {
   let migrated = { ...settings };
 
-  if (isLegacyLatinOnlyFontFamily(migrated.fontFamily)) {
+  if (isLegacyLatinOnlyFontFamily(migrated.fontFamily) || !isSupportedTerminalFont(migrated.fontFamily)) {
     migrated = { ...migrated, fontFamily: MACOS_MULTILINGUAL_TERMINAL_FONT };
   }
 
@@ -79,6 +95,16 @@ export function migrateAppearanceSettings(
   }
 
   return migrated;
+}
+
+/** Base64 of a larger file blows the localStorage quota and fails the whole save. */
+export const MAX_TERMINAL_BACKGROUND_IMAGE_BYTES = Math.floor(1.5 * 1024 * 1024);
+
+export function terminalBackgroundSize(
+  position: TerminalAppearanceSettings['backgroundImagePosition'],
+): string {
+  if (position === 'center' || position === 'tile') return 'auto';
+  return position;
 }
 
 export const DEFAULT_TERMINAL_SCROLLBACK = 10000;
@@ -443,11 +469,7 @@ export function loadAppearanceSettings(): TerminalAppearanceSettings {
 }
 
 export function saveAppearanceSettings(settings: TerminalAppearanceSettings): void {
-  try {
-    localStorage.setItem('terminalAppearance', JSON.stringify(normalizeAppearanceSettings(settings)));
-  } catch (e) {
-    console.error('Failed to save terminal appearance settings:', e);
-  }
+  localStorage.setItem('terminalAppearance', JSON.stringify(normalizeAppearanceSettings(settings)));
 }
 
 export const TERMINAL_APPEARANCE_CHANGED_EVENT = 'skd-terminal-appearance-changed';
@@ -550,6 +572,18 @@ function isLightBackground(bg: string | undefined): boolean {
   const b = parseInt(bg.slice(5, 7), 16);
   // Relative luminance approximation
   return (r * 299 + g * 587 + b * 114) / 1000 > 128;
+}
+
+/** Background for the terminal container. Text stays opaque; only the fill thins. */
+export function terminalContainerBackground(opts: {
+  allowTransparency: boolean;
+  nativeMaterial: boolean;
+  opacity: number;
+  opaqueBackground: string;
+}): string {
+  if (!opts.allowTransparency || !opts.nativeMaterial) return opts.opaqueBackground;
+  const amount = Math.min(100, Math.max(0, opts.opacity));
+  return `color-mix(in srgb, ${opts.opaqueBackground} ${amount}%, transparent)`;
 }
 
 export function getThemeAwareTerminalOptions(appearance: TerminalAppearanceSettings): ITerminalOptions {

@@ -5,27 +5,27 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-[13px] font-medium transition-[color,background-color,border-color,box-shadow] motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring focus-visible:ring-[3px] aria-invalid:border-destructive",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-[13px] font-medium transition-[color,background-color,border-color,box-shadow,filter] motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:shadow-[var(--focus-ring)] aria-invalid:border-destructive",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover active:brightness-95",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:brightness-95",
         outline:
-          "border border-input bg-input-background text-foreground hover:bg-accent hover:text-accent-foreground",
+          "border-[0.5px] border-border bg-input-background text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground active:brightness-95",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border-[0.5px] border-border bg-white text-foreground shadow-sm hover:bg-neutral-50 active:brightness-95 dark:bg-white/10 dark:hover:bg-white/15",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground",
+          "hover:bg-accent hover:text-accent-foreground active:brightness-95",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9 rounded-md",
-        toolbar: "size-6 gap-0 p-0 rounded-md",
+        default: "h-7 px-3 py-1 has-[>svg]:px-2.5",
+        sm: "h-6 rounded-md gap-1.5 px-2.5 text-[12px] has-[>svg]:px-2",
+        lg: "h-9 rounded-md px-5 has-[>svg]:px-4",
+        icon: "size-7 rounded-md",
+        toolbar: "size-7 gap-0 p-0 rounded-md",
         menubar: "size-7 gap-0 p-0 rounded-md",
       },
     },
@@ -47,10 +47,10 @@ const Button = React.forwardRef<
 
   return (
     <Comp
-      data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       {...props}
+      data-slot="button"
     />
   );
 });

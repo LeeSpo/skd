@@ -11,6 +11,9 @@ import { getWebSocketUrl } from '@/lib/websocket-endpoint';
 import {
   loadAppearanceSettings,
   getThemeAwareTerminalOptions,
+  getThemeAwareTerminalTheme,
+  terminalBackgroundSize,
+  terminalContainerBackground,
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
@@ -22,6 +25,7 @@ import { useTerminalCallbacks } from '../lib/terminal-callbacks-context';
 import { useTerminalInput } from '../lib/terminal-input-context';
 import { useConnectionAttempts } from '../lib/connection-attempt-context';
 import { isConnectStage } from '../lib/connection-diagnostics';
+import { isAutoReconnectEnabled, shouldReconnectAfterDrop } from '../lib/connection-settings';
 import {
   clearTerminalCwd,
   parseOsc1337Cwd,
@@ -189,21 +193,45 @@ export function PtyTerminal({
     () => loadAppearanceSettings(),
     [appearanceKey, settingsRevision],
   );
-  const resolvedTerminalBackground =
-    getThemeAwareTerminalOptions(appearance).theme?.background ?? '#1e1e1e';
-  
-  // Track whether we need to switch renderers due to background image change
-  // This is necessary because WebGL renderer doesn't support transparency
+  const nativeMaterial = document.documentElement.dataset.nativeMaterial === 'true';
+  const opaqueTerminalBackground =
+    getThemeAwareTerminalTheme(appearance).background ?? '#1e1e1e';
+  const transparentBackground = appearance.allowTransparency && nativeMaterial;
+  const resolvedTerminalBackground = terminalContainerBackground({
+    allowTransparency: appearance.allowTransparency,
+    nativeMaterial,
+    opacity: appearance.opacity,
+    opaqueBackground: opaqueTerminalBackground,
+  });
+
+  // WebGL cannot clear a transparent background. Background images already
+  // force the canvas renderer for the same reason.
   const hasBackgroundImage = !!appearance.backgroundImage;
-  
-  // Remount when renderer mode changes — WebGL vs Canvas cannot be swapped in-place.
+
   const terminalKey = React.useMemo(() => {
     const renderer =
-      appearance.useWebglRenderer && !hasBackgroundImage ? 'webgl' : 'canvas';
+      appearance.useWebglRenderer && !hasBackgroundImage && !transparentBackground ? 'webgl' : 'canvas';
     const key = hasBackgroundImage ? 'bg' : 'no-bg';
     hadBackgroundImageRef.current = hasBackgroundImage;
-    return `${key}-${renderer}`;
-  }, [hasBackgroundImage, appearance.useWebglRenderer]);
+    return `${key}-${renderer}-${transparentBackground ? 'clear' : 'solid'}`;
+  }, [hasBackgroundImage, appearance.useWebglRenderer, transparentBackground]);
+
+  React.useEffect(() => {
+    if (!transparentBackground) return;
+    const root = document.documentElement;
+    const next = Number(root.dataset.terminalTranslucentCount ?? '0') + 1;
+    root.dataset.terminalTranslucentCount = String(next);
+    root.dataset.terminalTranslucent = 'true';
+    return () => {
+      const remaining = Number(root.dataset.terminalTranslucentCount ?? '1') - 1;
+      if (remaining <= 0) {
+        delete root.dataset.terminalTranslucentCount;
+        delete root.dataset.terminalTranslucent;
+      } else {
+        root.dataset.terminalTranslucentCount = String(remaining);
+      }
+    };
+  }, [transparentBackground]);
   
   React.useEffect(() => {
     if (!terminalRef.current) return;
@@ -475,6 +503,15 @@ export function PtyTerminal({
         // Auto-reconnect with exponential backoff so the user doesn't have
         // to manually click Reconnect every time the network hiccups.
         if (hasEverConnected) {
+          if (!shouldReconnectAfterDrop(isAutoReconnectEnabled())) {
+            term.write(`\r\n\x1b[31m[${t('ptyTerminal.autoReconnectOff')}]\x1b[0m\r\n`);
+            if (connectionStatusRef.current !== 'disconnected') {
+              connectionStatusRef.current = 'disconnected';
+              onConnectionStatusChange?.(connectionId, 'disconnected');
+            }
+            return;
+          }
+
           const dropAttempt = autoReconnectAfterDropRef.current;
           if (dropAttempt >= MAX_AUTO_RECONNECT_AFTER_DROP) {
             // Exhausted auto-reconnect attempts — ask user to act manually.
@@ -1160,7 +1197,6 @@ export function PtyTerminal({
         xtermRef.current?.focus();
       }}
       style={{
-        opacity: appearance.allowTransparency ? appearance.opacity / 100 : 1,
         backgroundColor: resolvedTerminalBackground,
       }}
     >
@@ -1170,7 +1206,7 @@ export function PtyTerminal({
           className="absolute inset-0 pointer-events-none"
           style={{
             backgroundImage: `url(${appearance.backgroundImage})`,
-            backgroundSize: appearance.backgroundImagePosition === 'tile' ? 'auto' : appearance.backgroundImagePosition,
+            backgroundSize: terminalBackgroundSize(appearance.backgroundImagePosition),
             backgroundPosition: 'center',
             backgroundRepeat: appearance.backgroundImagePosition === 'tile' ? 'repeat' : 'no-repeat',
             opacity: appearance.backgroundImageOpacity / 100,

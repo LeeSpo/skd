@@ -121,32 +121,29 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
   const canSend = isConnected && draft.trim().length > 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-panel-border bg-panel-toolbar px-3 py-1.5">
-        <Button
-          type="button"
-          size="sm"
-          className="h-7 gap-1.5 px-3"
-          disabled={!canSend}
-          onClick={handleSend}
-        >
-          <Send className="w-3.5 h-3.5" />
-          {t('composePane.send')}
-        </Button>
+    <div className="compose-pane flex h-full min-h-0 flex-col bg-background">
+      {sendError && (
+        <p role="alert" className="shrink-0 border-b border-panel-border px-4 py-2 text-xs text-destructive">
+          {sendError}
+        </p>
+      )}
 
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7 gap-1.5 px-3"
-          disabled={draft.length === 0}
-          onClick={handleClear}
-        >
-          <Eraser className="w-3.5 h-3.5" />
-          {t('composePane.clear')}
-        </Button>
+      <div className="relative flex-1 min-h-0 p-2">
+        <Textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={!isConnected}
+          aria-label={t('composePane.editorLabel')}
+          placeholder={isConnected ? t('composePane.placeholder') : t('composePane.placeholderDisconnected')}
+          className="h-full w-full rounded-md border-0 resize-none font-mono text-[13px] leading-relaxed p-3 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground"
+          spellCheck={false}
+        />
+      </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+      <div className="compose-actions flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <span className="mr-auto text-xs text-muted-foreground">{t('composePane.hint.sendShortcut')}</span>
+        <div className="flex items-center gap-2">
           <Switch
             id={`compose-clear-after-send-${connectionId}`}
             checked={clearAfterSend}
@@ -159,28 +156,28 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
             {t('composePane.clearAfterSend')}
           </Label>
         </div>
-      </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1.5 px-3"
+          disabled={draft.length === 0}
+          onClick={handleClear}
+        >
+          <Eraser className="w-3.5 h-3.5" />
+          {t('composePane.clear')}
+        </Button>
 
-      {sendError && (
-        <p role="alert" className="shrink-0 border-b border-panel-border px-3 py-2 text-xs text-destructive">
-          {sendError}
-        </p>
-      )}
-
-      <div className="relative flex-1 min-h-0">
-        <Textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={!isConnected}
-          placeholder={isConnected ? t('composePane.placeholder') : t('composePane.placeholderDisconnected')}
-          className="absolute inset-0 h-full w-full rounded-none border-0 resize-none font-mono text-[13px] leading-relaxed p-4 bg-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-transparent placeholder:text-muted-foreground/50"
-          spellCheck={false}
-        />
-      </div>
-
-      <div className="flex items-center justify-end border-t border-panel-border px-4 py-1.5 text-xs text-muted-foreground">
-        {t('composePane.hint.sendShortcut')}
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 gap-1.5 px-3"
+          disabled={!canSend}
+          onClick={handleSend}
+        >
+          <Send className="w-3.5 h-3.5" />
+          {t('composePane.send')}
+        </Button>
       </div>
     </div>
   );

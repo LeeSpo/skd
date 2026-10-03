@@ -22,9 +22,7 @@ function Tabs({
 const tabsListVariants = cva("inline-flex items-center justify-center", {
   variants: {
     variant: {
-      pill: "bg-muted text-muted-foreground h-9 w-fit rounded-xl p-[3px] flex",
-      underline:
-        "h-8 w-full justify-start rounded-none border-b border-border bg-transparent p-0",
+      pill: "flex h-7 w-fit rounded-[7px] bg-muted p-0.5 text-muted-foreground",
     },
   },
   defaultVariants: {
@@ -33,13 +31,11 @@ const tabsListVariants = cva("inline-flex items-center justify-center", {
 });
 
 const tabsTriggerVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex items-center justify-center gap-1.5 font-medium whitespace-nowrap transition-[color,background-color,box-shadow] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        pill: "data-[state=active]:bg-card dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground h-[calc(100%-1px)] flex-1 rounded-xl border border-transparent px-2 py-1 text-sm focus-visible:ring-[3px] focus-visible:outline-1",
-        underline:
-          "relative h-8 rounded-none border-b-2 border-transparent bg-transparent px-3 py-1 text-xs text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+        pill: "h-6 flex-1 rounded-[6px] border border-transparent px-2.5 text-[13px] text-foreground data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/15 dark:data-[state=active]:text-foreground",
       },
     },
     defaultVariants: {

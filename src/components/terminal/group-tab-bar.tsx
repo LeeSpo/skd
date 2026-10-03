@@ -2,7 +2,9 @@ import React, { useState, useCallback, useRef, useEffect, useSyncExternalStore }
 import { useTranslation } from 'react-i18next';
 import { X, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, ArrowDown, MoveRight, FolderSync, Terminal, FileCode } from 'lucide-react';
 import type { TerminalTab, SplitDirection } from '../../lib/terminal-group-types';
+import type { PaneSession } from '../../lib/visible-pane-sessions';
 import { getTabDisplayName } from '../../lib/terminal-group-utils';
+import { tabTooltip } from '../../lib/session-chrome';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import {
@@ -34,12 +36,71 @@ import {
 import { NewTabMenu } from './new-tab-menu';
 import { tabsRemovedByBulkClose } from '../../lib/session-close';
 
+export function SplitSessionLabels({
+  sessions,
+  ownerGroupId,
+  renderOwnerChrome,
+  onFocusGroup,
+}: {
+  sessions: PaneSession[];
+  ownerGroupId?: string;
+  renderOwnerChrome?: (tab: TerminalTab) => React.ReactNode;
+  onFocusGroup: (groupId: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-full w-full min-w-0 items-stretch">
+      {sessions.map((session, index) => {
+        const owner = session.groupId === ownerGroupId;
+        return (
+          <div
+            key={session.groupId}
+            className={`relative flex min-w-0 flex-1 ${index > 0 ? 'border-l border-border' : ''}`}
+          >
+            {owner && renderOwnerChrome?.(session.tab)}
+            <button
+              type="button"
+              data-tauri-drag-region="false"
+              data-split-pane={session.groupId}
+              aria-pressed={owner ? true : undefined}
+              className={`flex h-full min-w-0 flex-1 items-center justify-center gap-1.5 rounded-sm text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ${owner ? 'px-7' : 'px-2'}`}
+              onPointerDown={owner ? undefined : (event) => event.stopPropagation()}
+              onClick={owner ? undefined : (event) => {
+                event.stopPropagation();
+                onFocusGroup(session.groupId);
+              }}
+            >
+              {session.tab.connectionStatus !== 'connected' && (
+                <StatusDot
+                  variant={session.tab.connectionStatus}
+                  aria-label={t(`statusBar.${session.tab.connectionStatus}`)}
+                />
+              )}
+              <span className="min-w-0 truncate text-center text-[13px] leading-none">
+                {getTabDisplayName(session.tab, session.tabs)}
+              </span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Component ──
 
 interface GroupTabBarProps {
   groupId: string;
   tabs: TerminalTab[];
   activeTabId: string | null;
+  /** `titlebar` fills the window toolbar. `pane` is only used when that slot is absent. */
+  variant?: 'titlebar' | 'pane';
+  /** This pane has keyboard focus. An unfocused pane keeps its visible tab readable, without the raised fill. */
+  focused?: boolean;
+  /** Hide the new-tab button on a bar that is not the place a new session should land. */
+  showNewTab?: boolean;
+  /** Visible sessions across the split, in pane order. Drawn inside the active segment. */
+  splitSessions?: PaneSession[];
   onNewConnection?: () => void;
   onNewLocalTerminal?: () => void | Promise<void>;
   onOpenSavedConnection?: (connectionId: string, targetGroupId: string) => void | Promise<void>;
@@ -55,6 +116,10 @@ export function GroupTabBar({
   groupId,
   tabs,
   activeTabId,
+  variant = 'pane',
+  focused = true,
+  showNewTab = true,
+  splitSessions,
   onNewConnection,
   onNewLocalTerminal,
   onOpenSavedConnection,
@@ -62,7 +127,7 @@ export function GroupTabBar({
   onReconnect,
 }: GroupTabBarProps) {
   const { t } = useTranslation();
-  const { dispatch } = useTerminalGroups();
+  const { state, dispatch } = useTerminalGroups();
   const activeDrag = useActiveDrag();
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -314,9 +379,12 @@ export function GroupTabBar({
 
   const handleTabSelect = useCallback(
     (tabId: string) => {
+      if (state.activeGroupId !== groupId) {
+        dispatch({ type: 'ACTIVATE_GROUP', groupId });
+      }
       dispatch({ type: 'ACTIVATE_TAB', groupId, tabId });
     },
-    [dispatch, groupId],
+    [dispatch, groupId, state.activeGroupId],
   );
 
   const handleMoveToNewGroup = useCallback(
@@ -326,71 +394,134 @@ export function GroupTabBar({
     [dispatch, groupId],
   );
 
+  const titlebar = variant === 'titlebar';
+
+  const tabIcon = (tab: TerminalTab) => (
+    tab.tabType === 'file-browser' ? (
+      <FolderSync className="size-3.5 shrink-0 text-muted-foreground" />
+    ) : tab.tabType === 'editor' ? (
+      <FileCode className="size-3.5 shrink-0 text-muted-foreground" />
+    ) : (
+      <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+    )
+  );
+
+  const closeButton = (tab: TerminalTab) => (
+    <Button
+      variant="ghost"
+      size="toolbar"
+      data-tauri-drag-region="false"
+      className="absolute inset-0 size-3.5 shrink-0 rounded-sm p-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+      aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleTabClose(tab.id);
+      }}
+    >
+      <X className="size-3" />
+    </Button>
+  );
+
   return (
     <>
-      <div className="flex h-8 shrink-0 items-center border-b border-panel-border bg-panel-toolbar">
+      <div
+        data-variant={variant}
+        data-tauri-drag-region={titlebar ? true : undefined}
+        className={
+          titlebar
+            ? 'terminal-tab-strip flex h-full w-full min-w-0 items-center px-1'
+            : 'terminal-tab-strip flex h-9 w-full min-w-0 shrink-0 items-center bg-workspace px-1'
+        }
+      >
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 transition-colors ${
-            isDragOver ? 'bg-accent/40' : ''
-          }`}
+          data-tauri-drag-region={titlebar ? true : undefined}
+          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto ${isDragOver ? 'bg-surface-hover' : ''}`}
         >
-          {tabs.map((tab, index) => (
+          {tabs.length === 0 && splitSessions && splitSessions.length > 0 && (
+            <div
+              data-split-summary
+              className="terminal-tab relative box-border flex h-7 min-w-0 flex-1 basis-0 items-stretch overflow-hidden rounded-[var(--radius-control)] border border-transparent font-medium text-foreground titlebar-tab-active"
+            >
+              <SplitSessionLabels
+                sessions={splitSessions}
+                onFocusGroup={(nextGroupId) => dispatch({ type: 'ACTIVATE_GROUP', groupId: nextGroupId })}
+              />
+            </div>
+          )}
+          {tabs.map((tab, index) => {
+            const splitColumns = tab.id === activeTabId && splitSessions && splitSessions.length > 1
+              ? splitSessions
+              : null;
+            return (
             <React.Fragment key={tab.id}>
               {/* Insertion indicator line */}
               {dropIndex === index && (
-                <div className="w-0.5 h-4 bg-primary shrink-0" />
+                <div className="w-px h-4 bg-primary shrink-0" />
               )}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    title={t(`statusBar.${tab.connectionStatus}`)}
-                    className={`group box-border flex h-7 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-2.5 ${
+                    data-tauri-drag-region="false"
+                    title={splitColumns
+                      ? splitColumns.map((session) => getTabDisplayName(session.tab, session.tabs)).join(' · ')
+                      : tabTooltip(tab, getTabDisplayName(tab, tabs), t(`statusBar.${tab.connectionStatus}`))}
+                    className={`terminal-tab group relative box-border flex h-7 cursor-pointer select-none items-center overflow-hidden rounded-[var(--radius-control)] border border-transparent ${
+                      splitColumns ? 'min-w-0' : 'min-w-[4.5rem] flex-1 basis-0 justify-center gap-1.5 px-2.5'
+                    } ${
                       tab.id === activeTabId
-                        ? 'bg-surface-selected text-foreground'
-                        : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                        ? focused
+                          ? 'titlebar-tab-active font-medium text-foreground'
+                          : 'font-medium text-foreground'
+                        : 'titlebar-tab-idle text-muted-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
+                    style={splitColumns ? { flexGrow: splitColumns.length, flexBasis: 0, minWidth: `${splitColumns.length * 4.5}rem` } : undefined}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
                     onDragStart={handleNativeDragStart}
                     draggable={false}
                     onClick={() => handleTabSelect(tab.id)}
                   >
-                    <button
-                      type="button"
-                      aria-pressed={tab.id === activeTabId}
-                      className="flex min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-                    >
-                      {tab.tabType === 'file-browser' ? (
-                        <FolderSync className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ) : tab.tabType === 'editor' ? (
-                        <FileCode className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      {tab.connectionStatus !== 'connected' && (
-                        <StatusDot
-                          variant={tab.connectionStatus}
-                          aria-label={t(`statusBar.${tab.connectionStatus}`)}
-                        />
-                      )}
-                      <span className="truncate text-[13px] leading-none">{getTabDisplayName(tab, tabs)}</span>
-                    </button>
-
-                    <Button
-                      variant="ghost"
-                      size="toolbar"
-                      className="size-5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-                      aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTabClose(tab.id);
-                      }}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
+                    {splitColumns ? (
+                      <SplitSessionLabels
+                        sessions={splitColumns}
+                        ownerGroupId={groupId}
+                        onFocusGroup={(nextGroupId) => dispatch({ type: 'ACTIVATE_GROUP', groupId: nextGroupId })}
+                        renderOwnerChrome={(owner) => (
+                          <span className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2">
+                            <span className="group-hover:invisible group-focus-within:invisible">
+                              {tabIcon(owner)}
+                            </span>
+                            {closeButton(owner)}
+                          </span>
+                        )}
+                      />
+                    ) : (
+                      <>
+                        <span className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2">
+                          <span className="group-hover:invisible group-focus-within:invisible">
+                            {tabIcon(tab)}
+                          </span>
+                          {closeButton(tab)}
+                        </span>
+                        <button
+                          type="button"
+                          data-tauri-drag-region="false"
+                          aria-pressed={tab.id === activeTabId}
+                          className="flex w-full min-w-0 items-center justify-center gap-1.5 rounded-sm px-7 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                        >
+                          {tab.connectionStatus !== 'connected' && (
+                            <StatusDot
+                              variant={tab.connectionStatus}
+                              aria-label={t(`statusBar.${tab.connectionStatus}`)}
+                            />
+                          )}
+                          <span className="min-w-0 truncate text-center text-[13px] leading-none">{getTabDisplayName(tab, tabs)}</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
@@ -469,19 +600,25 @@ export function GroupTabBar({
                 </ContextMenuContent>
               </ContextMenu>
             </React.Fragment>
-          ))}
+            );
+          })}
           {/* Insertion indicator at the end */}
           {dropIndex === tabs.length && (
-            <div className="w-0.5 h-4 bg-primary shrink-0" />
+            <div className="w-px h-4 bg-primary shrink-0" />
           )}
         </div>
 
-        <NewTabMenu
-          groupId={groupId}
-          onOpenSavedConnection={onOpenSavedConnection}
-          onNewConnection={onNewConnection}
-          onNewLocalTerminal={onNewLocalTerminal}
-        />
+        {showNewTab && (
+          <div data-tauri-drag-region="false" className="shrink-0">
+            <NewTabMenu
+              groupId={groupId}
+              triggerClassName="rounded-[var(--radius-control)]"
+              onOpenSavedConnection={onOpenSavedConnection}
+              onNewConnection={onNewConnection}
+              onNewLocalTerminal={onNewLocalTerminal}
+            />
+          </div>
+        )}
       </div>
 
       {/* Floating drag ghost — rendered via portal-like fixed positioning */}

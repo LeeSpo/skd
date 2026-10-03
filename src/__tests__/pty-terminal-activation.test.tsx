@@ -143,6 +143,8 @@ vi.mock('../lib/terminal-config', () => ({
     scrollback: 10000,
     theme: {},
   })),
+  getThemeAwareTerminalTheme: vi.fn(() => ({ background: '#1e1e1e' })),
+  terminalContainerBackground: vi.fn((opts: { opaqueBackground: string }) => opts.opaqueBackground),
 }));
 
 vi.mock('../components/terminal/terminal-context-menu', () => ({

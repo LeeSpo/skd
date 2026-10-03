@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import {
   WifiOff,
   RotateCcw,
-  ArrowRightLeft,
 } from "lucide-react";
 import { SyncDialog } from "./sync-dialog";
 import { DirectoryTransferDialog } from "./directory-transfer-dialog";
@@ -19,7 +18,6 @@ import {
 } from "./ui/resizable";
 import { FilePanel } from "./file-panel";
 import type { FilePanelRef } from "./file-panel";
-import { TransferControls } from "./transfer-controls";
 import { TransferQueue } from "./transfer-queue";
 import type { FileEntry } from "@/lib/file-entry-types";
 import { pathJoin } from "@/lib/file-entry-types";
@@ -84,8 +82,6 @@ export function FileBrowserView({
   const remotePanelRef = useRef<FilePanelRef>(null);
 
   // Selection counts for transfer controls
-  const [localSelCount, setLocalSelCount] = useState(0);
-  const [remoteSelCount, setRemoteSelCount] = useState(0);
 
   // Fetch local home directory on mount
   useEffect(() => {
@@ -526,9 +522,13 @@ export function FileBrowserView({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, [role="menu"], [role="menuitem"]')) return;
+      if (e.key === "Tab" && target.hasAttribute('data-panel-mode') && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setActivePanel((prev) => (prev === "local" ? "remote" : "local"));
+        (activePanel === 'local' ? remotePanelRef : localPanelRef).current?.focus();
       }
       if (e.key === "F5") {
         e.preventDefault();
@@ -576,7 +576,7 @@ export function FileBrowserView({
   return (
     <div
       ref={browserRoot}
-      className="h-full w-full flex flex-col bg-background text-foreground"
+      className="file-browser-workspace h-full w-full flex flex-col bg-background text-foreground"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -585,7 +585,7 @@ export function FileBrowserView({
         <ResizablePanelGroup
           direction="horizontal"
           autoSaveId="file-browser-split"
-          className="flex-1"
+          className="min-h-[152px] flex-1"
         >
           {/* Local Panel */}
           <ResizablePanel
@@ -608,32 +608,11 @@ export function FileBrowserView({
               onTransferToOther={enqueueUpload}
               onTransferDirectoryToOther={handleUploadDirectory}
               onFocus={() => setActivePanel("local")}
-              onSelectionCountChange={setLocalSelCount}
               showPermissions={false}
             />
           </ResizablePanel>
 
-          {/* Transfer Controls */}
-          <TransferControls
-            localSelectionCount={localSelCount}
-            remoteSelectionCount={remoteSelCount}
-            onUpload={handleUploadButton}
-            onDownload={handleDownloadButton}
-            disabled={!isConnected}
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={t('fileBrowser.toolbar.syncDirectories')}
-              onClick={() => setSyncDialogOpen(true)}
-              disabled={!isConnected}
-            >
-              <ArrowRightLeft className="h-4 w-4" />
-            </Button>
-          </TransferControls>
-
-          <ResizableHandle />
+          <ResizableHandle dividerTone="panel" />
 
           {/* Remote Panel */}
           <ResizablePanel
@@ -655,7 +634,7 @@ export function FileBrowserView({
               onTransferToOther={enqueueDownload}
               onTransferDirectoryToOther={handleDownloadDirectory}
               onFocus={() => setActivePanel("remote")}
-              onSelectionCountChange={setRemoteSelCount}
+              onSyncDirectories={() => setSyncDialogOpen(true)}
               showPermissions={true}
               disabled={!isConnected}
               onOsFilesDropped={handleOsFilesDropped}

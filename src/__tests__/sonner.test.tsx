@@ -85,7 +85,7 @@ vi.mock('sonner', async () => {
     function MockToaster(props, ref) {
       sonnerState.toasterProps = props;
       const { toasts } = useSonner();
-      const position = typeof props.position === 'string' ? props.position : 'bottom-right';
+      const position = typeof props.position === 'string' ? props.position : 'top-right';
       const [yPosition, xPosition] = position.split('-');
 
       return (

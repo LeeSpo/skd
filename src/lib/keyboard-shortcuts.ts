@@ -29,10 +29,9 @@ export const APP_SETTINGS_STORAGE_KEY = 'sshClientSettings';
 export const APP_SETTINGS_CHANGED_EVENT = 'sshClientSettingsChanged';
 
 export const DEFAULT_APP_KEYBOARD_SHORTCUTS = {
-  newSession: 'Ctrl+N',
-  closeSession: 'Ctrl+Shift+W',
-  nextTab: 'Ctrl+Tab',
-  previousTab: 'Ctrl+Shift+Tab',
+  closeSession: '⌘+W',
+  nextTab: '⌃+Tab',
+  previousTab: '⌃+⇧+Tab',
 } as const;
 
 export const DEFAULT_SPLIT_VIEW_SHORTCUTS: SplitViewShortcutBindings = {
@@ -95,13 +94,14 @@ export function parseKeyboardShortcut(shortcut: string): ParsedKeyboardShortcut 
 
   for (const part of parts) {
     const normalized = part.toLowerCase();
-    if (normalized === 'ctrl' || normalized === 'control' || normalized === 'cmdorctrl') {
+    if (part === '⌃' || normalized === 'ctrl' || normalized === 'control' || normalized === 'cmdorctrl') {
       parsed.ctrlKey = true;
-    } else if (normalized === 'shift') {
+    } else if (part === '⇧' || normalized === 'shift') {
       parsed.shiftKey = true;
-    } else if (normalized === 'alt' || normalized === 'option') {
+    } else if (part === '⌥' || normalized === 'alt' || normalized === 'option') {
       parsed.altKey = true;
     } else if (
+      part === '⌘' ||
       normalized === 'meta' ||
       normalized === 'cmd' ||
       normalized === 'command' ||
@@ -185,6 +185,11 @@ function isTerminalInputTarget(target: EventTarget | null): boolean {
   return target.tagName === 'TEXTAREA' || target.closest('.xterm') !== null;
 }
 
+/** True only for the xterm surface, not for ordinary text fields. */
+function isXtermTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('.xterm') !== null;
+}
+
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
@@ -213,7 +218,7 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled: boo
     if (!enabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) {
+      if (isEditableTarget(event.target) && !isXtermTarget(event.target)) {
         return;
       }
 
@@ -235,7 +240,7 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled: boo
 
         if (keyMatch && ctrlMatch && shiftMatch && altMatch && metaMatch) {
           if (shortcut.ignoreInTerminal && isTerminalInputTarget(event.target)) {
-            return;
+            continue;
           }
           event.preventDefault();
           event.stopPropagation();

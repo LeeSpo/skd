@@ -1,7 +1,9 @@
-import type { TerminalGroupState, GridNode } from './terminal-group-types';
+import type { TerminalGroupState, GridNode, TerminalGroup, TerminalTab, WorkspacePage } from './terminal-group-types';
 
 export const STORAGE_KEY = 'skd-terminal-groups';
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
+/** Layouts saved before a titlebar segment owned its own grid. */
+const MIGRATABLE_VERSION = 1;
 
 const LEGACY_ACTIVE_CONNECTIONS_KEY = 'skd-active-connections';
 
@@ -25,6 +27,10 @@ export function deserialize(json: string): TerminalGroupState | null {
   try {
     const parsed: unknown = JSON.parse(json);
     if (!isSerializedState(parsed)) return null;
+    if (parsed.version === MIGRATABLE_VERSION) {
+      if (!isValidLegacyState(parsed.data)) return null;
+      return migrateV1(parsed.data);
+    }
     if (parsed.version !== STATE_VERSION) return null;
     if (!isValidState(parsed.data)) return null;
     return parsed.data;
@@ -125,19 +131,30 @@ function isSerializedState(value: unknown): value is SerializedState {
   return typeof obj.version === 'number' && typeof obj.data === 'object' && obj.data !== null;
 }
 
+function isValidLegacyState(value: unknown): value is TerminalGroupState {
+  if (!hasGroupRecords(value)) return false;
+  return isValidGridNode(value.gridLayout);
+}
+
 function isValidState(value: unknown): value is TerminalGroupState {
+  if (!isValidLegacyState(value)) return false;
+  if (typeof value.activePageId !== 'string') return false;
+  if (typeof value.nextPageId !== 'number') return false;
+  if (!Array.isArray(value.pages) || value.pages.length === 0) return false;
+  return value.pages.every(isValidPage);
+}
+
+function hasGroupRecords(value: unknown): value is TerminalGroupState {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
 
   if (typeof obj.groups !== 'object' || obj.groups === null) return false;
   if (typeof obj.activeGroupId !== 'string') return false;
   if (typeof obj.nextGroupId !== 'number') return false;
-  if (!isValidGridNode(obj.gridLayout)) return false;
 
   // tabToGroupMap is optional for backward compatibility — initializeState rebuilds it
   if (obj.tabToGroupMap !== undefined && typeof obj.tabToGroupMap !== 'object') return false;
 
-  // Validate each group has required fields
   const groups = obj.groups as Record<string, unknown>;
   for (const key of Object.keys(groups)) {
     const group = groups[key] as Record<string, unknown>;
@@ -148,6 +165,74 @@ function isValidState(value: unknown): value is TerminalGroupState {
   }
 
   return true;
+}
+
+function isValidPage(value: unknown): value is WorkspacePage {
+  if (typeof value !== 'object' || value === null) return false;
+  const page = value as Record<string, unknown>;
+  return typeof page.id === 'string'
+    && typeof page.activeGroupId === 'string'
+    && isValidGridNode(page.gridLayout);
+}
+
+/**
+ * v1 stored one window-wide grid. A single pane with several tabs becomes one
+ * full-screen page per tab. A split tree stays one page, and any extra tab
+ * stacked inside a pane becomes its own page.
+ */
+export function migrateV1(data: TerminalGroupState): TerminalGroupState {
+  const groups: Record<string, TerminalGroup> = {};
+  for (const [id, group] of Object.entries(data.groups)) {
+    groups[id] = { ...group, tabs: [...group.tabs] };
+  }
+
+  let nextGroupId = data.nextGroupId;
+  const extras: TerminalTab[] = [];
+  for (const group of Object.values(groups)) {
+    if (group.tabs.length <= 1) continue;
+    const keep = group.tabs.find((tab) => tab.id === group.activeTabId) ?? group.tabs[0];
+    for (const tab of group.tabs) {
+      if (tab.id !== keep.id) extras.push(tab);
+    }
+    group.tabs = [keep];
+    group.activeTabId = keep.id;
+  }
+
+  const tabToGroupMap: Record<string, string> = { ...(data.tabToGroupMap ?? {}) };
+  for (const [id, group] of Object.entries(groups)) {
+    for (const tab of group.tabs) tabToGroupMap[tab.id] = id;
+  }
+
+  const pages: WorkspacePage[] = [{
+    id: '1',
+    gridLayout: data.gridLayout,
+    activeGroupId: data.activeGroupId,
+  }];
+  let nextPageId = 2;
+  for (const tab of extras) {
+    const groupId = String(nextGroupId);
+    nextGroupId += 1;
+    const pageId = String(nextPageId);
+    nextPageId += 1;
+    groups[groupId] = { id: groupId, tabs: [tab], activeTabId: tab.id };
+    tabToGroupMap[tab.id] = groupId;
+    pages.push({
+      id: pageId,
+      gridLayout: { type: 'leaf', groupId },
+      activeGroupId: groupId,
+    });
+  }
+
+  return {
+    groups,
+    activeGroupId: data.activeGroupId,
+    gridLayout: data.gridLayout,
+    nextGroupId,
+    tabToGroupMap,
+    pages,
+    activePageId: '1',
+    nextPageId,
+  };
 }
 
 function isValidGridNode(value: unknown): value is GridNode {

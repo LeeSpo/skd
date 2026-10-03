@@ -7,14 +7,15 @@ import { save, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { CancelledError } from '@/lib/async-retry';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { PanelToolbar, ToolbarDivider } from './ui/panel-chrome';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { PanelToolbar } from './ui/panel-chrome';
+import { FileColumnMenu } from '@/components/file-column-menu';
+import { useFileBrowserColumns } from '@/lib/file-browser-columns';
 import {
   FILE_BROWSER_CHROME_TEXT,
   FILE_BROWSER_LIST_ICONS,
   FILE_BROWSER_LIST_TEXT,
 } from '@/lib/file-browser-typography';
-import { ScrollArea } from './ui/scroll-area';
 import {
   buildDirectoryUploadPlan,
   buildFileUploadItems,
@@ -56,7 +57,6 @@ import {
   Scissors,
   FolderPlus,
   ChevronRight,
-  ChevronDown,
   X,
   FileEdit,
   ClipboardPaste,
@@ -65,10 +65,10 @@ import {
   Layers,
   GripVertical,
   ScrollText,
-  Pencil,
   LocateFixed,
   PanelLeft,
   Search,
+  MoreHorizontal,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from './ui/context-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
@@ -162,7 +162,7 @@ interface SortableColumnHeaderProps {
   sortField: SortField;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
-  onResizeStart?: (columnName: string, e: React.MouseEvent) => void;
+  onResizeStart?: (columnName: SortField, e: React.MouseEvent) => void;
   resizable?: boolean;
 }
 
@@ -178,10 +178,10 @@ function SortableColumnHeader({
 }: SortableColumnHeaderProps) {
   return (
     <div
-      className="relative flex cursor-pointer select-none items-center hover:text-foreground"
-      style={{ width: `${width}px` }}
-      onClick={() => onSort(field)}
+      className="relative flex h-7 shrink-0 select-none items-center"
+      style={field === 'name' ? { flex: `1 0 ${width}px` } : { width }}
     >
+      <button type="button" className="flex h-full min-w-0 items-center rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSort(field)}>
       <span>{label}</span>
       {sortField === field ? (
         sortDirection === 'asc' ? (
@@ -192,6 +192,7 @@ function SortableColumnHeader({
       ) : (
         <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
       )}
+      </button>
       {resizable && onResizeStart && (
         <div
           className="group absolute top-0 right-[-4px] bottom-0 flex w-2 cursor-col-resize items-center justify-center hover:bg-accent/50"
@@ -228,6 +229,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   const isAvailable = adapter.isAvailable;
 
   const { t } = useTranslation();
+  const { isColumnVisible } = useFileBrowserColumns();
+  const permissionsVisible = !isLocalMode && isColumnVisible('permissions');
+  const ownerVisible = !isLocalMode && isColumnVisible('owner');
   const [currentPath, setCurrentPath] = useState(adapter.defaultHomePath);
   const [followTerminalCwd, setFollowTerminalCwd] = useState(loadFollowTerminalPreference);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -306,13 +310,14 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   
   // Column widths state
   const [columnWidths, setColumnWidths] = useState({
-    name: 300,
+    name: 180,
     size: 80,
     modified: 140,
     permissions: 100,
     owner: 110
   });
-  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [resizingColumn, setResizingColumn] = useState<SortField | null>(null);
+  const columnResizeRef = useRef({ startX: 0, startWidth: 0 });
   
   // Sort state
   const [sortField, setSortField] = useState<SortField>('name');
@@ -495,32 +500,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     if (!resizingColumn) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const columnsContainer = document.querySelector('[data-columns-container]');
-      if (!columnsContainer) return;
-
-      const containerRect = columnsContainer.getBoundingClientRect();
-      const relativeX = e.clientX - containerRect.left - 8; // Account for padding
-
-      // Calculate new width based on mouse position
-      setColumnWidths(prev => {
-        const columns = Object.keys(prev);
-        const columnIndex = columns.indexOf(resizingColumn);
-        
-        if (columnIndex === -1) return prev;
-
-        // Calculate the start position of the column being resized
-        let columnStart = 0;
-        for (let i = 0; i < columnIndex; i++) {
-          columnStart += prev[columns[i] as keyof typeof prev] + 8; // Add gap
-        }
-
-        const newWidth = Math.max(50, relativeX - columnStart - 8); // Minimum width of 50px, account for gaps
-
-        return {
-          ...prev,
-          [resizingColumn]: newWidth
-        };
-      });
+      const { startX, startWidth } = columnResizeRef.current;
+      const width = Math.max(resizingColumn === 'name' ? 120 : 64, startWidth + e.clientX - startX);
+      setColumnWidths(prev => ({ ...prev, [resizingColumn]: width }));
     };
 
     const handleMouseUp = () => {
@@ -541,9 +523,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh the current connection's panel
   }), [connectionId]);
 
-  const handleResizeStart = (columnName: string, e: React.MouseEvent) => {
+  const handleResizeStart = (columnName: SortField, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    columnResizeRef.current = {
+      startX: e.clientX,
+      startWidth: e.currentTarget.parentElement?.getBoundingClientRect().width ?? columnWidths[columnName],
+    };
     setResizingColumn(columnName);
   };
 
@@ -1631,6 +1617,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   // Count actual files/folders (excluding ".." navigation entry)
   const actualItemCount = filteredFiles.filter(file => file.name !== '..').length;
+  const listMinWidth = columnWidths.name + columnWidths.size + columnWidths.modified + 40
+    + (permissionsVisible ? columnWidths.permissions + 8 : 0)
+    + (ownerVisible ? columnWidths.owner + 8 : 0);
 
   if (!isLocalMode && !isAvailable) {
     return (
@@ -1644,65 +1633,32 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   }
 
   return (
-    <div className={`flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
-      <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} h-auto min-h-9 gap-1 overflow-x-auto whitespace-nowrap py-1 scrollbar-none`}>
-          <Button
-            variant={treeVisible ? 'secondary' : 'ghost'}
-            size="toolbar"
-            aria-label={t('fileBrowser.toolbar.toggleDirectoryTree')}
-            aria-pressed={treeVisible}
-            title={t('fileBrowser.toolbar.toggleDirectoryTree')}
-            onClick={toggleTree}
-          >
-            <PanelLeft className="h-3.5 w-3.5" />
-          </Button>
-          {/* Back */}
-          <Button
-            variant="ghost"
-            size="toolbar"
-            title={t('fileBrowser.toolbar.back')}
-            disabled={!canGoBack}
-            onClick={goBack}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </Button>
-          {/* Forward */}
-          <Button
-            variant="ghost"
-            size="toolbar"
-            title={t('fileBrowser.toolbar.forward')}
-            disabled={!canGoForward}
-            onClick={goForward}
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-          {/* Go Up */}
-          <Button
-            variant="ghost"
-            size="toolbar"
-            title={t('fileBrowser.toolbar.parentDir')}
-            disabled={adapter.isRootPath(currentPath)}
-            onClick={goUp}
-          >
-            <ArrowUp className="h-3.5 w-3.5" />
-          </Button>
-          {/* Home */}
-          <Button
-            variant="ghost"
-            size="toolbar"
-            title={t('fileBrowser.toolbar.home')}
-            onClick={() => {
-              void adapter.homePath().then((home) => navigateTo(home));
-            }}
-          >
-            <Home className="h-3.5 w-3.5" />
-          </Button>
-
+    <div className={`file-browser flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
+      <PanelToolbar className={`file-browser-toolbar ${FILE_BROWSER_CHROME_TEXT}`}>
+        <Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.back')} title={t('fileBrowser.toolbar.back')} disabled={!canGoBack} onClick={goBack}><ArrowLeft className="size-3.5" /></Button>
+        <Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.forward')} title={t('fileBrowser.toolbar.forward')} disabled={!canGoForward} onClick={goForward}><ArrowRight className="size-3.5" /></Button>
           {/* Breadcrumb / Editable address bar */}
           <div
-            className="group mx-1.5 flex h-7 min-w-24 flex-1 cursor-text items-center rounded-md border border-input bg-input-background px-2 transition-colors motion-reduce:transition-none hover:border-border focus-within:ring-2 focus-within:ring-ring"
+            ref={(node) => {
+              if (node && restorePathFocusRef.current && !isEditingPath) {
+                restorePathFocusRef.current = false;
+                node.focus();
+              }
+            }}
+            role="group"
+            tabIndex={isEditingPath ? -1 : 0}
+            aria-label={t('fileBrowser.toolbar.editPath')}
+            aria-description={t('fileBrowser.toolbar.editPathHint')}
+            aria-keyshortcuts="Enter Space"
+            className="file-browser-path group flex h-7 min-w-0 flex-1 cursor-text items-center rounded-md px-2 transition-colors motion-reduce:transition-none hover:bg-surface-hover focus-within:ring-2 focus-within:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               if (!isEditingPath) beginPathEdit();
+            }}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              beginPathEdit();
             }}
           >
             {isEditingPath ? (
@@ -1729,8 +1685,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                 onBlur={handlePathSubmit}
               />
             ) : (
-              <>
-                <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none">
+              <div className="file-browser-breadcrumbs flex min-w-0 flex-1 items-center gap-0 overflow-x-auto whitespace-nowrap scrollbar-none" title={currentPath}>
                 {getBreadcrumbs(currentPath).map((seg, i) => (
                   <React.Fragment key={seg.path}>
                     {i > 0 && (
@@ -1748,94 +1703,40 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                     </button>
                   </React.Fragment>
                 ))}
-                </div>
-                <Button
-                  ref={(node) => {
-                    if (node && restorePathFocusRef.current) {
-                      restorePathFocusRef.current = false;
-                      node.focus();
-                    }
-                  }}
-                  type="button"
-                  variant="ghost"
-                  size="toolbar"
-                  className="ml-1 shrink-0 text-muted-foreground"
-                  title={t('fileBrowser.toolbar.editPath')}
-                  aria-label={t('fileBrowser.toolbar.editPath')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    beginPathEdit();
-                  }}
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-              </>
+              </div>
             )}
           </div>
 
-          {/* Refresh */}
-          <Button variant="ghost" size="toolbar" title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}>
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
 
-          <Button
-            variant={followTerminalCwd ? 'secondary' : 'ghost'}
-            size="toolbar"
-            title={t(followTerminalCwd
-              ? 'fileBrowser.toolbar.stopFollowingTerminal'
-              : 'fileBrowser.toolbar.followTerminal')}
-            aria-label={t('fileBrowser.toolbar.followTerminal')}
-            aria-pressed={followTerminalCwd}
-            onClick={toggleFollowTerminalCwd}
-          >
-            <LocateFixed className="h-3.5 w-3.5" />
-          </Button>
-
-          <ToolbarDivider />
-
-          <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" aria-label={t('fileBrowser.toolbar.newFolder')} title={t('fileBrowser.toolbar.newFolder')} onClick={handleCreateFolder}>
-            <FolderPlus className="h-3.5 w-3.5" />
-          </Button>
-          {adapter.supportsUpload && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 shrink-0 gap-1 px-2">
-                  <Upload className="h-3.5 w-3.5" />
-                  {t('fileBrowser.toolbar.upload')}
-                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => { void handleUpload(); }}>
-                  <Upload className="mr-2 h-3.5 w-3.5" />
-                  {t('fileBrowser.toolbar.uploadFiles')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => { void handleUploadFolder(); }}>
-                  <FolderUp className="mr-2 h-3.5 w-3.5" />
-                  {t('fileBrowser.toolbar.uploadFolder')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          <ToolbarDivider />
-
-          <Button
-            ref={searchToggleRef}
-            variant={searchVisible ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 shrink-0 gap-1 px-2"
-            aria-label={t('fileBrowser.search.toggle')}
-            aria-pressed={searchVisible}
-            title={t('fileBrowser.search.toggle')}
-            onClick={toggleSearch}
-          >
-            <Search className="h-3.5 w-3.5" />
-            {t('fileBrowser.search.button')}
-          </Button>
-
+        {followTerminalCwd && <span className="shrink-0 text-primary" title={t('fileBrowser.toolbar.followTerminal')} aria-label={t('fileBrowser.toolbar.followTerminal')}><LocateFixed className="size-3.5" /></span>}
+        <Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.refresh')} title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}><RefreshCw className={`size-3.5 ${isLoading ? 'animate-spin' : ''}`} /></Button>
+        {adapter.supportsUpload && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.upload')} title={t('fileBrowser.toolbar.upload')}><Upload className="size-3.5" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => { void handleUpload(); }}><Upload />{t('fileBrowser.toolbar.uploadFiles')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { void handleUploadFolder(); }}><FolderUp />{t('fileBrowser.toolbar.uploadFolder')}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Button ref={searchToggleRef} variant={searchVisible ? 'secondary' : 'ghost'} size="toolbar" aria-label={t('fileBrowser.search.toggle')} title={t('fileBrowser.search.toggle')} aria-pressed={searchVisible} onClick={toggleSearch}><Search className="size-3.5" /></Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.more')} title={t('fileBrowser.toolbar.more')}><MoreHorizontal className="size-3.5" /></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem disabled={adapter.isRootPath(currentPath)} onSelect={goUp}><ArrowUp />{t('fileBrowser.toolbar.parentDir')}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => { void adapter.homePath().then((home) => navigateTo(home)); }}><Home />{t('fileBrowser.toolbar.home')}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleCreateFolder}><FolderPlus />{t('fileBrowser.toolbar.newFolder')}</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={treeVisible} onCheckedChange={toggleTree}><PanelLeft />{t('fileBrowser.toolbar.toggleDirectoryTree')}</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={followTerminalCwd} onCheckedChange={toggleFollowTerminalCwd}><LocateFixed />{t('fileBrowser.toolbar.followTerminal')}</DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <FileColumnMenu permissions={!isLocalMode} owner={!isLocalMode} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </PanelToolbar>
           {searchVisible && (
-          <div className="relative min-w-32 flex-1">
+          <div className="file-browser-filter relative shrink-0 px-3 pb-2">
+          <div className="relative">
             <Search aria-hidden="true" className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchInputRef}
@@ -1873,19 +1774,12 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               </Button>
             )}
           </div>
+          </div>
           )}
 
-          <span className="shrink-0 whitespace-nowrap text-muted-foreground">{t('fileBrowser.items', { count: actualItemCount })}</span>
-
-          {selectedFiles.size > 0 && (
-            <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-              {t('fileBrowser.selected', { count: selectedFiles.size })}
-            </span>
-          )}
-      </PanelToolbar>
 
       {/* File List + Directory Tree */}
-      <div className="min-h-0 flex-1 overflow-hidden border-x border-b border-panel-border bg-background">
+      <div className="min-h-14 flex-1 overflow-hidden bg-background">
         <ResizablePanelGroup
           direction="horizontal"
           autoSaveId="integrated-file-browser-split"
@@ -1931,18 +1825,20 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               {/* Drag overlay */}
               {isDraggingOver && (
                 <div className="absolute inset-0 bg-accent/20 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
-                  <div className="bg-background/90 rounded-lg p-6 shadow-lg">
+                  <div className="bg-background/90 rounded-xl p-6 shadow-dialog">
                     <Upload className="h-12 w-12 mx-auto mb-3 text-primary" />
-                    <p className="font-medium">Drop files or folders to upload</p>
-                    <p className="text-sm text-muted-foreground mt-1">Upload to {currentPath}</p>
+                    <p className="font-medium">{t('fileBrowser.dropUpload')}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{t('fileBrowser.uploadTo', { path: currentPath })}</p>
                   </div>
                 </div>
               )}
 
-              {/* Column Headers — outside ScrollArea so they never move */}
+              <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
+              {/* One scroll surface keeps resized headers aligned with the rows. */}
               <PanelToolbar
                 density="dense"
-                className={`gap-2 px-2 font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
+                className={`file-browser-columns sticky top-0 z-10 gap-2 px-3 font-medium text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}
+                style={{ minWidth: listMinWidth }}
               >
                 <SortableColumnHeader
                   label={t('fileBrowser.column.name')}
@@ -1971,27 +1867,11 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                   onSort={handleSort}
                   onResizeStart={handleResizeStart}
                 />
-                {!isLocalMode && (
-                  <>
-                    <SortableColumnHeader
-                      label={t('fileBrowser.column.permissions')}
-                      field="permissions"
-                      width={columnWidths.permissions}
-                      sortField={sortField}
-                      sortDirection={sortDirection}
-                      onSort={handleSort}
-                      onResizeStart={handleResizeStart}
-                    />
-                    <SortableColumnHeader
-                      label={t('fileBrowser.column.owner')}
-                      field="owner"
-                      width={columnWidths.owner}
-                      sortField={sortField}
-                      sortDirection={sortDirection}
-                      onSort={handleSort}
-                      resizable={false}
-                    />
-                  </>
+                {permissionsVisible && (
+                  <SortableColumnHeader label={t('fileBrowser.column.permissions')} field="permissions" width={columnWidths.permissions} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} onResizeStart={handleResizeStart} />
+                )}
+                {ownerVisible && (
+                  <SortableColumnHeader label={t('fileBrowser.column.owner')} field="owner" width={columnWidths.owner} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} onResizeStart={handleResizeStart} />
                 )}
               </PanelToolbar>
 
@@ -2005,11 +1885,11 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                   </Button>
                 </div>
               )}
-              <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]]:[scrollbar-gutter:stable]">
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div
-                      className="min-h-full p-1.5"
+                      className="py-1"
+                      style={{ minWidth: listMinWidth, minHeight: 'calc(100% - 28px)' }}
                       data-columns-container
                       role="grid"
                       aria-multiselectable="true"
@@ -2025,8 +1905,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         <ContextMenu key={file.path}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer select-none gap-2 px-2 py-px hover:bg-muted/50 ${
-                                selectedFiles.has(file.name) ? 'bg-accent' : ''
+                              className={`${FILE_BROWSER_LIST_TEXT} file-browser-row flex h-7 cursor-pointer select-none items-center gap-2 px-3 ${
+                                selectedFiles.has(file.name) ? 'bg-surface-selected text-surface-selected-foreground' : ''
                               }`}
                               role="row"
                               aria-selected={file.name === '..' ? undefined : selectedFiles.has(file.name)}
@@ -2042,7 +1922,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                                 setSelectionAnchor(file.name);
                               }}
                             >
-                    <div className={`flex min-w-0 items-center gap-1 ${FILE_BROWSER_LIST_ICONS}`} style={{ width: `${columnWidths.name}px` }}>
+                    <div className={`flex min-w-0 items-center gap-2 ${FILE_BROWSER_LIST_ICONS}`} style={{ flex: `1 0 ${columnWidths.name}px` }}>
                       {getFileIcon(file)}
                       {renamingFile?.name === file.name ? (
                         <Input
@@ -2059,25 +1939,17 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                           autoFocus
                         />
                       ) : (
-                        <span className="truncate">{file.name}</span>
+                        <span className="truncate" title={file.path}>{file.name}</span>
                       )}
                     </div>
-                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.size}px` }}>
+                    <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.size}px` }}>
                       {file.type === 'file' ? formatFileSize(file.size) : '-'}
                     </div>
-                    <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
+                    <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
                       {file.name !== '..' ? formatDate(file.modified) : '-'}
                     </div>
-                    {!isLocalMode && (
-                      <>
-                        <div className="truncate font-mono text-muted-foreground" style={{ width: `${columnWidths.permissions}px` }}>
-                          {file.permissions}
-                        </div>
-                        <div className="truncate text-muted-foreground" style={{ width: `${columnWidths.owner}px` }}>
-                          {file.owner}:{file.group}
-                        </div>
-                      </>
-                    )}
+                    {permissionsVisible && <div className="shrink-0 truncate font-mono text-muted-foreground" style={{ width: columnWidths.permissions }}>{file.permissions}</div>}
+                    {ownerVisible && <div className="shrink-0 truncate text-muted-foreground" style={{ width: columnWidths.owner }}>{file.owner}:{file.group}</div>}
                             </div>
                           </ContextMenuTrigger>
 
@@ -2140,10 +2012,15 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
-              </ScrollArea>
+              </div>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
+      </div>
+
+      <div className={`file-browser-status flex h-7 shrink-0 items-center justify-between gap-3 px-3 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
+        <span>{t('filePanel.statusBar.items', { count: actualItemCount })}</span>
+        {selectedFiles.size > 0 && <span>{t('fileBrowser.selected', { count: selectedFiles.size })}</span>}
       </div>
 
       {adapter.supportsTransfer && (

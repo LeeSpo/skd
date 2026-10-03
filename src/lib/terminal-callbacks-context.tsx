@@ -19,6 +19,7 @@ export interface TerminalCallbacks {
   /** Request closing one or more tabs, with a confirm gate if a command is running. */
   onRequestCloseTabs?: (tabs: Array<{ groupId: string; tabId: string }>) => void;
   /** Open a remote file in a new editor window for a specific tab connection. */
+  onOpenSettings?: () => void;
   onOpenInEditorForTab?: (
     tabConnectionId: string,
     filePath: string,

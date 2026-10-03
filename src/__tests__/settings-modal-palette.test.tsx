@@ -27,6 +27,7 @@ describe('SettingsModal workspace palettes', () => {
       disconnect() {}
     });
     HTMLElement.prototype.scrollTo = vi.fn();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it('exposes seven vertical categories with keyboard navigation and a stable dialog height', async () => {
@@ -41,7 +42,7 @@ describe('SettingsModal workspace palettes', () => {
     expect(screen.getByRole('button', { name: 'Save Settings' })).toBeTruthy();
   });
 
-  it('previews and saves a palette with its suggested terminal theme', async () => {
+  it('previews and saves an interface palette without replacing the terminal theme', async () => {
     const onOpenChange = vi.fn();
     render(<SettingsModal open onOpenChange={onOpenChange} />);
 
@@ -59,9 +60,34 @@ describe('SettingsModal workspace palettes', () => {
       colorPalette: 'cupertino',
     });
     expect(JSON.parse(localStorage.getItem('terminalAppearance') ?? '{}')).toMatchObject({
-      theme: 'vs-code-dark',
+      theme: 'dracula',
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('names terminal controls and supports changing a slider with the keyboard', () => {
+    render(<SettingsModal open onOpenChange={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: 'Font Family' })).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Cursor Blink' })).toBeTruthy();
+    const slider = screen.getByRole('slider', { name: 'Font Size: 14px' });
+    slider.focus();
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(screen.getByRole('slider', { name: 'Font Size: 15px' }).getAttribute('aria-valuenow')).toBe('15');
+  });
+
+  it('restores the saved appearance mode as well as the palette after cancelling a preview', async () => {
+    const onOpenChange = vi.fn();
+    render(<SettingsModal open onOpenChange={onOpenChange} />);
+    const interfaceTab = screen.getByRole('tab', { name: 'Interface' });
+    fireEvent.mouseDown(interfaceTab);
+    fireEvent.click(interfaceTab);
+    await waitFor(() => expect(interfaceTab.getAttribute('aria-selected')).toBe('true'));
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(JSON.parse(localStorage.getItem('sshClientSettings') ?? '{}').theme).toBe('dark');
   });
 
   it('restores the original palette when preview is cancelled', async () => {

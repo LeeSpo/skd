@@ -9,6 +9,7 @@ import { initializeTheme } from "./lib/utils";
 initializeTheme();
 
 const mode = new URLSearchParams(window.location.search).get("mode");
+document.documentElement.dataset.windowKind = mode === 'file-viewer' ? 'file-viewer' : 'main';
 const Root = lazy(() => {
   if (mode === "file-viewer") {
     return import("./FileViewerWindow.tsx").then((module) => ({

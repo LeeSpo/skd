@@ -1,59 +1,71 @@
+import type React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MenuBar } from '@/components/menu-bar';
+import { WindowToolbar } from '@/components/window-toolbar';
+import { TitlebarSlotProvider } from '@/lib/titlebar-slot-context';
 
 afterEach(cleanup);
 
-describe('MenuBar', () => {
-  it('retains every action and gives icon buttons accessible names', () => {
+function renderToolbar(props: React.ComponentProps<typeof WindowToolbar> = {}) {
+  return render(
+    <TitlebarSlotProvider>
+      <WindowToolbar {...props} />
+    </TitlebarSlotProvider>,
+  );
+}
+
+describe('WindowToolbar', () => {
+  it('keeps common actions as direct toolbar buttons', () => {
     const actions = {
-      onToggleLeftSidebar: vi.fn(),
-      onToggleBottomPanel: vi.fn(),
-      onToggleRightSidebar: vi.fn(),
-      onToggleZenMode: vi.fn(),
-      onOpenPortForward: vi.fn(),
-      onOpenSettings: vi.fn(),
+      onToggleLeftSidebar: vi.fn(), onToggleBottomPanel: vi.fn(), onToggleRightSidebar: vi.fn(),
+      onToggleZenMode: vi.fn(), onOpenPortForward: vi.fn(), onOpenSettings: vi.fn(),
     };
-    render(<MenuBar {...actions} portForwardEnabled />);
-
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(7);
-    buttons.forEach(button => expect(button.getAttribute('aria-label')).toBeTruthy());
-
-    const names = [
-      'Toggle Connection Manager', 'Toggle Bottom Panel', 'Toggle Monitor Panel',
-      'Toggle Zen Mode', 'Port Forwarding…', 'Options',
-    ];
-    names.forEach(name => fireEvent.click(screen.getByRole('button', { name })));
+    renderToolbar({ ...actions, portForwardEnabled: true });
+    for (const name of ['Toggle Connection Manager', 'Toggle Bottom Panel', 'Toggle Monitor Panel', 'Toggle Zen Mode', 'Port Forwarding…', 'Options']) {
+      fireEvent.click(screen.getByRole('button', { name }));
+    }
+    expect(screen.queryByRole('button', { name: 'More Actions' })).toBeNull();
     Object.values(actions).forEach(action => expect(action).toHaveBeenCalledOnce());
   });
 
-  it('reflects panel state without changing toggle names', () => {
-    const { rerender } = render(<MenuBar leftSidebarVisible bottomPanelVisible={false} zenMode />);
-    expect(screen.getByRole('button', { name: 'Toggle Connection Manager' }).getAttribute('aria-pressed')).toBe('true');
+  it('reflects panel state and leaves the visible sidebar toggle to the sidebar titlebar', () => {
+    const { rerender } = renderToolbar({ leftSidebarVisible: true, bottomPanelVisible: false, zenMode: true });
+    expect(screen.queryByRole('button', { name: 'Toggle Connection Manager' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Toggle Bottom Panel' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Toggle Zen Mode' }).getAttribute('aria-pressed')).toBe('true');
-    rerender(<MenuBar leftSidebarVisible={false} bottomPanelVisible />);
+    expect(screen.getByRole('button', { name: 'Options' })).toBeTruthy();
+    rerender(
+      <TitlebarSlotProvider>
+        <WindowToolbar leftSidebarVisible={false} bottomPanelVisible />
+      </TitlebarSlotProvider>,
+    );
     expect(screen.getByRole('button', { name: 'Toggle Connection Manager' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Toggle Bottom Panel' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('preserves conditional panel controls and disabled port forwarding', () => {
+  it('preserves conditional controls and disables unavailable port forwarding', () => {
     const onOpenPortForward = vi.fn();
-    render(<MenuBar showExtraPanelToggles={false} onOpenPortForward={onOpenPortForward} />);
+    renderToolbar({ showExtraPanelToggles: false, onOpenPortForward });
     expect(screen.queryByRole('button', { name: 'Toggle Bottom Panel' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Toggle Monitor Panel' })).toBeNull();
     const portForward = screen.getByRole('button', { name: 'Port Forwarding…' });
-    expect((portForward as HTMLButtonElement).disabled).toBe(true);
+    expect(portForward.hasAttribute('disabled')).toBe(true);
     fireEvent.click(portForward);
     expect(onOpenPortForward).not.toHaveBeenCalled();
   });
 
-  it('keeps layout presets reachable by keyboard', () => {
-    const onApplyPreset = vi.fn();
-    render(<MenuBar onApplyPreset={onApplyPreset} />);
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Layout Presets' }), { key: 'Enter' });
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Minimal – Terminal Only' }));
-    expect(onApplyPreset).toHaveBeenCalledWith('Minimal');
+  it('shows the session title in the drag region and keeps controls from dragging the window', () => {
+    renderToolbar({
+      showSessionTitle: true,
+      workspaceTitle: 'prod-api',
+      workspaceSubtitle: 'root@db · SSH',
+      leftSidebarVisible: false,
+    });
+    expect(screen.getByText('prod-api')).toBeTruthy();
+    expect(screen.getByText('root@db · SSH')).toBeTruthy();
+    const slot = document.getElementById('titlebar-tabs-slot');
+    expect(slot?.getAttribute('data-tauri-drag-region')).not.toBe('false');
+    expect(screen.getByRole('button', { name: 'Toggle Connection Manager' }).getAttribute('data-tauri-drag-region')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Options' }).getAttribute('data-tauri-drag-region')).toBe('false');
   });
 });

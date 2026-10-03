@@ -1,33 +1,111 @@
 # skd visual baseline
 
-## Approved direction
+## Current direction — Sequoia native (2026-10)
 
-Blue-black technology aesthetic, compact readable density, and structural improvements where useful (user choice 1B / 2A / 3B). Opaque surfaces, no decorative glass or neon. Terminal content remains primary. Preserve saved palettes/layouts and terminal ANSI themes.
+The workspace targets the look of a macOS 15 Sequoia app (Finder, Safari compact tabs, System Settings). It stays React, Radix, and xterm.js inside the Tauri webview. There is no SwiftUI rewrite and no macOS 26 Liquid Glass.
+
+| Layer | Decision |
+| --- | --- |
+| Window material | One AppKit `sidebar` `NSVisualEffectView` behind the whole webview. It follows the window active state. |
+| Sidebar, titlebar, inspector chrome | Tinted with `--material-sidebar` / `--material-titlebar` / `--material-inspector` only when `data-native-material="true"`. |
+| Terminal | Opaque by default. Optional background opacity mixes the opaque theme colour; text is never faded with CSS `opacity`. WebGL is replaced by the canvas renderer while that background is translucent. `data-terminal-translucent` makes only `.workspace-content-surface` transparent. The bottom panel and inspector body stay opaque. |
+| Menus, popovers, tooltips, toasts | `.glass-menu` (`backdrop-filter`) with an opaque fallback. Menu highlight is the current palette `--primary` with white text. |
+| Sheets | `--material-sheet` tint, 12px radius, `bg-black/15` scrim, no backdrop-filter. Tall dialogs stay `inset-0 m-auto`. |
+| System palette | Default for users with no saved palette. `--primary` follows `--system-accent` from `NSColor.controlAccentColor`. Sidebar selection is a solid accent fill. The other palettes keep their own tokens and a 16% selection mix. |
+| Chrome | One 44px titlebar. A single group's tabs live in that bar. Two or more groups put a 30px strip on each pane and a title plus subtitle in the titlebar. The bottom status bar is gone. Controls are 28px, compact controls 24px. |
+
+The 2026-10-03 rule that only the sidebar may be translucent is superseded by the table above. Dense text (terminal, file lists, logs, form fields) still sits on an opaque or high-tint surface.
+
+## Previous direction — macOS workspace (2026-10-03)
+
+The workspace now uses a full-height host sidebar beside a solid terminal column. Native macOS sidebar material shows through the transparent main webview; controls remain React/Radix, and terminal rendering remains xterm.js. The layout draws on [Enso](https://github.com/amanfromsolan/enso) and the Apple toolbar/sidebar guidance linked below. It does not require a SwiftUI rewrite.
+
+### Geometry and behavior
+
+| Element | Current decision |
+| --- | --- |
+| Host sidebar | Full window height, 200–360 CSS px when resizing; native traffic lights have an 80px inset; search and compact 28px rows; preferences in the footer |
+| Main column | Opaque terminal/content surfaces; 44px toolbar, 36px terminal tab strip with 28px inset tabs, 24px status bar |
+| Toolbar | Session title, panel toggles, new-session menu and More Actions; layout presets, Zen mode and port forwarding remain available |
+| Tools | Files and Compose below the terminal; monitor/logs in the right inspector; existing visibility, layout presets and stored sizes remain authoritative |
+| Controls | System typography, 13px menu/form text, 32px default buttons/fields, restrained shadows and segmented controls; no enclosing cards around workspace panes |
+| Dialogs | Settings categories beside independently scrolling content; connection form bounded to 680px width; both retain fixed action footers and viewport-safe centering |
+| Files | Compact aligned rows, subtle alternating backgrounds, single navigation toolbar and existing filter/transfer behavior |
+
+Graphite, Midnight, Nordic and Cupertino retain their palette tokens and light/dark support. Choosing an interface palette no longer changes the terminal theme. Existing ANSI colors, font preferences, connection records, shortcuts and session serialization are preserved. Layout toggles retain the mounted terminal subtree.
+
+### Native material and fallback
+
+- Tauri applies the AppKit `sidebar` window effect with `followsWindowActiveState`. Only the sidebar exposes the effect; the main content and floating menus/dialogs remain opaque.
+- The main window uses Tauri's `macos-private-api` feature and `macOSPrivateApi` configuration for transparency. This implementation targets the existing macOS `.app`/`.dmg` distribution path; App Store compatibility is not part of this change.
+- The native appearance follows explicit light/dark previews. Automatic mode clears the native override so macOS can continue following the system; cancellation restores the saved mode without rewriting preferences.
+- AppKit's Reduce Transparency preference is queried on the main thread and observed live. Browser previews, native bridge failure and increased contrast use an opaque sidebar fallback. Inactive windows use quieter chrome and selection.
+- The separate file-viewer window keeps its opaque root and does not initialize the sidebar appearance bridge.
+
+### Verification
+
+- Frontend tests cover terminal mount continuity through sidebar/inspector toggles, saved layout state, native appearance preview/cancellation, automatic mode, accessibility changes and subscription cleanup. Existing theme, connection, terminal, file-browser and control tests remain in the full suite.
+- Native inspection before the user requested stopping Computer Use covered the source-built application at approximately 1280×800 and 960×600: settings and connection-form scrolling/footer reachability, all four dark palette previews, light Graphite/Cupertino previews, cancellation and the local file panel. Local terminal output survived resizing, panel toggles and appearance previews; pasted Chinese and spaces rendered correctly.
+- The final 200px sidebar constraint was code-reviewed; the automatic-mode correction has regression tests. The final source was built after Computer Use stopped. Actual system preference changes, full-screen transitions, composed IME input, VoiceOver and live remote SSH/SFTP transfers were not manually verified in this pass. Native screenshots are not a complete rendered contrast audit.
+- Final `bun run test`: 72 files and 634 tests passed. `bun run lint`: 0 errors, 180 existing warnings. `bun run tauri build --debug --bundles app`: TypeScript, Vite, Rust and macOS application bundling succeeded. `git diff --check`: clean. Existing jsdom canvas diagnostics and Vite's large-chunk advisory remain.
+- Rust test results: 154 passed; three existing local-delete-to-Trash tests failed. All three failures were reproduced against the unmodified HEAD in a separate temporary source copy: `test_delete_local_file`, `test_delete_local_directory`, `test_delete_local_file_moves_to_trash`.
+- Debug application bundle: `src-tauri/target/debug/bundle/macos/skd.app`. No release, upload or commit was created.
+
+The sections below are historical. Their earlier geometry, test totals and review gates do not describe the current implementation; this section supersedes them for the areas changed above.
+
+## Previous direction — macOS × Cursor (2026-09-18)
+
+macOS-informed structure with a Cursor-inspired neutral palette. Graphite uses a dark content canvas, slightly lighter window chrome, and raised floating surfaces. Keep terminal content primary, with system typography, restrained blue actions, inset selected rows and tabs, and visible keyboard focus. Existing palettes, saved layout and terminal ANSI/font choices remain user-controlled.
+
+This is a React/Radix/Tauri implementation informed by Apple guidance, not native AppKit, Liquid Glass, or an exact copy of a Cursor theme. Color values and geometry below are skd design decisions. The fixed app accent does not track the macOS system accent.
 
 ## Sources and scope
 
-- [Apple HIG Color](https://developer.apple.com/design/human-interface-guidelines/color): use color consistently, support appearance changes, preserve contrast, and do not communicate important information through color alone.
-- [Apple HIG Materials](https://developer.apple.com/design/human-interface-guidelines/materials): layers communicate hierarchy; use effects sparingly. Our opaque surfaces are a product decision, not a claim to implement native Liquid Glass.
-- [Warp Terminal themes](https://docs.warp.dev/terminal/appearance/themes): theme selection persists and supports OS appearance synchronization. Preserve user choice rather than silently forcing the new palette. The page does not specify our radii, colors or spacing.
-- [File browser research](file-browser-design-research.md): Apple toolbar/list guidance and first-party Transmit/ForkLift navigation and activity patterns.
+- [Apple Design Resources](https://developer.apple.com/design/resources/): official platform UI kits, font and symbol resources.
+- [Designing for macOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/): comfortable information density, resizable workspaces, menu integration, keyboard input and personalization.
+- [Apple Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars/): logical groups, leading sidebar controls, view titles and frequent actions.
+- [Apple Sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars/): concise grouping, disclosure and navigation hierarchy.
+- [Cursor Themes](https://docs.cursor.com/en/configuration/themes): light/dark theme support and customization. Graphite is an app-defined interpretation of Cursor's neutral editor aesthetic, not a published vendor color specification.
+- [File browser research](file-browser-design-research.md): existing file-navigation design background.
 
-Sources above were fetched during implementation. These are documentary references, not evidence of running competing applications. Numeric design choices below are skd specifications, not Apple requirements.
+The Apple and Cursor pages above were consulted for this pass. No proprietary UI kit assets or SF Symbols were copied into the repository; existing Lucide icons remain in use.
 
-## Rules
+## Design rules
 
-| Element | Design decision |
+| Element | Decision |
 | --- | --- |
-| Workspace | Midnight blue-black; distinguish content, chrome and floating surfaces using luminance, not extra frames |
-| Chrome | Quiet shared header/toolbar surface; panel dividers subtler than control boundaries |
-| Accent | Blue for primary actions, focus and selection; status retains text or icons |
-| Type | System UI font; compact controls target 13px, support text 12px; preserve terminal font preferences |
-| Corners | Controls 6px, floating menus 8px, dialogs 12px; no rounded card around every workspace region |
-| Elevation | Shared menu shadow; stronger dialog shadow; no decorative lifting on ordinary buttons |
-| Focus | Visible keyboard ring; never rely on hover alone |
-| Motion | Short color/shadow transitions, respect reduced motion |
-| Tooltip | Neutral floating surface, readable text, bounded width, delayed hover; keyboard access preserved |
-| Forms | Errors beside fields; stable scrollable content and reachable footer |
-| Feedback | Persistent task state separate from transient notifications; do not hide failures just to simplify UI |
+| Graphite hierarchy | Content `#181818`, chrome/sidebar `#212121`, floating surface `#282828`; borders `#303030` / `#353535` |
+| Accent and text | Blue `#8AB4F8`, primary text `#E6E6E6`, secondary text `#ABABAB`; selected `#343434`, hover `#2A2A2A` |
+| Light appearance | Neutral white/gray surfaces, blue actions, stronger semantic text colors |
+| Window chrome | 44px unified toolbar, native traffic-light clearance, leading sidebar toggle and session title; hide irrelevant panel toggles in the empty workspace |
+| Tabs and sidebars | 40px terminal tab strip with 32px inset tabs; rounded connection rows; separate search/local-shell actions from the section heading |
+| Type | SF Pro/system stack, 13px controls and form descriptions, 12px supporting copy; preserve terminal font preferences |
+| Corners | 8px controls/rows, 10px menus, 14px dialogs; avoid enclosing every workspace pane in a card |
+| Forms | Segmented connection navigation, `min(680px, 85vh)` height, independently scrollable content and fixed footer |
+| Sliders and switches | Thin 4px slider track within a 28px hit region; visible inactive switch tracks; labels associated with actual controls |
+| Focus and motion | Blue focus indicator, named keyboard-accessible controls; reduced-motion and increased-contrast media preferences |
+| Feedback | Explicit empty/search states; preserve connection status and persistent failure feedback |
+
+## Behavior and verification for this pass
+
+- Connection search matches names, hosts and usernames through collapsed folders. Matching ancestors expand temporarily; clearing the search restores the underlying disclosure state. Escape respects IME composition.
+- Saved connection rows support Tab focus, Space to select and Enter to connect, without changing terminal input handlers.
+- Welcome actions open a remote connection, a local terminal, or preferences. No demonstration hosts or fake operational data were added.
+- Settings categories remain vertical; palette cards use two columns. Cancelling a preview restores both the saved appearance mode and previous palette.
+- Visual inspection covered the Graphite workspace, welcome screen, connection dialog, dark/light settings and native Cupertino workspace. Browser measurements at 960×600 confirmed the connection dialog stays within the viewport (760×510, 45px top margin). Native inspection used the development bundle built from this source, with real search, dialog and local-terminal input/output checks.
+- Raw token tests cover all four dark palettes and the shared/Cupertino light palettes. These checks are not a full accessibility certification or a native screenshot audit of every palette.
+
+### Final validation (2026-09-19)
+
+- `bun run test`: 70 test files, 625 tests passed. jsdom reports its existing unimplemented canvas diagnostic; the test run exits successfully.
+- `bun run lint`: 0 errors, 180 warnings (same count as the first lint run in this pass).
+- `bun run tauri build --debug --bundles app`: TypeScript, Vite, Rust and macOS app bundling succeeded. Vite retains its large-chunk advisory.
+- `git diff --check`: clean. The original uncommitted work was preserved; this pass does not create a commit.
+- Development bundle: `src-tauri/target/debug/bundle/macos/skd.app`.
+
+## Earlier implementation history
+
+The notes below document previous passes and their then-current checks. Their color/geometry choices and outstanding-review statements are historical; the current direction and verification above supersede those for the areas changed in this pass.
 
 ## Implementation batches and acceptance
 
@@ -113,7 +191,7 @@ See [Apple source notes and per-area checklist](hig-macos-audit-notes.md). HIG p
 | File browser | Increase shared list text from 11px/16px to 13px/18px; keep chrome at 12px. Preserve on-demand filter, upload and selection behavior. Path editing now has a named, focusable edit button, composition guards and keyboard focus restoration (second pass below). Rename focus remains a follow-up. |
 | Terminal/Compose | Preserve terminal tokens, ANSI/font preferences and input behavior. Existing inline failure feedback retained. Compose's suppressed textarea ring still needs a dedicated focus treatment review. |
 | Dialogs/settings/welcome | Retain existing scrolling, vertical tab navigation and compact 13px controls. Shared field focus uses opaque semantic ring color; validation retains its border and `aria-invalid`. |
-| Menus/popovers | Retain 6px controls, 8px menus and 12px dialogs; no global radius/size rewrite or fake glass. |
+| Menus/popovers | Controls 5px, menus 8px, dialogs 6px; no global fake glass. |
 | Transfers/status/monitoring/logs | Retain text/icon state descriptions and persistent failures. Light semantic colors strengthened. Log accessible naming and motion gaps are not resolved by this pass. |
 
 ### Color changes and measured evidence

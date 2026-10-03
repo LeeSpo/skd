@@ -403,14 +403,29 @@ pub fn classify_handshake_error(err: &anyhow::Error, host: &str, port: u16) -> C
     )
 }
 
-/// Default TCP connect timeout used by SSH sessions.
+/// Fallback TCP timeout when a caller does not pass the settings value.
+/// The settings UI defaults to [`DEFAULT_TCP_TIMEOUT_SECS`] and always sends it.
 pub fn default_tcp_timeout() -> Duration {
     Duration::from_secs(3)
 }
 
-/// Default TCP connect timeout used by standalone SFTP sessions.
-pub fn sftp_tcp_timeout() -> Duration {
-    Duration::from_secs(10)
+pub const DEFAULT_TCP_TIMEOUT_SECS: u64 = 10;
+pub const MIN_TCP_TIMEOUT_SECS: u64 = 5;
+pub const MAX_TCP_TIMEOUT_SECS: u64 = 120;
+pub const DEFAULT_KEEPALIVE_INTERVAL_SECS: u64 = 60;
+pub const MIN_KEEPALIVE_INTERVAL_SECS: u64 = 30;
+pub const MAX_KEEPALIVE_INTERVAL_SECS: u64 = 300;
+
+pub fn clamp_tcp_timeout_secs(value: Option<u64>) -> u64 {
+    value
+        .unwrap_or(DEFAULT_TCP_TIMEOUT_SECS)
+        .clamp(MIN_TCP_TIMEOUT_SECS, MAX_TCP_TIMEOUT_SECS)
+}
+
+pub fn clamp_keepalive_interval_secs(value: Option<u64>) -> u64 {
+    value
+        .unwrap_or(DEFAULT_KEEPALIVE_INTERVAL_SECS)
+        .clamp(MIN_KEEPALIVE_INTERVAL_SECS, MAX_KEEPALIVE_INTERVAL_SECS)
 }
 
 #[cfg(test)]
@@ -437,6 +452,23 @@ mod tests {
         let diag = classify_connect_error(&err, ConnectStage::ResolvingDns);
         assert_eq!(diag.kind, ConnectErrorKind::DnsFailure);
         assert_eq!(diag.stage, ConnectStage::ResolvingDns);
+    }
+
+    #[test]
+    fn clamps_connection_timing_settings() {
+        assert_eq!(clamp_tcp_timeout_secs(None), DEFAULT_TCP_TIMEOUT_SECS);
+        assert_eq!(clamp_tcp_timeout_secs(Some(30)), 30);
+        assert_eq!(clamp_tcp_timeout_secs(Some(1)), MIN_TCP_TIMEOUT_SECS);
+        assert_eq!(clamp_tcp_timeout_secs(Some(500)), MAX_TCP_TIMEOUT_SECS);
+        assert_eq!(
+            clamp_keepalive_interval_secs(None),
+            DEFAULT_KEEPALIVE_INTERVAL_SECS
+        );
+        assert_eq!(clamp_keepalive_interval_secs(Some(120)), 120);
+        assert_eq!(
+            clamp_keepalive_interval_secs(Some(1)),
+            MIN_KEEPALIVE_INTERVAL_SECS
+        );
     }
 
     #[test]

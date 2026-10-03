@@ -7,9 +7,8 @@ const panelHeaderVariants = cva(
   {
     variants: {
       density: {
-        // Fixed height aligns with GroupTabBar / TabsList underline (h-8 = 32px)
-        default: "h-8 py-0",
-        dense: "h-7 py-0",
+        default: "h-[35px] py-0",
+        dense: "h-[22px] py-0",
       },
       tone: {
         panel: "",
@@ -49,9 +48,8 @@ const panelToolbarVariants = cva(
   {
     variants: {
       density: {
-        // Match panel header / tab chrome height for consistent panel stacking
-        default: "h-8 py-0",
-        dense: "h-7 py-0",
+        default: "h-[35px] py-0",
+        dense: "h-[22px] py-0",
       },
     },
     defaultVariants: {

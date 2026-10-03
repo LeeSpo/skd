@@ -6,6 +6,7 @@ import {
   type ConnectStage,
   isConnectStage,
 } from './connection-diagnostics';
+import { loadConnectionTimeoutSecs, loadKeepAliveIntervalSecs } from './connection-settings';
 import { isHostKeyVerificationEnabled, parseUnknownHostKeyError } from './host-key-verification';
 import type { KeyboardInteractiveCoordinator } from './keyboard-interactive-context';
 
@@ -75,6 +76,8 @@ export async function sshConnectWithHostKeyTrust(
         request: {
           ...params,
           host_key_verification: isHostKeyVerificationEnabled(),
+          tcp_timeout_secs: loadConnectionTimeoutSecs(),
+          keepalive_interval_secs: loadKeepAliveIntervalSecs(),
         },
       });
       onAttemptResult?.(response);
@@ -111,6 +114,8 @@ export async function sftpConnectWithHostKeyTrust(
     request: {
       ...params,
       host_key_verification: isHostKeyVerificationEnabled(),
+      tcp_timeout_secs: loadConnectionTimeoutSecs(),
+      keepalive_interval_secs: loadKeepAliveIntervalSecs(),
     },
   });
 

@@ -9,8 +9,11 @@ import {
   LEGACY_LATIN_ONLY_TERMINAL_FONT,
   loadAppearanceSettings,
   MACOS_MULTILINGUAL_TERMINAL_FONT,
+  MENLO_TERMINAL_FONT,
+  terminalBackgroundSize,
   migrateAppearanceSettings,
   terminalThemes,
+  terminalContainerBackground,
 } from '../terminal-config';
 
 describe('terminal multilingual font configuration', () => {
@@ -63,8 +66,8 @@ describe('terminal multilingual font configuration', () => {
     expect(loadAppearanceSettings().useWebglRenderer).toBe(false);
   });
 
-  it('preserves explicit non-legacy font choices', () => {
-    const customFont = "'JetBrains Mono', monospace";
+  it('preserves an explicit Menlo choice', () => {
+    const customFont = MENLO_TERMINAL_FONT;
     localStorage.setItem(
       'terminalAppearance',
       JSON.stringify({
@@ -74,6 +77,22 @@ describe('terminal multilingual font configuration', () => {
     );
 
     expect(loadAppearanceSettings().fontFamily).toBe(customFont);
+  });
+
+  it('replaces uninstalled font choices with the multilingual stack', () => {
+    const migrated = migrateAppearanceSettings({
+      ...defaultAppearanceSettings,
+      fontFamily: "'JetBrains Mono', monospace",
+    });
+
+    expect(migrated.fontFamily).toBe(MACOS_MULTILINGUAL_TERMINAL_FONT);
+  });
+
+  it('uses a valid background-size for center and tile', () => {
+    expect(terminalBackgroundSize('center')).toBe('auto');
+    expect(terminalBackgroundSize('tile')).toBe('auto');
+    expect(terminalBackgroundSize('cover')).toBe('cover');
+    expect(terminalBackgroundSize('contain')).toBe('contain');
   });
 
   it('migrateAppearanceSettings upgrades legacy fonts only', () => {
@@ -152,5 +171,22 @@ describe('palette-aware terminal backgrounds', () => {
     });
 
     expect(theme.background).toBe(terminalThemes['vs-code-light'].background);
+  });
+});
+
+describe('terminal container background', () => {
+  it('keeps the opaque colour unless transparency and native material are both on', () => {
+    expect(terminalContainerBackground({
+      allowTransparency: true,
+      nativeMaterial: false,
+      opacity: 80,
+      opaqueBackground: '#1e1e1e',
+    })).toBe('#1e1e1e');
+    expect(terminalContainerBackground({
+      allowTransparency: true,
+      nativeMaterial: true,
+      opacity: 80,
+      opaqueBackground: '#1e1e1e',
+    })).toBe('color-mix(in srgb, #1e1e1e 80%, transparent)');
   });
 });

@@ -16,6 +16,7 @@ mod sftp_transfer;
 mod transfer_queue;
 mod ssh;
 mod websocket_server;
+mod window_appearance;
 
 use connection_manager::ConnectionManager;
 use std::sync::atomic::AtomicU16;
@@ -245,6 +246,8 @@ pub fn run() {
             let connection_manager_clone = connection_manager.clone();
             move |app| {
                 connection_manager_clone.transfers.set_app(app.handle().clone());
+                crate::window_appearance::observe_appearance(&app.handle());
+
                 // Register native macOS menu and forward item events to the frontend
                 match build_app_menu(&app.handle(), default_menu_text) {
                     Ok(menu) => {
@@ -296,6 +299,7 @@ pub fn run() {
         })
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
+            commands::get_window_appearance,
             commands::ssh_connect,
             commands::ssh_keyboard_interactive_respond,
             commands::ssh_cancel_connect,

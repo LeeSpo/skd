@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       borderRadius: {
+        xl: '14px',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
@@ -55,6 +56,7 @@ export default {
         border: 'var(--border)',
         input: 'var(--input)',
         'input-background': 'var(--input-background)',
+        'switch-background': 'var(--switch-background)',
         ring: 'var(--ring)',
         chart: {
           '1': 'var(--chart-1)',
@@ -92,7 +94,10 @@ export default {
         },
         surface: {
           raised: 'var(--surface-raised)',
-          selected: 'var(--surface-selected)',
+          selected: {
+            DEFAULT: 'var(--surface-selected)',
+            foreground: 'var(--surface-selected-foreground)',
+          },
           hover: 'var(--surface-hover)',
         },
         workspace: 'var(--workspace-bg)',
@@ -109,6 +114,9 @@ export default {
         mono: ['var(--font-mono)'],
       },
       fontSize: {
+        'ui-body': ['var(--text-body)', { lineHeight: '18px' }],
+        'ui-label': ['var(--text-secondary)', { lineHeight: '14px' }],
+        'ui-page': ['var(--text-page-title)', { lineHeight: '28px' }],
         'ui-2xs': ['0.625rem', { lineHeight: '0.875rem' }],
         'ui-xs': ['0.6875rem', { lineHeight: '1rem' }],
         xs: ['0.75rem', { lineHeight: '1rem' }],

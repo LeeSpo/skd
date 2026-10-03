@@ -9,8 +9,10 @@ import React, {
 import { useTranslation } from 'react-i18next';
 import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import { PanelHeader, PanelToolbar } from "./ui/panel-chrome";
+import { FileColumnMenu } from '@/components/file-column-menu';
+import { useFileBrowserColumns } from '@/lib/file-browser-columns';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   FILE_BROWSER_CHROME_TEXT,
   FILE_BROWSER_LIST_ICONS,
@@ -44,6 +46,8 @@ import {
   ArrowUpDown,
   ArrowDownAZ,
   ArrowUpAZ,
+  MoreHorizontal,
+  ArrowRightLeft,
 } from "lucide-react";
 import type { FileEntry } from "@/lib/file-entry-types";
 import {
@@ -84,6 +88,7 @@ export interface FilePanelProps {
 
   // Columns config
   showPermissions?: boolean;
+  onSyncDirectories?: () => void;
 
   // Disabled state (e.g., remote when not connected)
   disabled?: boolean;
@@ -106,6 +111,7 @@ export interface FilePanelRef {
   refresh: () => void;
   selectAll: () => void;
   navigateTo: (path: string) => void;
+  focus: () => void;
 }
 
 // ---------- MIME type for cross-panel drag ----------
@@ -131,6 +137,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       onPathChange,
       onSelectionCountChange,
       showPermissions = false,
+      onSyncDirectories,
       disabled = false,
       onOsFilesDropped,
       onOpenInEditor,
@@ -138,10 +145,15 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
     ref,
   ) {
     const { t } = useTranslation();
+    const { isColumnVisible } = useFileBrowserColumns();
+    const permissionsVisible = showPermissions && isColumnVisible('permissions');
     const [currentPath, setCurrentPath] = useState(initialPath ?? "/");
     const [entries, setEntries] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState("");
+    const [searchVisible, setSearchVisible] = useState(false);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const searchToggleRef = useRef<HTMLButtonElement>(null);
     const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
       null,
@@ -192,6 +204,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         navigateTo: (path: string) => {
           loadDirectory(path);
         },
+        focus: () => containerRef.current?.focus(),
       }),
       [currentPath, entries, selectedNames],
     );
@@ -517,6 +530,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
 
     // ------ Keyboard ------
     const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       // Don't intercept keys when typing in the filter input
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -533,15 +547,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
       mode === "local" ? 'filePanel.panel.local' : 'filePanel.panel.remote',
     );
     const segments = getSegments(currentPath);
-    const activeBorderColor =
-      mode === "local" ? "border-primary/40 ring-1 ring-primary/10 shadow-sm" : "border-success/40 ring-1 ring-success/10 shadow-sm";
-    const borderClass = isActive
-      ? `border ${activeBorderColor} transition-all duration-200`
-      : "border border-border transition-all duration-200";
-    const selectedBg =
-      mode === "local"
-        ? "bg-primary/20 dark:bg-primary/20"
-        : "bg-success/20 dark:bg-success/20";
+    const selectedBg = "bg-surface-selected text-surface-selected-foreground";
 
     // Show the ring overlay for either cross-panel drag or OS drop;
     // the inner banner picks the right copy below.
@@ -550,22 +556,19 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
     return (
       <div
         ref={containerRef}
-        className={`h-full flex flex-col relative bg-background text-foreground ${borderClass} rounded-sm overflow-hidden ${showDropOverlay ? "ring-2 ring-primary ring-inset bg-primary/5" : ""}`}
+        className={`file-browser file-panel h-full min-w-0 flex flex-col relative bg-background text-foreground overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${showDropOverlay ? "ring-2 ring-primary ring-inset bg-primary/5" : ""}`}
         onClick={onFocus}
+        onFocusCapture={onFocus}
         onKeyDown={handleKeyDown}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         tabIndex={0}
         data-panel-mode={mode}
+        data-panel-active={isActive}
       >
-        <PanelHeader className={FILE_BROWSER_CHROME_TEXT}>
-          <Badge
-            variant={mode === "local" ? "outline" : "secondary"}
-            className="h-4 px-1 py-0"
-          >
-            {panelBadgeLabel}
-          </Badge>
+        <PanelHeader className={`file-panel-heading ${FILE_BROWSER_CHROME_TEXT}`}>
+          <span className="file-panel-label shrink-0 font-medium">{panelBadgeLabel}</span>
           {label && label !== panelBadgeLabel && (
             <span className="flex-1 truncate text-muted-foreground">
               {label}
@@ -573,42 +576,9 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
           )}
         </PanelHeader>
 
-        <PanelToolbar className={FILE_BROWSER_CHROME_TEXT}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title={t('filePanel.toolbar.goUp')}
-            disabled={disabled || currentPath === "/"}
-            onClick={() => loadDirectory(getParentPath(currentPath))}
-          >
-            <ArrowUp className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title={t('filePanel.toolbar.home')}
-            disabled={disabled}
-            onClick={() => loadDirectory(initialPath ?? "/")}
-          >
-            <Home className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title={t('filePanel.toolbar.refresh')}
-            disabled={disabled}
-            onClick={() => loadDirectory(currentPath)}
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-            />
-          </Button>
-
+        <PanelToolbar className={`file-browser-toolbar ${FILE_BROWSER_CHROME_TEXT}`}>
           {/* Breadcrumbs */}
-          <div className="ml-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto whitespace-nowrap">
+          <div className="file-browser-breadcrumbs file-browser-path flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto whitespace-nowrap px-2" title={currentPath}>
             {segments.map((seg, i) => (
               <React.Fragment key={seg.path}>
                 {i > 0 && (
@@ -625,28 +595,53 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
             ))}
           </div>
 
-          {/* Filter */}
-          <div className="flex items-center shrink-0 h-6 rounded bg-muted/50 px-1.5 gap-1">
-            <Search className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-            <input
-              placeholder={t('filePanel.toolbar.filter')}
-              className="h-full w-24 bg-transparent outline-none placeholder:text-muted-foreground/50"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            title={t('filePanel.toolbar.newFolder')}
-            disabled={disabled}
-            onClick={handleCreateDir}
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="toolbar" aria-label={t('filePanel.toolbar.refresh')} title={t('filePanel.toolbar.refresh')} disabled={disabled || loading} onClick={() => loadDirectory(currentPath)}>
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
+          {onTransferToOther && (
+            <Button variant="ghost" size="toolbar" disabled={disabled || selectedNames.size === 0} onClick={handleTransfer}
+              aria-label={t(mode === 'local' ? 'transferControls.uploadSelected' : 'transferControls.downloadSelected', { count: selectedNames.size })}
+              title={t(mode === 'local' ? 'transferControls.uploadSelected' : 'transferControls.downloadSelected', { count: selectedNames.size })}>
+              {mode === 'local' ? <Upload className="size-3.5" /> : <Download className="size-3.5" />}
+            </Button>
+          )}
+          <Button ref={searchToggleRef} variant={searchVisible ? 'secondary' : 'ghost'} size="toolbar" disabled={disabled}
+            aria-label={t('fileBrowser.search.toggle')} title={t('fileBrowser.search.toggle')} aria-pressed={searchVisible}
+            onClick={() => {
+              setSearchVisible(!searchVisible);
+              if (searchVisible) setFilter('');
+              else requestAnimationFrame(() => searchInputRef.current?.focus());
+            }}>
+            <Search className="size-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="toolbar" disabled={disabled} aria-label={t('fileBrowser.toolbar.more')} title={t('fileBrowser.toolbar.more')}><MoreHorizontal className="size-3.5" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={getParentPath(currentPath) === currentPath} onSelect={() => { void loadDirectory(getParentPath(currentPath)); }}><ArrowUp />{t('filePanel.toolbar.goUp')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { void loadDirectory(initialPath ?? '/'); }}><Home />{t('filePanel.toolbar.home')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { void handleCreateDir(); }}><FolderPlus />{t('filePanel.toolbar.newFolder')}</DropdownMenuItem>
+              {onSyncDirectories && <DropdownMenuItem onSelect={onSyncDirectories}><ArrowRightLeft />{t('fileBrowser.toolbar.syncDirectories')}</DropdownMenuItem>}
+              <DropdownMenuSeparator />
+              <FileColumnMenu permissions={showPermissions} />
+            </DropdownMenuContent>
+          </DropdownMenu>
         </PanelToolbar>
+
+        {searchVisible && (
+          <div className="file-browser-filter relative shrink-0 px-3 pb-2">
+            <input ref={searchInputRef} type="search" aria-label={t('fileBrowser.search.label')} placeholder={t('fileBrowser.search.placeholder')}
+              className="h-7 w-full rounded-md border border-input bg-input-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={filter} onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229 || e.key !== 'Escape') return;
+                e.stopPropagation();
+                if (filter) setFilter('');
+                else { setSearchVisible(false); searchToggleRef.current?.focus(); }
+              }} />
+          </div>
+        )}
 
         {/* File list */}
         <ContextMenu>
@@ -661,17 +656,17 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                   {filter ? t('filePanel.empty.noMatches') : t('filePanel.empty.emptyDirectory')}
                 </div>
               ) : (
-                <table className={`w-full ${FILE_BROWSER_LIST_TEXT}`} style={{ tableLayout: "fixed" }}>
+                <table className={`file-browser-table w-full ${FILE_BROWSER_LIST_TEXT}`} style={{ tableLayout: "fixed", minWidth: 140 + colWidths.size + colWidths.modified + (permissionsVisible ? colWidths.permissions : 0) }}>
                   <colgroup>
                     <col />
                     <col style={{ width: colWidths.size }} />
                     <col style={{ width: colWidths.modified }} />
-                    {showPermissions && (
+                    {permissionsVisible && (
                       <col style={{ width: colWidths.permissions }} />
                     )}
                   </colgroup>
-                  <thead className="sticky top-0 bg-muted/60 z-10">
-                    <tr className="border-b text-muted-foreground">
+                  <thead className="file-browser-columns sticky top-0 z-10">
+                    <tr className="text-muted-foreground">
                       <th
                         className="relative cursor-pointer select-none px-2 py-px text-left font-medium hover:bg-muted/80"
                         onClick={() => handleSortClick("name")}
@@ -712,7 +707,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                           {t('filePanel.column.modified')}
                           <SortIndicator column="modified" />
                         </span>
-                        {showPermissions && (
+                        {permissionsVisible && (
                           <div
                             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
                             onMouseDown={(e) =>
@@ -722,7 +717,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                           />
                         )}
                       </th>
-                      {showPermissions && (
+                      {permissionsVisible && (
                         <th className="relative px-2 py-px text-left font-medium">
                           {t('filePanel.column.permissions')}
                         </th>
@@ -736,7 +731,8 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                         <ContextMenu key={entry.name}>
                           <ContextMenuTrigger asChild>
                             <tr
-                              className={`border-b border-border/40 cursor-pointer select-none transition-colors ${isSelected ? `${selectedBg} font-medium` : "hover:bg-muted/40"}`}
+                              className={`file-browser-row h-7 cursor-pointer select-none transition-colors motion-reduce:transition-none ${isSelected ? selectedBg : "hover:bg-surface-hover"}`}
+                              aria-selected={isSelected}
                               onClick={(e) => handleRowClick(idx, e)}
                               onDoubleClick={() => handleDoubleClick(entry)}
                               draggable
@@ -745,7 +741,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                               <td className="overflow-hidden px-2 py-px">
                                 <div className={`flex min-w-0 items-center gap-1 ${FILE_BROWSER_LIST_ICONS}`}>
                                   {getFileIcon(entry)}
-                                  <span className="truncate">{entry.name}</span>
+                                  <span className="truncate" title={entry.name}>{entry.name}</span>
                                 </div>
                               </td>
                               <td className="overflow-hidden whitespace-nowrap px-2 py-px text-right text-muted-foreground">
@@ -756,7 +752,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                               <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-px text-muted-foreground">
                                 {entry.modified ?? "—"}
                               </td>
-                              {showPermissions && (
+                              {permissionsVisible && (
                                 <td className="overflow-hidden whitespace-nowrap px-2 py-px font-mono text-muted-foreground">
                                   {entry.permissions ?? "—"}
                                 </td>
@@ -892,7 +888,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
         )}
 
         {/* Status bar */}
-        <PanelToolbar density="dense" className={`justify-between border-t px-2 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
+        <PanelToolbar density="dense" className={`file-browser-status justify-between gap-3 px-3 text-muted-foreground ${FILE_BROWSER_CHROME_TEXT}`}>
           <span>
             {t('filePanel.statusBar.items', { count: filteredEntries.length })}
             {selectedNames.size > 0 && (

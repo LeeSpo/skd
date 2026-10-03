@@ -15,6 +15,7 @@ interface NewTabMenuProps {
   onOpenSavedConnection?: (connectionId: string, targetGroupId: string) => void | Promise<void>;
   onNewConnection?: () => void;
   onNewLocalTerminal?: () => void | Promise<void>;
+  triggerClassName?: string;
 }
 
 function ConnectionItem({
@@ -62,6 +63,7 @@ export function NewTabMenu({
   onOpenSavedConnection,
   onNewConnection,
   onNewLocalTerminal,
+  triggerClassName,
 }: NewTabMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -111,6 +113,7 @@ export function NewTabMenu({
   };
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (visibleConnections.length === 0) return;
@@ -155,6 +158,7 @@ export function NewTabMenu({
                 size="toolbar"
                 className={cn(
                   'mx-1',
+                  triggerClassName,
                   open && 'bg-accent text-accent-foreground',
                 )}
                 aria-label={t('newTabMenu.title')}

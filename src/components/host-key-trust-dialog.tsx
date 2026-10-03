@@ -66,7 +66,7 @@ export function HostKeyTrustDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="macos-alert sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('hostKeyTrust.title')}</AlertDialogTitle>
           <AlertDialogDescription asChild>

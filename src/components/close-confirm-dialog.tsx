@@ -30,7 +30,7 @@ export function CloseConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onCancel(); }}>
-      <AlertDialogContent>
+      <AlertDialogContent className="macos-alert sm:max-w-[320px]">
         <AlertDialogHeader>
           <AlertDialogTitle>
             {isQuit ? t('closeConfirm.quitTitle') : t('closeConfirm.title')}

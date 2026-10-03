@@ -16,6 +16,7 @@ describe('workspace color palettes', () => {
     localStorage.clear();
     document.documentElement.className = '';
     delete document.documentElement.dataset.colorPalette;
+    delete document.documentElement.dataset.themeMode;
     changeListeners.length = 0;
     vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({
       matches: false,
@@ -35,13 +36,13 @@ describe('workspace color palettes', () => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults missing and invalid saved values to Graphite', () => {
+  it('defaults missing and invalid saved values to System', () => {
     expect(getSavedColorPalette()).toBe(DEFAULT_COLOR_PALETTE);
-    expect(normalizeColorPalette('unknown')).toBe('graphite');
+    expect(normalizeColorPalette('unknown')).toBe('system');
     expect(normalizeColorPalette('cupertino')).toBe('cupertino');
 
     localStorage.setItem('sshClientSettings', JSON.stringify({ colorPalette: 'unknown' }));
-    expect(getSavedColorPalette()).toBe('graphite');
+    expect(getSavedColorPalette()).toBe('system');
   });
 
   it('applies palette and theme state to the root element', () => {
@@ -68,4 +69,29 @@ describe('workspace color palettes', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
+  it('keeps palette application independent and defines terminal matches', () => {
+    applyColorPalette('graphite');
+    expect(document.documentElement.dataset.colorPalette).toBe('graphite');
+    expect(PALETTE_TERMINAL_THEMES).toEqual({
+      system: 'vs-code-dark',
+      graphite: 'one-dark',
+      midnight: 'tokyo-night',
+      nordic: 'nord',
+      cupertino: 'vs-code-dark',
+    });
+  });
+
+  it('follows the previewed appearance mode without overwriting the saved mode', () => {
+    localStorage.setItem('sshClientSettings', JSON.stringify({ theme: 'dark' }));
+    initializeTheme();
+    applyTheme('auto');
+    changeListeners[0]?.({ matches: true } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    changeListeners[0]?.({ matches: false } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    applyTheme('dark');
+    changeListeners[0]?.({ matches: false } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('sshClientSettings')!)).toEqual({ theme: 'dark' });
+  });
 });

@@ -28,10 +28,13 @@ export function treeRowState(opts: {
 }) {
   const { selected, focused, variant = "panel", className } = opts;
   return cn(
-    "flex items-center rounded-sm",
+    "flex items-center",
     className,
     variant === "sidebar"
-      ? cn(selected ? "bg-surface-selected text-sidebar-foreground" : "hover:bg-sidebar-accent")
+      ? cn(
+          "sidebar-row rounded-md",
+          selected && "sidebar-row-selected",
+        )
       : cn(
           selected && "bg-accent",
           focused && !selected && "bg-muted",
