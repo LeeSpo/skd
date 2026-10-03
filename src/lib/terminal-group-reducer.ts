@@ -5,6 +5,7 @@ import type {
   TerminalGroupAction,
   TerminalGroupState,
   TerminalTab,
+  WorkspacePage,
 } from './terminal-group-types';
 
 // ── Grid tree helpers ──
@@ -106,18 +107,81 @@ function collectLeafIds(node: GridNode): string[] {
   return node.children.flatMap(collectLeafIds);
 }
 
+function gridContains(node: GridNode, groupId: string): boolean {
+  return collectLeafIds(node).includes(groupId);
+}
+
+/**
+ * Older callers and property fixtures omit pages. One page mirroring the
+ * live grid keeps "every group is a leaf of state.gridLayout" intact.
+ */
+export function ensurePages(state: TerminalGroupState): TerminalGroupState {
+  if (state.pages && state.pages.length > 0 && state.activePageId) {
+    if (typeof state.nextPageId === 'number') return state;
+    const maxId = state.pages.reduce((max, page) => {
+      const numeric = Number(page.id);
+      return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
+    }, 1);
+    return { ...state, nextPageId: maxId + 1 };
+  }
+  const page: WorkspacePage = {
+    id: '1',
+    gridLayout: state.gridLayout,
+    activeGroupId: state.activeGroupId,
+  };
+  return {
+    ...state,
+    pages: [page],
+    activePageId: page.id,
+    nextPageId: 2,
+  };
+}
+
+/** Write the live grid back onto the active page. No-op when it already matches. */
+export function rememberActivePage(state: TerminalGroupState): TerminalGroupState {
+  if (!state.pages?.length || !state.activePageId) return state;
+  const current = state.pages.find((page) => page.id === state.activePageId);
+  if (!current) return state;
+  if (current.gridLayout === state.gridLayout && current.activeGroupId === state.activeGroupId) {
+    return state;
+  }
+  return {
+    ...state,
+    pages: state.pages.map((page) =>
+      page.id === state.activePageId
+        ? { ...page, gridLayout: state.gridLayout, activeGroupId: state.activeGroupId }
+        : page,
+    ),
+  };
+}
+
+/** Pages as the titlebar should read them: the active page uses the live grid. */
+export function livePages(state: TerminalGroupState): WorkspacePage[] {
+  const ensured = ensurePages(state);
+  return ensured.pages.map((page) =>
+    page.id === ensured.activePageId
+      ? { ...page, gridLayout: ensured.gridLayout, activeGroupId: ensured.activeGroupId }
+      : page,
+  );
+}
+
 // ── Default state ──
 
 export function createDefaultState(): TerminalGroupState {
   const groupId = '1';
+  const pageId = '1';
+  const gridLayout: GridNode = { type: 'leaf', groupId };
   return {
     groups: {
       [groupId]: { id: groupId, tabs: [], activeTabId: null },
     },
     activeGroupId: groupId,
-    gridLayout: { type: 'leaf', groupId },
+    gridLayout,
     nextGroupId: 2,
     tabToGroupMap: {},
+    pages: [{ id: pageId, gridLayout, activeGroupId: groupId }],
+    activePageId: pageId,
+    nextPageId: 2,
   };
 }
 
@@ -141,45 +205,143 @@ function maybeRemoveEmptyGroup(state: TerminalGroupState, groupId: string): Term
   return removeGroupFromState(state, groupId);
 }
 
-function removeGroupFromState(state: TerminalGroupState, groupId: string): TerminalGroupState {
+function dropGroupRecords(state: TerminalGroupState, groupId: string): Pick<TerminalGroupState, 'groups' | 'tabToGroupMap'> {
   const group = state.groups[groupId];
-  const newGroups = { ...state.groups };
-  delete newGroups[groupId];
-
-  const newTabToGroupMap = { ...state.tabToGroupMap };
+  const groups = { ...state.groups };
+  delete groups[groupId];
+  const tabToGroupMap = { ...state.tabToGroupMap };
   if (group) {
-    for (const tab of group.tabs) {
-      delete newTabToGroupMap[tab.id];
-    }
+    for (const tab of group.tabs) delete tabToGroupMap[tab.id];
+  }
+  return { groups, tabToGroupMap };
+}
+
+/** Grid that actually owns this group. The active page's copy is the live tree. */
+function gridOwningGroup(state: TerminalGroupState, groupId: string): { page: WorkspacePage; grid: GridNode } | null {
+  const active = state.pages.find((page) => page.id === state.activePageId);
+  if (active && gridContains(state.gridLayout, groupId)) {
+    return { page: active, grid: state.gridLayout };
+  }
+  const page = state.pages.find((candidate) =>
+    candidate.id !== state.activePageId && gridContains(candidate.gridLayout, groupId),
+  );
+  return page ? { page, grid: page.gridLayout } : null;
+}
+
+function removeGroupFromState(state: TerminalGroupState, groupId: string): TerminalGroupState {
+  const { groups, tabToGroupMap } = dropGroupRecords(state, groupId);
+  const owner = gridOwningGroup(state, groupId);
+
+  if (!owner) {
+    const activeGroupId = state.activeGroupId === groupId
+      ? (Object.keys(groups)[0] ?? state.activeGroupId)
+      : state.activeGroupId;
+    return { ...state, groups, tabToGroupMap, activeGroupId };
   }
 
-  let newGrid = removeLeaf(state.gridLayout, groupId);
+  const removed = removeLeaf(owner.grid, groupId);
+  const newGrid = removed ? simplifyTree(removed) : null;
+
   if (newGrid === null) {
-    // Should not happen if we preserve last group, but safety fallback
-    const remaining = Object.keys(newGroups)[0];
-    newGrid = { type: 'leaf', groupId: remaining };
+    const remainingPages = state.pages.filter((page) => page.id !== owner.page.id);
+    if (remainingPages.length === 0) {
+      const remaining = Object.keys(groups)[0];
+      const fallback: GridNode = { type: 'leaf', groupId: remaining };
+      return {
+        ...state,
+        groups,
+        tabToGroupMap,
+        gridLayout: fallback,
+        activeGroupId: remaining,
+        pages: [{ id: owner.page.id, gridLayout: fallback, activeGroupId: remaining }],
+        activePageId: owner.page.id,
+      };
+    }
+    if (state.activePageId !== owner.page.id) {
+      return { ...state, groups, tabToGroupMap, pages: remainingPages };
+    }
+    const index = state.pages.findIndex((page) => page.id === owner.page.id);
+    const neighbor = remainingPages[Math.min(index, remainingPages.length - 1)];
+    const activeGroupId = groups[neighbor.activeGroupId]
+      ? neighbor.activeGroupId
+      : collectLeafIds(neighbor.gridLayout)[0];
+    return {
+      ...state,
+      groups,
+      tabToGroupMap,
+      pages: remainingPages,
+      activePageId: neighbor.id,
+      gridLayout: neighbor.gridLayout,
+      activeGroupId,
+    };
   }
-  newGrid = simplifyTree(newGrid);
 
-  let newActiveGroupId = state.activeGroupId;
-  if (newActiveGroupId === groupId) {
-    // Pick first available group from the tree
-    const leafIds = collectLeafIds(newGrid);
-    newActiveGroupId = leafIds[0] ?? Object.keys(newGroups)[0];
+  const leaves = collectLeafIds(newGrid);
+  const pageActive = owner.page.activeGroupId === groupId ? leaves[0] : owner.page.activeGroupId;
+  if (owner.page.id === state.activePageId) {
+    return {
+      ...state,
+      groups,
+      tabToGroupMap,
+      gridLayout: newGrid,
+      activeGroupId: state.activeGroupId === groupId ? pageActive : state.activeGroupId,
+    };
   }
-
   return {
     ...state,
-    groups: newGroups,
-    gridLayout: newGrid,
-    activeGroupId: newActiveGroupId,
-    tabToGroupMap: newTabToGroupMap,
+    groups,
+    tabToGroupMap,
+    pages: state.pages.map((page) =>
+      page.id === owner.page.id ? { ...page, gridLayout: newGrid, activeGroupId: pageActive } : page,
+    ),
+  };
+}
+
+function appendTab(state: TerminalGroupState, groupId: string, tab: TerminalTab): TerminalGroupState {
+  const group = state.groups[groupId];
+  if (!group) return state;
+  return {
+    ...state,
+    groups: {
+      ...state.groups,
+      [groupId]: { ...group, tabs: [...group.tabs, tab], activeTabId: tab.id },
+    },
+    tabToGroupMap: { ...state.tabToGroupMap, [tab.id]: groupId },
+  };
+}
+
+function openTabOnNewPage(state: TerminalGroupState, tab: TerminalTab): TerminalGroupState {
+  const saved = rememberActivePage(state);
+  const newGroupId = String(state.nextGroupId);
+  const newPageId = String(state.nextPageId);
+  const newGroup: TerminalGroup = { id: newGroupId, tabs: [tab], activeTabId: tab.id };
+  const gridLayout: GridNode = { type: 'leaf', groupId: newGroupId };
+  return {
+    ...saved,
+    groups: { ...saved.groups, [newGroupId]: newGroup },
+    gridLayout,
+    activeGroupId: newGroupId,
+    nextGroupId: state.nextGroupId + 1,
+    nextPageId: state.nextPageId + 1,
+    activePageId: newPageId,
+    pages: [...saved.pages, { id: newPageId, gridLayout, activeGroupId: newGroupId }],
+    tabToGroupMap: { ...state.tabToGroupMap, [tab.id]: newGroupId },
   };
 }
 
 // ── Main reducer ──
 
 export function terminalGroupReducer(
+  raw: TerminalGroupState,
+  action: TerminalGroupAction,
+): TerminalGroupState {
+  if (action.type === 'RESET_LAYOUT') return createDefaultState();
+  if (action.type === 'RESTORE_LAYOUT') return action.state;
+  const state = ensurePages(raw);
+  return rememberActivePage(applyTerminalGroupAction(state, action));
+}
+
+function applyTerminalGroupAction(
   state: TerminalGroupState,
   action: TerminalGroupAction,
 ): TerminalGroupState {
@@ -187,6 +349,7 @@ export function terminalGroupReducer(
     case 'SPLIT_GROUP': {
       const { groupId, direction, newTab } = action;
       if (!state.groups[groupId]) return state;
+      if (!gridContains(state.gridLayout, groupId)) return state;
 
       const newGroupId = String(state.nextGroupId);
       const tab = newTab ?? undefined;
@@ -229,25 +392,42 @@ export function terminalGroupReducer(
 
     case 'ACTIVATE_GROUP': {
       if (!state.groups[action.groupId]) return state;
+      const owner = gridOwningGroup(state, action.groupId);
+      if (owner && owner.page.id !== state.activePageId) {
+        const saved = rememberActivePage(state);
+        return {
+          ...saved,
+          activePageId: owner.page.id,
+          gridLayout: owner.grid,
+          activeGroupId: action.groupId,
+        };
+      }
+      if (state.activeGroupId === action.groupId) return state;
       return { ...state, activeGroupId: action.groupId };
     }
 
-    case 'ADD_TAB': {
-      const { groupId, tab } = action;
-      const group = state.groups[groupId];
-      if (!group) return state;
+    case 'ACTIVATE_PAGE': {
+      const page = state.pages.find((candidate) => candidate.id === action.pageId);
+      if (!page || page.id === state.activePageId) return state;
+      const saved = rememberActivePage(state);
+      const activeGroupId = saved.groups[page.activeGroupId]
+        ? page.activeGroupId
+        : (collectLeafIds(page.gridLayout)[0] ?? saved.activeGroupId);
       return {
-        ...state,
-        groups: {
-          ...state.groups,
-          [groupId]: {
-            ...group,
-            tabs: [...group.tabs, tab],
-            activeTabId: tab.id,
-          },
-        },
-        tabToGroupMap: { ...state.tabToGroupMap, [tab.id]: groupId },
+        ...saved,
+        activePageId: page.id,
+        gridLayout: page.gridLayout,
+        activeGroupId,
       };
+    }
+
+    case 'ADD_TAB': {
+      const focused = state.groups[state.activeGroupId];
+      if (!focused) return state;
+      // An empty focused pane is the place a session belongs: startup, or the
+      // blank half of a split. A pane that already has a session opens a page.
+      if (focused.tabs.length === 0) return appendTab(state, focused.id, action.tab);
+      return openTabOnNewPage(state, action.tab);
     }
 
     case 'REMOVE_TAB': {
@@ -451,6 +631,7 @@ export function terminalGroupReducer(
       const sourceGroup = state.groups[sourceGroupId];
       if (!sourceGroup) return state;
       if (!state.groups[splitAt]) return state;
+      if (!gridContains(state.gridLayout, splitAt)) return state;
 
       const tab = sourceGroup.tabs.find((t) => t.id === tabId);
       if (!tab) return state;
@@ -549,13 +730,9 @@ export function terminalGroupReducer(
       };
     }
 
-    case 'RESET_LAYOUT': {
-      return createDefaultState();
-    }
-
-    case 'RESTORE_LAYOUT': {
-      return action.state;
-    }
+    case 'RESET_LAYOUT':
+    case 'RESTORE_LAYOUT':
+      return state;
 
     default:
       return state;

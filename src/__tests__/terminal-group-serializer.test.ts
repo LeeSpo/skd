@@ -23,14 +23,18 @@ function makeTab(id: string): TerminalTab {
 }
 
 function makeState(): TerminalGroupState {
+  const gridLayout: TerminalGroupState['gridLayout'] = { type: 'leaf', groupId: '1' };
   return {
     groups: {
       '1': { id: '1', tabs: [makeTab('t1')], activeTabId: 't1' },
     },
     activeGroupId: '1',
     tabToGroupMap: { t1: '1' },
-    gridLayout: { type: 'leaf', groupId: '1' },
+    gridLayout,
     nextGroupId: 2,
+    pages: [{ id: '1', gridLayout, activeGroupId: '1' }],
+    activePageId: '1',
+    nextPageId: 2,
   };
 }
 
@@ -93,22 +97,26 @@ describe('serialize / deserialize', () => {
   });
 
   it('round-trips a state with branch grid layout', () => {
+    const gridLayout: TerminalGroupState['gridLayout'] = {
+      type: 'branch',
+      direction: 'horizontal',
+      children: [
+        { type: 'leaf', groupId: '1' },
+        { type: 'leaf', groupId: '2' },
+      ],
+      sizes: [50, 50],
+    };
     const state: TerminalGroupState = {
       groups: {
         '1': { id: '1', tabs: [makeTab('t1')], activeTabId: 't1' },
         '2': { id: '2', tabs: [makeTab('t2')], activeTabId: 't2' },
       },
       activeGroupId: '1',
-      gridLayout: {
-        type: 'branch',
-        direction: 'horizontal',
-        children: [
-          { type: 'leaf', groupId: '1' },
-          { type: 'leaf', groupId: '2' },
-        ],
-        sizes: [50, 50],
-      },
+      gridLayout,
       nextGroupId: 3,
+      pages: [{ id: '1', gridLayout, activeGroupId: '1' }],
+      activePageId: '1',
+      nextPageId: 2,
     };
     expect(deserialize(serialize(state))).toEqual(state);
   });
@@ -116,6 +124,70 @@ describe('serialize / deserialize', () => {
   it('round-trips default state', () => {
     const state = createDefaultState();
     expect(deserialize(serialize(state))).toEqual(state);
+  });
+
+  it('migrates a v1 single pane with several tabs into one page per tab', () => {
+    const json = JSON.stringify({
+      version: 1,
+      data: {
+        groups: {
+          '1': { id: '1', tabs: [makeTab('a'), makeTab('b')], activeTabId: 'a' },
+        },
+        activeGroupId: '1',
+        gridLayout: { type: 'leaf', groupId: '1' },
+        nextGroupId: 2,
+        tabToGroupMap: { a: '1', b: '1' },
+      },
+    });
+    const state = deserialize(json);
+    expect(state).not.toBeNull();
+    expect(state!.pages).toHaveLength(2);
+    expect(state!.gridLayout).toEqual({ type: 'leaf', groupId: '1' });
+    expect(state!.groups['1'].tabs.map((tab) => tab.id)).toEqual(['a']);
+    const extra = state!.pages.find((page) => page.id !== '1');
+    expect(extra?.gridLayout.type).toBe('leaf');
+    if (extra?.gridLayout.type === 'leaf') {
+      expect(state!.groups[extra.gridLayout.groupId].tabs.map((tab) => tab.id)).toEqual(['b']);
+    }
+  });
+
+  it('migrates a v1 split by keeping the tree on one page and lifting extra tabs out', () => {
+    const gridLayout = {
+      type: 'branch',
+      direction: 'horizontal',
+      children: [
+        { type: 'leaf', groupId: '1' },
+        { type: 'leaf', groupId: '2' },
+      ],
+      sizes: [50, 50],
+    };
+    const json = JSON.stringify({
+      version: 1,
+      data: {
+        groups: {
+          '1': { id: '1', tabs: [makeTab('a'), makeTab('extra')], activeTabId: 'a' },
+          '2': { id: '2', tabs: [makeTab('b')], activeTabId: 'b' },
+        },
+        activeGroupId: '1',
+        gridLayout,
+        nextGroupId: 3,
+        tabToGroupMap: { a: '1', extra: '1', b: '2' },
+      },
+    });
+    const state = deserialize(json);
+    expect(state).not.toBeNull();
+    expect(state!.pages[0].gridLayout).toEqual(gridLayout);
+    expect(state!.groups['1'].tabs.map((tab) => tab.id)).toEqual(['a']);
+    expect(state!.groups['2'].tabs.map((tab) => tab.id)).toEqual(['b']);
+    const extraPage = state!.pages[1];
+    expect(extraPage.gridLayout.type).toBe('leaf');
+    if (extraPage.gridLayout.type === 'leaf') {
+      expect(state!.groups[extraPage.gridLayout.groupId].tabs.map((tab) => tab.id)).toEqual(['extra']);
+    }
+  });
+
+  it('returns null for a v1 payload that is not a layout', () => {
+    expect(deserialize(JSON.stringify({ version: 1, data: { tabs: [] } }))).toBeNull();
   });
 });
 

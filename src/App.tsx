@@ -34,7 +34,7 @@ import { StableTerminalGrid } from './components/terminal/grid-renderer';
 import { ErrorBoundary } from './components/error-boundary';
 import type { TerminalTab } from './lib/terminal-group-types';
 import { getTabDisplayName } from './lib/terminal-group-utils';
-import { sessionSubtitle } from './lib/session-chrome';
+
 import { Toaster } from './components/ui/sonner';
 import { HostKeyTrustDialog } from './components/host-key-trust-dialog';
 import { toast } from 'sonner';
@@ -1464,9 +1464,8 @@ function AppContent() {
 
   // Check if there are any tabs across all groups
   const hasAnyTabs = allTabs.length > 0;
-  const hoistTabs = Object.keys(state.groups).length <= 1 && hasAnyTabs;
+  const titlebarShowsTabs = hasAnyTabs;
   const sessionTitle = activeTab && activeGroup ? getTabDisplayName(activeTab, activeGroup.tabs) : undefined;
-  const sessionSubtitleText = activeTab && !hoistTabs ? sessionSubtitle(activeTab) : undefined;
   // Check if the grid has only one empty group (show welcome screen)
   const showWelcomeInMainArea = !hasAnyTabs && Object.keys(state.groups).length <= 1;
   // File-browser tabs don't need right sidebar (system monitor) or bottom panel (integrated file browser)
@@ -1533,8 +1532,7 @@ function AppContent() {
         toolbar={(
           <WindowToolbar
             workspaceTitle={sessionTitle}
-            workspaceSubtitle={sessionSubtitleText}
-            showSessionTitle={!hoistTabs}
+            showSessionTitle={!titlebarShowsTabs}
             onOpenSettings={handleOpenSettings}
             onOpenPortForward={handleOpenPortForward}
             portForwardEnabled={canManagePortForward}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { GridRenderer, StableTerminalGrid } from '../components/terminal/grid-renderer';
-import { terminalGroupReducer } from '../lib/terminal-group-reducer';
+import { createDefaultState, terminalGroupReducer } from '../lib/terminal-group-reducer';
 import type { GridNode, TerminalGroupState, TerminalTab } from '../lib/terminal-group-types';
 
 const ptyLifecycle = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
@@ -243,6 +243,50 @@ describe('GridRenderer', () => {
 
     expect(view.container.querySelector('[data-mock-pty="t1"]')).toBe(originalPty);
     expect(ptyLifecycle.mounts).toBe(3);
+    expect(ptyLifecycle.unmounts).toBe(0);
+  });
+
+  it('renders two panes for the split page and one pane for the other page', async () => {
+    class ResizeObserverMock {
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    let state = terminalGroupReducer(createDefaultState(), {
+      type: 'ADD_TAB',
+      groupId: '1',
+      tab: makeTab('host'),
+    });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('peer'),
+    });
+    const splitPageId = state.activePageId;
+    state = terminalGroupReducer(state, {
+      type: 'ADD_TAB',
+      groupId: state.activeGroupId,
+      tab: makeTab('local'),
+    });
+    const localPageId = state.activePageId;
+
+    mockState = state;
+    const view = render(<StableTerminalGrid />);
+    await waitFor(() => expect(view.container.querySelector('[data-mock-pty="local"]')).not.toBeNull());
+    expect(view.container.querySelectorAll('[data-terminal-group-slot]')).toHaveLength(1);
+    expect(ptyLifecycle.unmounts).toBe(0);
+
+    mockState = terminalGroupReducer(state, { type: 'ACTIVATE_PAGE', pageId: splitPageId });
+    view.rerender(<StableTerminalGrid />);
+    expect(view.container.querySelectorAll('[data-terminal-group-slot]')).toHaveLength(2);
+    expect(view.container.querySelector('[data-mock-pty="host"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-mock-pty="peer"]')).not.toBeNull();
+
+    mockState = terminalGroupReducer(mockState, { type: 'ACTIVATE_PAGE', pageId: localPageId });
+    view.rerender(<StableTerminalGrid />);
+    expect(view.container.querySelectorAll('[data-terminal-group-slot]')).toHaveLength(1);
     expect(ptyLifecycle.unmounts).toBe(0);
   });
 

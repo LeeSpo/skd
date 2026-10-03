@@ -14,10 +14,12 @@ import {
 } from '../../lib/tab-drag-state';
 import { DropZoneOverlay } from './drop-zone-overlay';
 import { GroupTabBar } from './group-tab-bar';
+import { WorkspaceTabBar } from './workspace-tab-bar';
 import { PanelSurfaceFallback } from '../ui/panel-chrome';
 import { WelcomeScreen } from '../welcome-screen';
 import { useConnectionAttempts } from '../../lib/connection-attempt-context';
 import { useTitlebarSlot } from '../../lib/titlebar-slot-context';
+
 import { ConnectionFailureView, ConnectionProgressSegments } from '../connection-progress';
 
 interface TerminalGroupViewProps {
@@ -223,22 +225,31 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
   );
 
   const isLastGroup = Object.keys(state.groups).length === 1;
-  const hoistTabs = Boolean(group && isLastGroup && group.tabs.length > 0 && titlebarSlot != null);
+  const anyTabs = Object.values(state.groups).some((entry) => entry.tabs.length > 0);
+  // The active group moves one workspace bar into the titlebar. That bar lists
+  // pages, so a split stays on its own segment and another page can be full-screen.
+  // Pane hosts stay hidden whenever the slot exists, and this host node is moved
+  // rather than swapped, so an in-progress drag is not remounted.
+  const hoistWorkspace = Boolean(group && isActive && titlebarSlot && anyTabs);
 
   useLayoutEffect(() => {
-    const parent = hoistTabs && titlebarSlot ? titlebarSlot : paneSlot;
+    const parent = hoistWorkspace && titlebarSlot ? titlebarSlot : paneSlot;
     if (!parent || portalHost.parentElement === parent) return;
     parent.appendChild(portalHost);
-  }, [hoistTabs, paneSlot, portalHost, titlebarSlot]);
+  }, [hoistWorkspace, paneSlot, portalHost, titlebarSlot]);
 
   useEffect(() => () => portalHost.remove(), [portalHost]);
 
   if (!group) return null;
 
   const showWelcome = group.tabs.length === 0 && isLastGroup;
-  const tabBar = (
+  const tabBar = hoistWorkspace ? (
+    <WorkspaceTabBar />
+  ) : (
     <GroupTabBar
-      variant={hoistTabs ? 'titlebar' : 'pane'}
+      variant="pane"
+      focused={isActive}
+      showNewTab={isActive || isLastGroup}
       groupId={groupId}
       tabs={group.tabs}
       activeTabId={group.activeTabId}
@@ -260,7 +271,7 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
       aria-label={`Terminal group ${groupId}`}
     >
       <div className={renderTabContents ? '' : 'pointer-events-auto'}>
-        <div ref={setPaneSlot} hidden={hoistTabs} data-tab-bar-host="pane" />
+        <div ref={setPaneSlot} hidden={titlebarSlot != null} data-tab-bar-host="pane" />
         {createPortal(tabBar, portalHost)}
       </div>
       <div

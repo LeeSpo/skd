@@ -87,6 +87,9 @@ const arbitraryTerminalGroupState: fc.Arbitrary<TerminalGroupState> = fc
       activeGroupId: groupIds[0],
       gridLayout,
       nextGroupId: count + 1,
+      pages: [{ id: '1', gridLayout, activeGroupId: groupIds[0] }],
+      activePageId: '1',
+      nextPageId: 2,
     } as TerminalGroupState;
   });
 
@@ -127,7 +130,7 @@ describe('terminal-group-serializer property tests', () => {
           }).map((obj) => JSON.stringify(obj)),
           // Valid JSON with wrong version
           fc.record({
-            version: fc.integer().filter((v) => v !== STATE_VERSION),
+            version: fc.integer().filter((v) => v !== STATE_VERSION && v !== 1),
             data: fc.anything(),
           }).map((obj) => JSON.stringify(obj)),
         ),

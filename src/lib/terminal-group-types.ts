@@ -31,13 +31,27 @@ export interface TerminalGroup {
   activeTabId: string | null;
 }
 
+/**
+ * One titlebar segment. A page owns its grid: a split page is a branch,
+ * and any other page is a single leaf covering the whole terminal area.
+ */
+export interface WorkspacePage {
+  id: string;
+  gridLayout: GridNode;
+  activeGroupId: string;
+}
+
 /** 完整布局状态 */
 export interface TerminalGroupState {
   groups: Record<string, TerminalGroup>;
+  /** Live grid of the active page. Mirrored onto `pages` after every edit. */
   activeGroupId: string;
   gridLayout: GridNode;
   nextGroupId: number;
   tabToGroupMap: Record<string, string>;
+  pages: WorkspacePage[];
+  activePageId: string;
+  nextPageId: number;
 }
 
 /** Reducer Action 类型 */
@@ -45,6 +59,7 @@ export type TerminalGroupAction =
   | { type: 'SPLIT_GROUP'; groupId: string; direction: SplitDirection; newTab?: TerminalTab }
   | { type: 'REMOVE_GROUP'; groupId: string }
   | { type: 'ACTIVATE_GROUP'; groupId: string }
+  | { type: 'ACTIVATE_PAGE'; pageId: string }
   | { type: 'ADD_TAB'; groupId: string; tab: TerminalTab }
   | { type: 'REMOVE_TAB'; groupId: string; tabId: string }
   | { type: 'ACTIVATE_TAB'; groupId: string; tabId: string }
