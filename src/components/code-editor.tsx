@@ -5,7 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching, foldGutter, foldKeymap } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { loadEditorConfig, EDITOR_CONFIG_CHANGED_EVENT, type EditorConfig } from "@/lib/editor-config";
+import { loadEditorConfig, EDITOR_CONFIG_CHANGED_EVENT, isBracketMatchingEnabled, type EditorConfig } from "@/lib/editor-config";
 
 type LanguageLoader = () => Promise<Extension | null>;
 
@@ -174,6 +174,12 @@ export function CodeEditor({
       }),
       // Tab size from config
       EditorState.tabSize.of(editorConfig.tabSize),
+      EditorView.theme({
+        ".cm-scroller": {
+          fontFamily: editorConfig.fontFamily,
+          fontSize: `${editorConfig.fontSize}px`,
+        },
+      }),
     ];
 
     // Conditional extensions based on user config
@@ -187,7 +193,7 @@ export function CodeEditor({
     if (editorConfig.foldGutter) {
       exts.push(foldGutter());
     }
-    if (editorConfig.bracketMatching || editorConfig.matchBrackets) {
+    if (isBracketMatchingEnabled(editorConfig)) {
       exts.push(bracketMatching());
     }
     if (editorConfig.wordWrap) {
@@ -255,11 +261,7 @@ export function CodeEditor({
     <div
       ref={containerRef}
       className={`overflow-auto border rounded-md ${className}`}
-      style={{
-        height: "100%",
-        fontSize: `${editorConfig.fontSize}px`,
-        fontFamily: editorConfig.fontFamily,
-      }}
+      style={{ height: "100%" }}
     />
   );
 }

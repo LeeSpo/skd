@@ -37,6 +37,28 @@ describe('public-key connection requests', () => {
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(invokeMock.mock.calls[0]?.[0]).toBe('ssh_connect');
+    expect(invokeMock.mock.calls[0]?.[1]).toMatchObject({
+      request: {
+        tcp_timeout_secs: 10,
+        keepalive_interval_secs: 60,
+      },
+    });
+  });
+
+  it('sends a saved connection timeout and keepalive interval', async () => {
+    localStorage.setItem('sshClientSettings', JSON.stringify({
+      connectionTimeout: 30,
+      keepAliveInterval: 120,
+    }));
+
+    await sshConnectWithHostKeyTrust(publicKeyParams, vi.fn());
+
+    expect(invokeMock.mock.calls[0]?.[1]).toMatchObject({
+      request: {
+        tcp_timeout_secs: 30,
+        keepalive_interval_secs: 120,
+      },
+    });
   });
 
   it('submits one SFTP authentication request', async () => {

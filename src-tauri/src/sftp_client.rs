@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::connection_diagnostics::{sftp_tcp_timeout, ConnectStage};
+use crate::connection_diagnostics::{
+    DEFAULT_KEEPALIVE_INTERVAL_SECS, DEFAULT_TCP_TIMEOUT_SECS, ConnectStage,
+};
 use crate::ssh::{
     establish_authenticated_session, AuthMethod, SshConfig, SshHandler,
 };
@@ -21,6 +23,18 @@ pub struct SftpConfig {
     pub auth_method: SftpAuthMethod,
     #[serde(default = "default_host_key_verification")]
     pub host_key_verification: bool,
+    #[serde(default = "default_tcp_timeout_secs")]
+    pub tcp_timeout_secs: u64,
+    #[serde(default = "default_keepalive_interval_secs")]
+    pub keepalive_interval_secs: u64,
+}
+
+fn default_tcp_timeout_secs() -> u64 {
+    DEFAULT_TCP_TIMEOUT_SECS
+}
+
+fn default_keepalive_interval_secs() -> u64 {
+    DEFAULT_KEEPALIVE_INTERVAL_SECS
 }
 
 fn default_host_key_verification() -> bool {
@@ -90,11 +104,12 @@ impl StandaloneSftpClient {
                 },
             },
             host_key_verification: config.host_key_verification,
+            keepalive_interval_secs: config.keepalive_interval_secs,
         };
 
         let ssh_session = establish_authenticated_session(
             &ssh_config,
-            sftp_tcp_timeout(),
+            Duration::from_secs(config.tcp_timeout_secs),
             Arc::new(on_stage),
             None,
         )

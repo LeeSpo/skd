@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useBlocksTerminalTransparency } from '@/lib/use-window-appearance';
+import { DEFAULT_CONNECTION_TIMEOUT_SECS } from '@/lib/connection-settings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -32,8 +34,13 @@ import {
   saveAppearanceSettings,
   dispatchTerminalAppearanceChanged,
   terminalThemes,
+  terminalBackgroundSize,
   terminalContainerBackground,
   MACOS_MULTILINGUAL_TERMINAL_FONT,
+  MENLO_TERMINAL_FONT,
+  MONACO_TERMINAL_FONT,
+  COURIER_NEW_TERMINAL_FONT,
+  MAX_TERMINAL_BACKGROUND_IMAGE_BYTES,
   MIN_TERMINAL_SCROLLBACK,
   MAX_TERMINAL_SCROLLBACK,
 } from '../lib/terminal-config';
@@ -61,6 +68,7 @@ import {
   saveEditorConfig,
   dispatchEditorConfigChanged,
   DEFAULT_EDITOR_CONFIG,
+  DEFAULT_EDITOR_FONT,
   EDITOR_THEMES,
   type EditorConfig,
 } from '@/lib/editor-config';
@@ -78,23 +86,16 @@ interface AppSettings {
   colorScheme: string;
   cursorStyle: string;
   scrollbackLines: number;
-  defaultProtocol: string;
   connectionTimeout: number;
   keepAliveInterval: number;
   autoReconnect: boolean;
   hostKeyVerification: boolean;
-  autoLockTimeout: number;
   theme: ThemeMode;
   colorPalette: ColorPalette;
-  showConnectionManager: boolean;
-  showSystemMonitor: boolean;
   enableNotifications: boolean;
-  newSession: string;
   closeSession: string;
   nextTab: string;
   previousTab: string;
-  logLevel: string;
-  maxLogSize: number;
   checkUpdates: boolean;
 }
 
@@ -112,47 +113,47 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
   const originalPaletteRef = useRef<ColorPalette>(getSavedColorPalette());
   const originalThemeRef = useRef<ThemeMode>(getSavedTheme());
+  const preserveDraftRef = useRef(false);
+  const closingForUpdateCheckRef = useRef(false);
   
   const [settings, setSettings] = useState<AppSettings>({
     // Terminal settings
     fontSize: 14,
-    fontFamily: 'JetBrains Mono',
+    fontFamily: 'Menlo, monospace',
     colorScheme: 'dark',
     cursorStyle: 'block',
     scrollbackLines: 10000,
     
     // Connection settings
-    defaultProtocol: 'SSH',
-    connectionTimeout: 30,
+    connectionTimeout: DEFAULT_CONNECTION_TIMEOUT_SECS,
     keepAliveInterval: 60,
     autoReconnect: true,
     
     // Security settings
     hostKeyVerification: true,
-    autoLockTimeout: 30,
     
     // Interface settings
     theme: 'dark',
     colorPalette: DEFAULT_COLOR_PALETTE,
-    showConnectionManager: true,
-    showSystemMonitor: true,
     enableNotifications: true,
     
     // Keyboard shortcuts
-    newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession,
     closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
     nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
     previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
     
     // Advanced settings
-    logLevel: 'info',
-    maxLogSize: 100,
     checkUpdates: false
   });
 
   // Load settings when modal opens
   useEffect(() => {
     if (open) {
+      closingForUpdateCheckRef.current = false;
+      if (preserveDraftRef.current) {
+        preserveDraftRef.current = false;
+        return;
+      }
       originalThemeRef.current = getSavedTheme();
       originalPaletteRef.current = normalizeColorPalette(
         document.documentElement.dataset.colorPalette,
@@ -211,31 +212,36 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       onOpenChange(true);
+    } else if (closingForUpdateCheckRef.current) {
+      onOpenChange(false);
     } else {
       handleCancel();
     }
   };
 
+  const handleCheckForUpdates = () => {
+    preserveDraftRef.current = true;
+    closingForUpdateCheckRef.current = true;
+    onCheckForUpdates?.();
+    onOpenChange(false);
+  };
+
   const handleSave = () => {
-    // Save terminal appearance settings
-    saveAppearanceSettings(terminalAppearance);
-    dispatchTerminalAppearanceChanged();
-    
-    // Notify parent component of appearance changes
-    if (onAppearanceChange) {
-      onAppearanceChange(terminalAppearance);
-    }
-    
-    // Save editor config and notify live editors
     saveEditorConfig(editorConfig);
     dispatchEditorConfigChanged();
-    
-    // Apply the theme immediately
     applyTheme(settings.theme, settings.colorPalette);
-    
-    // Save other settings to localStorage
     localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     window.dispatchEvent(new Event(APP_SETTINGS_CHANGED_EVENT));
+
+    try {
+      saveAppearanceSettings(terminalAppearance);
+    } catch {
+      toast.error(t('settings.terminal.imageSaveFailed'));
+      return;
+    }
+
+    dispatchTerminalAppearanceChanged();
+    onAppearanceChange?.(terminalAppearance);
     onOpenChange(false);
   };
 
@@ -251,27 +257,20 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
       // Reset other settings to default values
       setSettings({
         fontSize: 14,
-        fontFamily: 'JetBrains Mono',
+        fontFamily: 'Menlo, monospace',
         colorScheme: 'dark',
         cursorStyle: 'block',
         scrollbackLines: 10000,
-        defaultProtocol: 'SSH',
-        connectionTimeout: 30,
+        connectionTimeout: DEFAULT_CONNECTION_TIMEOUT_SECS,
         keepAliveInterval: 60,
         autoReconnect: true,
         hostKeyVerification: true,
-        autoLockTimeout: 30,
         theme: 'dark',
         colorPalette: DEFAULT_COLOR_PALETTE,
-        showConnectionManager: true,
-        showSystemMonitor: true,
         enableNotifications: true,
-        newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession,
         closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
         nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
         previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
-        logLevel: 'info',
-        maxLogSize: 100,
         checkUpdates: false
       });
       
@@ -356,25 +355,13 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                         <SelectItem value={MACOS_MULTILINGUAL_TERMINAL_FONT}>
                           {t('settings.terminal.fontSystemMultilingual')}
                         </SelectItem>
-                        <SelectItem value="Menlo, Monaco, 'Courier New', monospace">
+                        <SelectItem value={MENLO_TERMINAL_FONT}>
                           {t('settings.terminal.fontMenlo')}
                         </SelectItem>
-                        <SelectItem value="'JetBrains Mono', monospace">
-                          {t('settings.terminal.fontJetBrainsMono')}
-                        </SelectItem>
-                        <SelectItem value="'Fira Code', monospace">
-                          {t('settings.terminal.fontFiraCode')}
-                        </SelectItem>
-                        <SelectItem value="'Source Code Pro', monospace">
-                          {t('settings.terminal.fontSourceCodePro')}
-                        </SelectItem>
-                        <SelectItem value="Consolas, monospace">
-                          {t('settings.terminal.fontConsolas')}
-                        </SelectItem>
-                        <SelectItem value="Monaco, monospace">
+                        <SelectItem value={MONACO_TERMINAL_FONT}>
                           {t('settings.terminal.fontMonaco')}
                         </SelectItem>
-                        <SelectItem value="'Courier New', monospace">
+                        <SelectItem value={COURIER_NEW_TERMINAL_FONT}>
                           {t('settings.terminal.fontCourierNew')}
                         </SelectItem>
                       </SelectContent>
@@ -549,8 +536,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          // Check file size (max 5MB)
-                          if (file.size > 5 * 1024 * 1024) {
+                          if (file.size > MAX_TERMINAL_BACKGROUND_IMAGE_BYTES) {
                             alert(t('settings.terminal.imageSizeWarning'));
                             return;
                           }
@@ -668,7 +654,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                         className="absolute inset-0 pointer-events-none"
                         style={{
                           backgroundImage: `url(${terminalAppearance.backgroundImage})`,
-                          backgroundSize: terminalAppearance.backgroundImagePosition === 'tile' ? 'auto' : terminalAppearance.backgroundImagePosition,
+                          backgroundSize: terminalBackgroundSize(terminalAppearance.backgroundImagePosition),
                           backgroundPosition: 'center',
                           backgroundRepeat: terminalAppearance.backgroundImagePosition === 'tile' ? 'repeat' : 'no-repeat',
                           opacity: terminalAppearance.backgroundImageOpacity / 100,
@@ -717,13 +703,18 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="'JetBrains Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace">JetBrains Mono</SelectItem>
-                        <SelectItem value="'Fira Code', Menlo, Monaco, 'Courier New', monospace">Fira Code</SelectItem>
-                        <SelectItem value="'Source Code Pro', Menlo, Monaco, 'Courier New', monospace">Source Code Pro</SelectItem>
-                        <SelectItem value="Menlo, Monaco, 'Courier New', monospace">Menlo</SelectItem>
-                        <SelectItem value="Consolas, monospace">Consolas</SelectItem>
-                        <SelectItem value="Monaco, monospace">Monaco</SelectItem>
-                        <SelectItem value="'Courier New', monospace">Courier New</SelectItem>
+                        <SelectItem value={MACOS_MULTILINGUAL_TERMINAL_FONT}>
+                          {t('settings.terminal.fontSystemMultilingual')}
+                        </SelectItem>
+                        <SelectItem value={DEFAULT_EDITOR_FONT}>
+                          {t('settings.terminal.fontMenlo')}
+                        </SelectItem>
+                        <SelectItem value={MONACO_TERMINAL_FONT}>
+                          {t('settings.terminal.fontMonaco')}
+                        </SelectItem>
+                        <SelectItem value={COURIER_NEW_TERMINAL_FONT}>
+                          {t('settings.terminal.fontCourierNew')}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -822,17 +813,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             <FormSection title={t('settings.connection.title')} footer={t('settings.connection.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="settings-connection-defaultProtocol">{t('settings.connection.defaultProtocol')}</Label>
-                    <Select value={settings.defaultProtocol} onValueChange={(value) => updateSetting('defaultProtocol', value)}>
-                      <SelectTrigger id="settings-connection-defaultProtocol">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="SSH">SSH</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label id="settings-connection-connectionTimeout-label">{t('settings.connection.connectionTimeout', { timeout: settings.connectionTimeout })}</Label>
                     <Slider aria-labelledby="settings-connection-connectionTimeout-label"
                       value={[settings.connectionTimeout]}
@@ -883,22 +863,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     checked={settings.hostKeyVerification}
                     onCheckedChange={(checked) => updateSetting('hostKeyVerification', checked)}
                   />
-                </div>
-
-
-
-                <div className="space-y-2">
-                  <Label id="settings-security-autoLockTimeout-label">{t('settings.security.autoLockTimeout', { timeout: settings.autoLockTimeout })}</Label>
-                  <Slider aria-labelledby="settings-security-autoLockTimeout-label"
-                    value={[settings.autoLockTimeout]}
-                    onValueChange={([value]) => updateSetting('autoLockTimeout', value)}
-                    min={5}
-                    max={120}
-                    step={5}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {t('settings.security.autoLockTimeoutDesc')}
-                  </p>
                 </div>
               </FormSection>
           </TabsContent>
@@ -976,28 +940,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <Separator />
 
-                <div className="space-y-4">
-                  <Label>{t('settings.interface.panelVisibility')}</Label>
-                  
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="settings-interface-connectionManager">{t('settings.interface.connectionManager')}</Label>
-                    <Switch id="settings-interface-connectionManager"
-                      checked={settings.showConnectionManager}
-                      onCheckedChange={(checked) => updateSetting('showConnectionManager', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="settings-interface-systemMonitor">{t('settings.interface.systemMonitor')}</Label>
-                    <Switch id="settings-interface-systemMonitor"
-                      checked={settings.showSystemMonitor}
-                      onCheckedChange={(checked) => updateSetting('showSystemMonitor', checked)}
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-interface-enableNotifications">{t('settings.interface.enableNotifications')}</Label>
@@ -1017,14 +959,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             <FormSection title={t('settings.keyboard.title')} footer={t('settings.keyboard.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('settings.keyboard.newSession')}</Label>
-                    <Input
-                      value={settings.newSession}
-                      onChange={(e) => updateSetting('newSession', e.target.value)}
-                      placeholder="Ctrl+N"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label>{t('settings.keyboard.closeSession')}</Label>
                     <Input
                       value={settings.closeSession}
@@ -1032,15 +966,12 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       placeholder={DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.keyboard.nextTab')}</Label>
                     <Input
                       value={settings.nextTab}
                       onChange={(e) => updateSetting('nextTab', e.target.value)}
-                      placeholder="Ctrl+Tab"
+                      placeholder={DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1048,7 +979,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     <Input
                       value={settings.previousTab}
                       onChange={(e) => updateSetting('previousTab', e.target.value)}
-                      placeholder="Ctrl+Shift+Tab"
+                      placeholder={DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab}
                     />
                   </div>
                 </div>
@@ -1063,35 +994,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
           <TabsContent value="advanced" className={tabContentClassName}>
             <FormSection title={t('settings.advanced.title')} footer={t('settings.advanced.desc')}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-advanced-logLevel">{t('settings.advanced.logLevel')}</Label>
-                    <Select value={settings.logLevel} onValueChange={(value) => updateSetting('logLevel', value)}>
-                      <SelectTrigger id="settings-advanced-logLevel">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="error">{t('settings.logLevel.error')}</SelectItem>
-                        <SelectItem value="warn">{t('settings.logLevel.warn')}</SelectItem>
-                        <SelectItem value="info">{t('settings.logLevel.info')}</SelectItem>
-                        <SelectItem value="debug">{t('settings.logLevel.debug')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label id="settings-advanced-maxLogSize-label">{t('settings.advanced.maxLogSize', { size: settings.maxLogSize })}</Label>
-                    <Slider aria-labelledby="settings-advanced-maxLogSize-label"
-                      value={[settings.maxLogSize]}
-                      onValueChange={([value]) => updateSetting('maxLogSize', value)}
-                      min={10}
-                      max={500}
-                      step={10}
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-advanced-checkUpdates">{t('settings.advanced.checkUpdates')}</Label>
@@ -1103,11 +1005,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        onCheckForUpdates?.();
-                        // Close the modal so the update dialog / toast is not obscured.
-                        handleCancel();
-                      }}
+                      onClick={handleCheckForUpdates}
                       className="gap-1.5"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />

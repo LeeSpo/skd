@@ -82,6 +82,7 @@ mod key_loading_tests {
                 passphrase: None,
             },
             host_key_verification: false,
+            keepalive_interval_secs: 60,
         };
 
         let mut client = SshClient::new();
@@ -267,6 +268,7 @@ mod keyboard_interactive_tests {
             username: "testuser".to_string(),
             auth_method: AuthMethod::KeyboardInteractive,
             host_key_verification: false,
+            keepalive_interval_secs: 60,
         };
         let mut client = SshClient::new();
         client
@@ -346,6 +348,7 @@ mod rsa_host_key_compatibility_tests {
                 passphrase: None,
             },
             host_key_verification: false,
+            keepalive_interval_secs: 60,
         };
         let mut client = SshClient::new();
         client

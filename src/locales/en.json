@@ -278,15 +278,11 @@
       "fontFamily": "Font Family",
       "fontSystemMultilingual": "System (Multilingual)",
       "fontMenlo": "Menlo (Latin only)",
-      "fontJetBrainsMono": "JetBrains Mono (Latin only)",
-      "fontFiraCode": "Fira Code (Latin only)",
-      "fontSourceCodePro": "Source Code Pro (Latin only)",
-      "fontConsolas": "Consolas (Latin only)",
       "fontMonaco": "Monaco (Latin only)",
       "fontCourierNew": "Courier New (Latin only)",
       "latinFontCjkWarning": "Latin-only fonts may show boxes (□) for Japanese, Chinese, Korean, and other non-Latin scripts unless WebGL is off and a multilingual font is selected.",
       "useWebglRenderer": "WebGL Renderer",
-      "useWebglRendererDesc": "Faster rendering, but non-Latin characters may display as boxes. Keep off for Japanese, Chinese, and Korean text.",
+      "useWebglRendererDesc": "Faster rendering, but non-Latin characters may display as boxes. Keep off for Japanese, Chinese, and Korean text. A background image always uses the canvas renderer.",
       "fontSize": "Font Size: {{size}}px",
       "lineHeight": "Line Height: {{height}}",
       "letterSpacing": "Letter Spacing: {{spacing}}px",
@@ -296,7 +292,7 @@
       "cursorBlink": "Cursor Blink",
       "cursorBlinkDesc": "Enable cursor blinking animation",
       "allowTransparency": "Allow Transparency",
-      "allowTransparencyDesc": "Enable transparent terminal background",
+      "allowTransparencyDesc": "Let the terminal background show the window behind it. Lower the opacity to see through it.",
       "transparencyBlocked": "Turn off Reduce Transparency or Increase Contrast in System Settings to use a translucent terminal.",
       "opacity": "Opacity: {{opacity}}%",
       "backgroundImage": "Background Image",
@@ -307,7 +303,8 @@
       "imageOpacity": "Image Opacity: {{opacity}}%",
       "imageBlur": "Image Blur: {{blur}}px",
       "imagePosition": "Image Position",
-      "imageSizeWarning": "Image must be less than 5MB"
+      "imageSizeWarning": "Image must be less than 1.5MB",
+      "imageSaveFailed": "Could not save the background image. Other settings were saved. Choose a smaller image and save again."
     },
     "editor": {
       "title": "Code Editor",
@@ -330,7 +327,6 @@
     "connection": {
       "title": "Connection Settings",
       "desc": "Configure default connection behavior and timeouts.",
-      "defaultProtocol": "Default Protocol",
       "connectionTimeout": "Connection Timeout: {{timeout}}s",
       "keepAliveInterval": "Keep Alive Interval: {{interval}}s",
       "autoReconnect": "Auto Reconnect",
@@ -340,9 +336,7 @@
       "title": "Security Settings",
       "desc": "Configure security options and authentication settings.",
       "hostKeyVerification": "Host Key Verification",
-      "hostKeyVerificationDesc": "Verify SSH host keys for enhanced security",
-      "autoLockTimeout": "Auto Lock Timeout: {{timeout}} minutes",
-      "autoLockTimeoutDesc": "Automatically lock the application after this period of inactivity"
+      "hostKeyVerificationDesc": "Verify SSH host keys for enhanced security"
     },
     "interface": {
       "title": "Interface Settings",
@@ -350,27 +344,20 @@
       "appTheme": "Application Theme",
       "colorPalette": "Workspace Color Palette",
       "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Your terminal theme is configured separately.",
-      "panelVisibility": "Panel Visibility",
-      "connectionManager": "Connection Manager",
-      "systemMonitor": "System Monitor",
-      "statusBar": "Status Bar",
       "enableNotifications": "Enable Notifications",
-      "enableNotificationsDesc": "Show system notifications for important events"
+      "enableNotificationsDesc": "Show in-app toasts for successes, failures, and other events. Turning this off hides those toasts."
     },
     "keyboard": {
       "title": "Keyboard Shortcuts",
       "desc": "Customize keyboard shortcuts for common actions.",
-      "newSession": "New Session",
-      "closeSession": "Close Session",
+      "closeSession": "Close Tab",
       "nextTab": "Next Tab",
       "previousTab": "Previous Tab",
-      "note": "Changes to keyboard shortcuts take effect after saving."
+      "note": "Shortcut changes apply after you save, including while a terminal is focused. They do not change the shortcuts shown in the macOS menu. Close in the menu stays ⌘W. Tab switching uses ⌃ so it does not take over ⌘Tab."
     },
     "advanced": {
       "title": "Advanced Settings",
-      "desc": "Configure advanced options and diagnostic settings.",
-      "logLevel": "Log Level",
-      "maxLogSize": "Max Log Size: {{size}}MB",
+      "desc": "Check for new releases.",
       "checkUpdates": "Check for Updates",
       "checkUpdatesDesc": "Automatically check GitHub for new releases",
       "checkNow": "Check Now"
@@ -388,7 +375,7 @@
     "palette": {
       "system": {
         "name": "System",
-        "description": "Follows macOS appearance and your accent color"
+        "description": "Uses your macOS accent color. Light and dark follow the application theme above."
       },
       "graphite": {
         "name": "Graphite",
@@ -404,7 +391,7 @@
       },
       "cupertino": {
         "name": "Cupertino",
-        "description": "macOS-inspired neutrals with adaptive blue accents"
+        "description": "macOS-inspired neutrals with a fixed blue accent"
       }
     },
     "cursor": {
@@ -417,12 +404,6 @@
       "contain": "Contain (fit inside)",
       "center": "Center (original size)",
       "tile": "Tile (repeat)"
-    },
-    "logLevel": {
-      "error": "Error",
-      "warn": "Warning",
-      "info": "Info",
-      "debug": "Debug"
     }
   },
   "welcome": {
@@ -1112,6 +1093,7 @@
     "failedToCopyClipboard": "Failed to copy to clipboard",
     "failedToOpenUrl": "Failed to open link",
     "reconnectingTerminal": "Reconnecting terminal…",
+    "autoReconnectOff": "Connection lost. Auto-reconnect is off. Use right-click → Reconnect.",
     "outputSaved": "Terminal output saved",
     "failedToSaveOutput": "Failed to save output"
   },

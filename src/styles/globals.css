@@ -1195,6 +1195,10 @@ html[data-window-kind="main"] body {
   box-shadow: var(--shadow-dialog), 0 24px 80px rgba(0, 0, 0, 0.18);
 }
 
+.preferences-dialog {
+  background: var(--popover);
+}
+
 .preferences-dialog [data-slot="dialog-header"],
 .connection-dialog [data-slot="dialog-header"] {
   background: var(--panel-header-bg);
@@ -1322,8 +1326,8 @@ html[data-window-kind="main"] body {
   background: var(--workspace-bg);
 }
 
-[data-native-material="true"] .preferences-navigation {
-  background: var(--material-sidebar);
+.preferences-navigation {
+  background: var(--sidebar);
 }
 
 .inspector-panel [data-slot="card"] {

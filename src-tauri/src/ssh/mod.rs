@@ -62,6 +62,13 @@ pub struct SshConfig {
     pub username: String,
     pub auth_method: AuthMethod,
     pub host_key_verification: bool,
+    /// Seconds between SSH keepalive packets. `0` disables them.
+    #[serde(default = "default_keepalive_interval_secs")]
+    pub keepalive_interval_secs: u64,
+}
+
+fn default_keepalive_interval_secs() -> u64 {
+    crate::connection_diagnostics::DEFAULT_KEEPALIVE_INTERVAL_SECS
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,10 +288,10 @@ pub async fn establish_authenticated_session(
             key: std::borrow::Cow::Borrowed(PREFERRED_HOST_KEY_ALGOS),
             ..russh::Preferred::DEFAULT
         },
-        // Send a keepalive every 60 s. After 3 missed replies russh closes
-        // the connection, preventing the server from silently dropping idle
-        // sessions after hours of inactivity.
-        keepalive_interval: Some(Duration::from_secs(60)),
+        // After 3 missed replies russh closes the connection, so an idle
+        // session does not sit open until the server drops it.
+        keepalive_interval: (config.keepalive_interval_secs > 0)
+            .then(|| Duration::from_secs(config.keepalive_interval_secs)),
         keepalive_max: 3,
         ..client::Config::default()
     };

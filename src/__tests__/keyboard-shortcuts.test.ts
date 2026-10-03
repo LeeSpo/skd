@@ -92,11 +92,12 @@ describe('createSplitViewShortcuts', () => {
     );
   });
 
-  // Requirement 5.3: Ctrl+Shift+W closes active tab without stealing bash Ctrl+W
-  it('Ctrl+Shift+W triggers closeTab by default', () => {
+  it('⌘+W triggers closeTab by default', () => {
     const actions = createMockActions();
     const shortcuts = createSplitViewShortcuts(actions);
-    const shortcut = findShortcut(shortcuts, 'w', { ctrlKey: true, shiftKey: true });
+    const shortcut = shortcuts.find(
+      (item) => item.key === 'w' && item.metaKey === true && item.ctrlKey === false && item.shiftKey === false,
+    );
 
     expect(shortcut).toBeDefined();
     shortcut!.handler();
@@ -162,11 +163,11 @@ describe('createSplitViewShortcuts', () => {
     expect(actions.prevTab).not.toHaveBeenCalled();
   });
 
-  it('all shortcuts have ctrlKey set to true', () => {
+  it('binds every shortcut to Command or Control', () => {
     const actions = createMockActions();
     const shortcuts = createSplitViewShortcuts(actions);
     for (const shortcut of shortcuts) {
-      expect(shortcut.ctrlKey).toBe(true);
+      expect(shortcut.ctrlKey === true || shortcut.metaKey === true).toBe(true);
     }
   });
 
@@ -241,6 +242,29 @@ describe('useKeyboardShortcuts', () => {
     expect(wasNotPrevented).toBe(false);
     expect(actions.toggleLeftSidebar).toHaveBeenCalledOnce();
   });
+
+  it('closes the tab from a focused terminal', () => {
+    const actions = createMockActions();
+    const shortcuts = createSplitViewShortcuts(actions);
+    render(React.createElement(ShortcutHarness, { shortcuts }));
+
+    const xterm = document.createElement('div');
+    xterm.className = 'xterm';
+    const textarea = document.createElement('textarea');
+    xterm.appendChild(textarea);
+    document.body.appendChild(xterm);
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'w',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    const wasNotPrevented = textarea.dispatchEvent(event);
+
+    expect(wasNotPrevented).toBe(false);
+    expect(actions.closeTab).toHaveBeenCalledOnce();
+  });
 });
 
 describe('keyboard shortcut settings', () => {
@@ -256,6 +280,15 @@ describe('keyboard shortcut settings', () => {
       altKey: false,
       metaKey: false,
     });
+    expect(parseKeyboardShortcut('⌘+W')).toEqual({
+      key: 'w',
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: true,
+    });
+    expect(parseKeyboardShortcut('⌃+⇧+Tab')?.shiftKey).toBe(true);
+    expect(parseKeyboardShortcut('⌃+⇧+Tab')?.ctrlKey).toBe(true);
   });
 
   it('loads saved keyboard shortcuts from sshClientSettings', () => {

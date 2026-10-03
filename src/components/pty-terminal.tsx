@@ -12,6 +12,7 @@ import {
   loadAppearanceSettings,
   getThemeAwareTerminalOptions,
   getThemeAwareTerminalTheme,
+  terminalBackgroundSize,
   terminalContainerBackground,
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
@@ -24,6 +25,7 @@ import { useTerminalCallbacks } from '../lib/terminal-callbacks-context';
 import { useTerminalInput } from '../lib/terminal-input-context';
 import { useConnectionAttempts } from '../lib/connection-attempt-context';
 import { isConnectStage } from '../lib/connection-diagnostics';
+import { isAutoReconnectEnabled, shouldReconnectAfterDrop } from '../lib/connection-settings';
 import {
   clearTerminalCwd,
   parseOsc1337Cwd,
@@ -721,6 +723,15 @@ export function PtyTerminal({
           // Auto-reconnect with exponential backoff so the user doesn't have
           // to manually click Reconnect every time the network hiccups.
           if (hasEverConnected) {
+            if (!shouldReconnectAfterDrop(isAutoReconnectEnabled())) {
+              term.write(`\r\n\x1b[31m[${t('ptyTerminal.autoReconnectOff')}]\x1b[0m\r\n`);
+              if (connectionStatusRef.current !== 'disconnected') {
+                connectionStatusRef.current = 'disconnected';
+                onConnectionStatusChange?.(connectionId, 'disconnected');
+              }
+              return;
+            }
+
             const dropAttempt = autoReconnectAfterDropRef.current;
             if (dropAttempt >= MAX_AUTO_RECONNECT_AFTER_DROP) {
               // Exhausted auto-reconnect attempts — ask user to act manually.
@@ -1176,7 +1187,7 @@ export function PtyTerminal({
           className="absolute inset-0 pointer-events-none"
           style={{
             backgroundImage: `url(${appearance.backgroundImage})`,
-            backgroundSize: appearance.backgroundImagePosition === 'tile' ? 'auto' : appearance.backgroundImagePosition,
+            backgroundSize: terminalBackgroundSize(appearance.backgroundImagePosition),
             backgroundPosition: 'center',
             backgroundRepeat: appearance.backgroundImagePosition === 'tile' ? 'repeat' : 'no-repeat',
             opacity: appearance.backgroundImageOpacity / 100,

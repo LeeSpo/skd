@@ -5,6 +5,12 @@
  * Consumed by `CodeEditor` and surfaced in Settings → Editor tab.
  */
 
+import {
+  COURIER_NEW_TERMINAL_FONT,
+  MACOS_MULTILINGUAL_TERMINAL_FONT,
+  MONACO_TERMINAL_FONT,
+} from './terminal-config';
+
 // ---------- Types ----------
 
 export interface EditorConfig {
@@ -24,26 +30,41 @@ export interface EditorConfig {
   highlightActiveLine: boolean;
   /** Show fold gutter (collapse/expand code blocks) */
   foldGutter: boolean;
-  /** Auto-close matching brackets */
+  /** Highlight the bracket that matches the one next to the cursor */
   bracketMatching: boolean;
-  /** Match and highlight the bracket next to the cursor */
-  matchBrackets: boolean;
 }
 
 // ---------- Defaults ----------
 
+export const DEFAULT_EDITOR_FONT = "Menlo, Monaco, monospace";
+
+const SUPPORTED_EDITOR_FONTS = new Set<string>([
+  MACOS_MULTILINGUAL_TERMINAL_FONT,
+  DEFAULT_EDITOR_FONT,
+  MONACO_TERMINAL_FONT,
+  COURIER_NEW_TERMINAL_FONT,
+]);
+
+export function normalizeEditorFont(fontFamily: string): string {
+  return SUPPORTED_EDITOR_FONTS.has(fontFamily) ? fontFamily : DEFAULT_EDITOR_FONT;
+}
+
 export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   theme: "oneDark",
   fontSize: 14,
-  fontFamily: "'JetBrains Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace",
+  fontFamily: DEFAULT_EDITOR_FONT,
   lineNumbers: true,
   wordWrap: true,
   tabSize: 2,
   highlightActiveLine: true,
   foldGutter: true,
   bracketMatching: true,
-  matchBrackets: true,
 };
+
+/** The settings switch is the only control. A stored `matchBrackets` flag must not keep it on. */
+export function isBracketMatchingEnabled(config: Pick<EditorConfig, 'bracketMatching'>): boolean {
+  return config.bracketMatching;
+}
 
 // ---------- Storage ----------
 
@@ -54,7 +75,8 @@ export function loadEditorConfig(): EditorConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<EditorConfig>;
-      return { ...DEFAULT_EDITOR_CONFIG, ...parsed };
+      const merged = { ...DEFAULT_EDITOR_CONFIG, ...parsed };
+      return { ...merged, fontFamily: normalizeEditorFont(merged.fontFamily) };
     }
   } catch {
     // Fall through to defaults
