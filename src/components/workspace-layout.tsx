@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PanelLeftClose, Settings } from 'lucide-react';
+import { PanelLeftClose } from 'lucide-react';
 import { useLayout } from '@/lib/layout-context';
 import { TitlebarSlotProvider } from '@/lib/titlebar-slot-context';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,10 @@ interface WorkspaceLayoutProps {
   toolbar: ReactNode;
   children: ReactNode;
   inspector?: ReactNode;
-  onOpenSettings: () => void;
 }
 
 /** Window chrome owns geometry; sessions stay in their existing stable layer. */
-export function WorkspaceLayout({ sidebar, toolbar, children, inspector, onOpenSettings }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ sidebar, toolbar, children, inspector }: WorkspaceLayoutProps) {
   const { t } = useTranslation();
   const { layout, toggleLeftSidebar, setLeftSidebarSize, setRightSidebarSize } = useLayout();
   const shellRef = useRef<HTMLDivElement>(null);
@@ -55,17 +54,10 @@ export function WorkspaceLayout({ sidebar, toolbar, children, inspector, onOpenS
                 </TooltipProvider>
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">{sidebar}</div>
-              <div className="sidebar-footer flex h-10 shrink-0 items-center px-3">
-                <Button variant="ghost" size="sm" onClick={onOpenSettings} className="h-7 w-full justify-start gap-2 px-2 text-muted-foreground" aria-label={t('common.options')}>
-                  <Settings className="size-3.5" />
-                  <span>{t('welcome.preferences')}</span>
-                  <span className="ml-auto text-[11px] opacity-60" aria-hidden="true">⌘,</span>
-                </Button>
-              </div>
             </aside>
           </ResizablePanel>
         )}
-        {layout.leftSidebarVisible && <ResizableHandle key="sidebar-divider" dividerTone="sidebar" />}
+        {layout.leftSidebarVisible && <ResizableHandle key="sidebar-divider" />}
         <ResizablePanel key="main-content" id="main-content" order={2} defaultSize={workspaceShare} minSize={45}>
           <div className="workspace-column flex h-full min-h-0 flex-col">
             {toolbar}

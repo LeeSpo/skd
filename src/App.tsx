@@ -1515,7 +1515,6 @@ function AppContent() {
         <UpdateChecker checkSignal={updateCheckSignal} />
       </Suspense>
       <WorkspaceLayout
-        onOpenSettings={handleOpenSettings}
         sidebar={(
           <ConnectionManager
             onConnectionSelect={handleConnectionSelect}

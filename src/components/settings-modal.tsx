@@ -318,16 +318,16 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           orientation="vertical"
           className="flex flex-row gap-0 flex-1 min-h-0 overflow-hidden"
         >
-          <div className="preferences-navigation w-36 sm:w-44 shrink-0 overflow-y-auto border-r border-panel-border bg-sidebar p-3">
+          <div className="preferences-navigation w-48 shrink-0 overflow-y-auto border-r border-panel-border bg-sidebar px-2.5 py-3 sm:w-56">
             <TabsList
               aria-label={t('settings.title')}
-              className="flex w-full flex-col items-stretch justify-start rounded-none bg-transparent h-auto p-0 gap-1"
+              className="flex h-auto w-full flex-col items-stretch justify-start gap-1.5 rounded-none bg-transparent p-0"
             >
               {tabItems.map(({ value, icon: Icon, labelKey }) => (
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none px-2 py-1 text-[13px] transition-colors motion-reduce:transition-none"
+                  className="h-9 w-full flex-none justify-start gap-2.5 rounded-md border-0 px-3 text-[13px] text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none motion-reduce:transition-none"
                 >
                   <Icon className="size-4 shrink-0" />
                   <span>{t(labelKey)}</span>

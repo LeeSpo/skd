@@ -11,9 +11,10 @@ describe('ConnectionManager tree layout', () => {
   });
 
   it('distinguishes persistent sidebar selection from pointer hover', () => {
-    expect(treeRowState({ selected: true, variant: 'sidebar' })).toContain('bg-surface-selected');
+    expect(treeRowState({ selected: true, variant: 'sidebar' })).toContain('sidebar-row-selected');
     expect(treeRowState({ selected: true, variant: 'sidebar' })).not.toContain('hover:bg-surface-hover');
-    expect(treeRowState({ variant: 'sidebar' })).toContain('hover:bg-surface-hover');
+    expect(treeRowState({ variant: 'sidebar' })).toContain('sidebar-row');
+    expect(treeRowState({ variant: 'sidebar' })).not.toContain('sidebar-row-selected');
     expect(treeRowState({ variant: 'sidebar' })).toContain('rounded-md');
   });
 

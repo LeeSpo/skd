@@ -201,8 +201,6 @@
   --surface-hover: #e8e8e8;
   --surface-content: #ffffff;
   --workspace-bg: #ffffff;
-  --sidebar-selection: var(--primary);
-  --sidebar-selection-foreground: #ffffff;
   --statusbar-bg: #f0f0f0;
   --drop-zone: color-mix(in srgb, var(--primary) 18%, transparent);
   --overlay: rgba(0, 0, 0, 0.18);
@@ -599,8 +597,6 @@
   --surface-hover: #303030;
   --surface-content: #1e1e1e;
   --workspace-bg: #1e1e1e;
-  --sidebar-selection: var(--primary);
-  --sidebar-selection-foreground: #ffffff;
   --statusbar-bg: #282828;
   --drop-zone: color-mix(in srgb, var(--primary) 22%, transparent);
   --overlay: rgba(0, 0, 0, 0.4);
@@ -682,6 +678,12 @@ body {
 }
 
 /* Unified window toolbar: keep pointer and keyboard states equally legible. */
+.window-chrome {
+  --chrome-hover: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --chrome-pressed: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --chrome-active: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
 .window-chrome [data-slot="button"] {
   color: var(--muted-foreground);
   transition: color 120ms ease, background-color 120ms ease;
@@ -689,19 +691,26 @@ body {
 
 .window-chrome [data-slot="button"]:hover:not(:disabled) {
   color: color-mix(in srgb, var(--foreground) 74%, transparent);
-  background-color: color-mix(in srgb, var(--foreground) 4%, transparent);
+  background-color: var(--chrome-hover);
 }
 
 .window-chrome [data-slot="button"][aria-pressed="true"],
 .window-chrome [data-slot="button"][data-state="open"] {
   color: var(--foreground);
-  background-color: var(--surface-hover);
+  background-color: var(--chrome-pressed);
+}
+
+/* This control is only shown while the sidebar is open, so the pressed fill sat
+   there at rest and the lighter hover replaced it. */
+.sidebar-titlebar [data-slot="button"][aria-pressed="true"]:not(:hover):not(:active) {
+  background-color: transparent;
+  color: var(--muted-foreground);
 }
 
 .window-chrome [data-slot="button"]:active:not(:disabled) {
   color: var(--foreground);
   /* Pressed controls darken; --surface-selected may be an accent fill. */
-  background-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+  background-color: var(--chrome-active);
 }
 
 .window-chrome [data-slot="button"]:focus-visible {
@@ -1010,12 +1019,11 @@ html {
   background: var(--input-background);
 }
 
-/* Window material is AppKit behind the webview. Only the navigation column
-   exposes it; terminal, tools and floating surfaces remain readable solids. */
+/* Window material is AppKit behind the webview. The sidebar and the titlebar
+   share one tint; terminal, tools and floating surfaces remain readable solids. */
 :root {
   --sidebar-tint: color-mix(in srgb, var(--sidebar) 58%, transparent);
   --sidebar-opaque: var(--sidebar);
-  --sidebar-selection: color-mix(in srgb, var(--primary) 16%, var(--sidebar));
   --chrome-hairline: color-mix(in srgb, var(--foreground) 10%, transparent);
   --control-highlight: rgba(255, 255, 255, 0.45);
   --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
@@ -1026,12 +1034,6 @@ html {
   --grouped-bg: rgb(255 255 255 / 0.05);
   --control-highlight: rgba(255, 255, 255, 0.06);
   --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
-}
-
-/* Later than the shared :root mix so System source lists use the accent fill. */
-:root[data-color-palette="system"] {
-  --sidebar-selection: var(--primary);
-  --sidebar-selection-foreground: #ffffff;
 }
 
 html[data-window-kind="main"],
@@ -1050,6 +1052,16 @@ html[data-window-kind="main"] body {
 .workspace-sidebar {
   background: var(--sidebar-opaque);
   color: var(--sidebar-foreground);
+  /* Translucent washes sit on the sidebar material. Solid accent and surface
+     fills read as blue or gray slabs. */
+  --sidebar-row-hover: color-mix(in srgb, var(--foreground) 6%, transparent);
+  --sidebar-selection: color-mix(in srgb, var(--foreground) 11%, transparent);
+  --sidebar-selection-foreground: var(--sidebar-foreground);
+}
+
+.dark .workspace-sidebar {
+  --sidebar-row-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --sidebar-selection: color-mix(in srgb, var(--foreground) 13%, transparent);
 }
 
 [data-native-material="true"] .workspace-sidebar {
@@ -1058,6 +1070,7 @@ html[data-window-kind="main"] body {
 
 .workspace-sidebar .panel-header {
   background: transparent;
+  border-bottom: 0;
 }
 
 .workspace-sidebar .sidebar-search {
@@ -1071,16 +1084,30 @@ html[data-window-kind="main"] body {
   background: var(--input-background);
 }
 
-.workspace-sidebar .bg-surface-selected {
+.workspace-sidebar .sidebar-row:hover {
+  background-color: var(--sidebar-row-hover);
+}
+
+.workspace-sidebar .sidebar-row-selected,
+.workspace-sidebar .sidebar-row-selected:hover {
   background: var(--sidebar-selection);
   color: var(--sidebar-selection-foreground, var(--surface-selected-foreground));
+}
+
+.workspace-sidebar .connection-browser [data-slot="button"]:hover:not(:disabled),
+.workspace-sidebar .connection-browser [data-slot="button"][data-state="open"] {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-foreground);
 }
 
 .workspace-content-surface {
   background: var(--workspace-bg);
 }
 
-[data-native-material="true"] .workspace-toolbar,
+[data-native-material="true"] .workspace-toolbar {
+  background: var(--sidebar-tint);
+}
+
 [data-native-material="true"] .inspector-header {
   background: var(--material-titlebar);
 }
@@ -1106,22 +1133,18 @@ html[data-window-kind="main"] body {
   border-color: var(--chrome-hairline);
 }
 
-.sidebar-footer {
-  box-shadow: 0 -1px 0 var(--chrome-hairline);
-}
-
 .workspace-toolbar {
   background: var(--panel-header-bg);
   border-bottom: 1px solid var(--chrome-hairline);
 }
 
-[data-window-active="false"] .window-chrome,
-[data-window-active="false"] .sidebar-footer {
+[data-window-active="false"] .window-chrome {
   color: var(--muted-foreground);
 }
 
-[data-window-active="false"] .workspace-sidebar .bg-surface-selected {
-  background: color-mix(in srgb, var(--foreground) 8%, var(--sidebar));
+[data-window-active="false"] .workspace-sidebar .sidebar-row-selected,
+[data-window-active="false"] .workspace-sidebar .sidebar-row-selected:hover {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
   color: var(--sidebar-foreground);
 }
 
@@ -1325,7 +1348,8 @@ html[data-window-kind="main"] body {
 }
 
 @media (prefers-contrast: more) {
-  .workspace-sidebar {
+  .workspace-sidebar,
+  .workspace-toolbar {
     background: var(--sidebar-opaque) !important;
   }
   :root {

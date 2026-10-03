@@ -31,7 +31,6 @@ function ResizablePanel({
 const dividerToneClasses = {
   default: "before:bg-transparent hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
   panel: "before:bg-panel-border hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
-  sidebar: "before:bg-sidebar-border hover:before:bg-primary active:before:bg-primary data-[resize-handle-state=drag]:before:bg-primary focus-visible:before:bg-primary",
 } as const;
 
 function ResizableHandle({
