@@ -64,6 +64,7 @@
     "noCredentialsDesc": "No saved credentials found. Please connect manually.",
     "noEditorHandler": "Cannot open {{name}}: no editor handler available",
     "fileBrowser": "File Browser",
+    "bottomPanel": "Workspace tools",
     "localFiles": "Local Files",
     "composePane": "Compose Pane",
     "monitor": "Monitor",
@@ -489,6 +490,7 @@
     "moreActions": "More Actions"
   },
   "composePane": {
+    "editorLabel": "Commands to send to the terminal",
     "send": "Send",
     "clear": "Clear",
     "clearAfterSend": "Clear after send",
@@ -695,6 +697,8 @@
     },
     "toolbar": {
       "back": "Back",
+      "more": "More file actions",
+      "columns": "Columns",
       "forward": "Forward",
       "toggleDirectoryTree": "Toggle directory tree",
       "parentDir": "Parent directory",

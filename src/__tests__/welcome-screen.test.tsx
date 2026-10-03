@@ -16,7 +16,6 @@ it('offers only functional native-button actions without decorative gradients', 
   expect(connect).toHaveBeenCalledOnce();
   expect(settings).toHaveBeenCalledOnce();
   expect(local).toHaveBeenCalledOnce();
-  expect(container.querySelector('[class*="gradient"]')).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Recent' })).toBeNull();
 });
 

@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from 'react-i18next';
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Collapsible,
@@ -105,11 +104,12 @@ export function TransferQueue({
     <Collapsible
       open={expanded}
       onOpenChange={onToggleExpanded}
-      className="border-t border-panel-border bg-panel-toolbar"
+      className="transfer-queue flex min-h-7 max-h-[40%] flex-col overflow-hidden bg-background"
+      style={{ flexBasis: expanded ? '40%' : undefined, flexShrink: expanded ? 1 : 0 }}
     >
-      <div className="flex items-center gap-2 px-3">
+      <div className="flex min-h-7 shrink-0 items-center gap-2 px-3">
       <CollapsibleTrigger asChild>
-        <button type="button" className="flex min-w-0 flex-1 items-center py-2 text-xs rounded-md hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors motion-reduce:transition-none">
+        <button type="button" className="flex min-h-7 min-w-0 flex-1 items-center text-xs rounded-md hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors motion-reduce:transition-none">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
             {expanded ? (
               <ChevronDown className="h-3 w-3" />
@@ -118,12 +118,9 @@ export function TransferQueue({
             )}
             {t('transferQueue.transfers')}
             {activeCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="text-xs px-1.5 py-0 min-h-5"
-              >
+              <span className="text-muted-foreground">
                 {t('transferQueue.active', { count: activeCount })}
-              </Badge>
+              </span>
             )}
             {completedCount > 0 && (
               <span className="text-success">{t('transferQueue.done', { count: completedCount })}</span>
@@ -149,18 +146,18 @@ export function TransferQueue({
             </Button>
           )}
       </div>
-      <CollapsibleContent>
-        <ScrollArea className="h-40">
+      <CollapsibleContent className="min-h-0 flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
           {transfers.length === 0 ? (
             <div className="flex items-center justify-center h-12 text-xs text-muted-foreground">
               {t('transferQueue.noTransfers')}
             </div>
           ) : (
-            <div className="divide-y divide-panel-border bg-background">
+            <div className="bg-background">
               {transfers.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center gap-2 px-3 py-1 text-xs"
+                  className="transfer-queue-row flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1 text-xs"
                 >
                   {item.direction === "upload" ? (
                     <Upload className="h-3 w-3 text-primary shrink-0" />
@@ -177,7 +174,7 @@ export function TransferQueue({
 
                   {item.status === "transferring" && (
                     <>
-                      <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div role="progressbar" aria-label={item.fileName} aria-valuenow={item.progress} aria-valuemin={0} aria-valuemax={100} className="w-16 h-1 bg-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-[width] duration-300 motion-reduce:transition-none"
                           style={{ width: `${item.progress}%` }}
@@ -245,7 +242,7 @@ export function TransferQueue({
 
                   {item.status === "failed" && (
                     <span
-                      className="text-destructive break-words max-w-[min(40%,20rem)]"
+                      className="text-destructive break-words min-w-0 max-w-full basis-full"
                       title={item.error}
                     >
                       {item.error}

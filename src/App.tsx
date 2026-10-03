@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { WindowToolbar } from './components/window-toolbar';
 import { WorkspaceLayout } from '@/components/workspace-layout';
 import { useWindowAppearance } from '@/lib/use-window-appearance';
+import { useBottomPanelSizing } from '@/lib/use-bottom-panel-sizing';
 import { ConnectionManager } from './components/connection-manager';
 import type { ConnectionConfig } from './components/connection-dialog';
 import { TerminalInputProvider } from './lib/terminal-input-context';
@@ -226,6 +227,7 @@ function AppContent() {
     toggleZenMode,
     setBottomPanelSize,
   } = useLayout();
+  const bottomPanelSizing = useBottomPanelSizing(layout.bottomPanelSize);
 
   // Collect all tabs across all groups for compatibility with existing features
   const allTabs = useMemo(() => {
@@ -1590,7 +1592,7 @@ function AppContent() {
           </Tabs>
         ) : undefined}
       >
-        <div className="workspace-content-surface flex h-full flex-col">
+        <div ref={bottomPanelSizing.ref} className="workspace-content-surface flex h-full flex-col">
           {showWelcomeInMainArea ? (
             <WelcomeScreen
               onNewConnection={handleNewTab}
@@ -1602,7 +1604,7 @@ function AppContent() {
           ) : (
             <ResizablePanelGroup direction="vertical" className="flex-1">
               {/* Terminal Grid Panel */}
-              <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
+              <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 100 - bottomPanelSizing.size : 100} minSize={30}>
                 <TerminalCallbacksProvider value={terminalCallbacks}>
                   <ErrorBoundary label="Terminal">
                     <StableTerminalGrid />
@@ -1617,18 +1619,18 @@ function AppContent() {
                   <ResizablePanel
                     id="bottom-panel"
                     order={2}
-                    defaultSize={layout.bottomPanelSize}
-                    minSize={20}
-                    maxSize={50}
+                    defaultSize={bottomPanelSizing.size}
+                    minSize={bottomPanelSizing.minSize}
+                    maxSize={bottomPanelSizing.maxSize}
                     onResize={(size) => setBottomPanelSize(size)}
                   >
                     <Tabs
                       value={bottomPanelTab}
                       onValueChange={(value) => setBottomPanelTab(value as 'file-browser' | 'compose')}
-                      className="bottom-panel h-full flex flex-col bg-workspace"
+                      className="bottom-panel h-full min-h-0 flex flex-col gap-0 bg-workspace"
                     >
-                      <div className="relative flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-3">
-                        <TabsList aria-label={t('app.fileBrowser')} className="mx-auto h-7">
+                      <div className="bottom-panel-header flex h-10 shrink-0 items-center justify-between gap-3 px-3">
+                        <TabsList aria-label={t('app.bottomPanel')} className="h-7">
                           <TabsTrigger value="file-browser">
                             {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
                           </TabsTrigger>
@@ -1639,7 +1641,6 @@ function AppContent() {
                         <Button
                           variant="ghost"
                           size="menubar"
-                          className="absolute right-2"
                           aria-label={t('menuBar.toggleBottomPanel')}
                           onClick={toggleBottomPanel}
                         >

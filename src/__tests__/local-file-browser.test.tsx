@@ -77,6 +77,10 @@ vi.mock('../components/ui/scroll-area', () => ({
 
 const mockedInvoke = vi.mocked(invoke);
 
+function openMoreMenu() {
+  fireEvent.keyDown(screen.getByRole('button', { name: 'fileBrowser.toolbar.more' }), { key: 'Enter' });
+}
+
 beforeEach(() => {
   localStorage.clear();
   // Existing drag/drop cases exercise the explicitly expanded sidebar.
@@ -130,7 +134,8 @@ describe('IntegratedFileBrowser path editing', () => {
       command === 'list_local_files' && (args as { path: string }).path === '/var/next',
     )).toHaveLength(1);
     expect(document.activeElement).toBe(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Home' }));
     await screen.findByRole('button', { name: 'test' });
   });
 
@@ -140,13 +145,14 @@ describe('IntegratedFileBrowser path editing', () => {
     fireEvent.click(screen.getByRole('group', { name: 'fileBrowser.toolbar.editPath' }));
     const input = screen.getByRole('textbox', { name: 'fileBrowser.toolbar.editPath' });
     fireEvent.change(input, { target: { value: '/blur-target' } });
-    const next = screen.getByRole('button', { name: 'Home' });
+    const next = screen.getByRole('button', { name: 'fileBrowser.toolbar.more' });
     fireEvent.blur(input, { relatedTarget: next });
     next.focus();
     await waitFor(() => expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', { path: '/blur-target' }));
     expect(document.activeElement).toBe(next);
     expect(screen.queryByRole('textbox', { name: 'fileBrowser.toolbar.editPath' })).toBeNull();
-    fireEvent.click(next);
+    openMoreMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Home' }));
     await screen.findByRole('button', { name: 'test' });
   });
 
@@ -216,8 +222,9 @@ describe('IntegratedFileBrowser directory tree preference', () => {
     localStorage.removeItem('skd-file-browser-tree-visible');
     const first = render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
-    const toggle = screen.getByRole('button', { name: 'fileBrowser.toolbar.toggleDirectoryTree' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    openMoreMenu();
+    const toggle = screen.getByRole('menuitemcheckbox', { name: 'fileBrowser.toolbar.toggleDirectoryTree' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(screen.queryByTestId('directory-tree')).toBeNull();
     expect(screen.queryByTestId('resize-handle')).toBeNull();
     fireEvent.click(toggle);
@@ -228,7 +235,8 @@ describe('IntegratedFileBrowser directory tree preference', () => {
     render(<IntegratedFileBrowser mode="local" />);
     await screen.findByText('readme.md');
     expect(screen.getByTestId('directory-tree')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.toolbar.toggleDirectoryTree' }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'fileBrowser.toolbar.toggleDirectoryTree' }));
     expect(screen.queryByTestId('directory-tree')).toBeNull();
     expect(localStorage.getItem('skd-file-browser-tree-visible')).toBe('false');
     expect(screen.getByText('readme.md')).toBeTruthy();
@@ -702,7 +710,7 @@ describe('IntegratedFileBrowser local mode', () => {
     expect(screen.queryByText('Permissions')).toBeNull();
     expect(screen.queryByText('Owner')).toBeNull();
 
-    const scrollArea = screen.getByTestId('scroll-area');
+    const scrollArea = screen.getByRole('grid');
     expect(scrollArea.contains(screen.getByText('readme.md'))).toBe(true);
     expect(document.querySelector('thead')).toBeNull();
     expect(document.querySelector('table')).toBeNull();
@@ -718,10 +726,7 @@ describe('IntegratedFileBrowser local mode', () => {
       });
     });
 
-    expect(
-      screen.getByRole('button', { name: 'fileBrowser.toolbar.followTerminal' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect(screen.getByLabelText('fileBrowser.toolbar.followTerminal')).toBeTruthy();
   });
 
   it('keeps a manually opened folder until the terminal reports a new cwd', async () => {
@@ -777,10 +782,7 @@ describe('IntegratedFileBrowser local mode', () => {
       expect(screen.getByText('inside.md')).toBeTruthy();
       expect(screen.queryByText('fileBrowser.selected')).toBeNull();
     });
-    expect(
-      screen.getByRole('button', { name: 'fileBrowser.toolbar.followTerminal' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect(screen.getByLabelText('fileBrowser.toolbar.followTerminal')).toBeTruthy();
 
     view.rerender(
       <IntegratedFileBrowser mode="local" terminalCwd="/var/next" />,
@@ -826,10 +828,11 @@ describe('IntegratedFileBrowser local mode', () => {
       path: '/tmp/disabled-target',
     });
 
-    const followButton = screen.getByRole('button', {
+    openMoreMenu();
+    const followButton = screen.getByRole('menuitemcheckbox', {
       name: 'fileBrowser.toolbar.followTerminal',
     });
-    expect(followButton.getAttribute('aria-pressed')).toBe('false');
+    expect(followButton.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(followButton);
 
     await waitFor(() => {

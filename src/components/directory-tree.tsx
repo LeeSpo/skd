@@ -367,7 +367,7 @@ export function DirectoryTree({
     <div className="flex h-full w-full flex-col overflow-hidden bg-background">
       <PanelHeader
         density="dense"
-        className={`font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
+        className={`file-browser-columns font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
       >
         {t('directoryTree.directories')}
       </PanelHeader>
@@ -395,7 +395,7 @@ export function DirectoryTree({
                 className={treeRowState({
                   selected: isSelected,
                   focused: isFocused,
-                  className: `group ${isDropTarget ? 'ring-1 ring-primary bg-accent/70' : ''}`,
+                  className: `file-directory-row group h-7 ${isDropTarget ? 'ring-1 ring-primary bg-accent/70' : ''}`,
                 })}
                 style={treeIndent(row.depth, 4, 14)}
                 data-testid={`tree-row-${row.path}`}
@@ -425,7 +425,7 @@ export function DirectoryTree({
 
                 <button
                   type="button"
-                  className={`flex h-6 min-w-0 flex-1 items-center gap-2 pr-2 text-left ${FILE_BROWSER_LIST_TEXT}`}
+                  className={`flex h-7 min-w-0 flex-1 items-center gap-2 pr-2 text-left ${FILE_BROWSER_LIST_TEXT}`}
                   onClick={() => {
                     setFocusPath(row.path);
                     onNavigate(row.path);
@@ -433,8 +433,8 @@ export function DirectoryTree({
                   aria-label={t('directoryTree.navigateTo', { path: row.path })}
                   disabled={disabled}
                 >
-                  <Folder className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate">{row.name}</span>
+                  <Folder className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="truncate" title={row.path}>{row.name}</span>
                   {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </button>
               </div>

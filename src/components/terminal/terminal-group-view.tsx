@@ -266,9 +266,7 @@ export function TerminalGroupView({ groupId, renderTabContents = true }: Termina
       <div
         ref={contentRef}
         data-group-content={groupId}
-        className={`relative min-h-0 flex-1 overflow-hidden ${
-          isActive ? 'ring-inset ring-1 ring-border/50' : ''
-        }`}
+        className="relative min-h-0 flex-1 overflow-hidden"
       >
         {showWelcome ? (
           <WelcomeScreen

@@ -1190,21 +1190,104 @@ html[data-window-kind="main"] body {
   background: var(--surface-raised);
 }
 
-.finder-browser .panel-toolbar {
+.file-browser .panel-toolbar {
   background: var(--panel-toolbar-bg);
   border-color: var(--chrome-hairline);
 }
 
-.finder-file-row {
-  min-height: 22px;
+.file-browser .file-browser-toolbar {
+  height: 40px;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 0;
 }
 
-.finder-file-row:nth-child(even):not([aria-selected="true"]) {
-  background: color-mix(in srgb, var(--foreground) 2.5%, transparent);
+.file-browser-filter {
+  background: var(--panel-toolbar-bg);
 }
 
-.finder-file-row:hover:not([aria-selected="true"]) {
+.file-browser .file-browser-columns {
+  height: 28px;
+  background: var(--background);
+  border: 0;
+  box-shadow: 0 1px 0 var(--chrome-hairline);
+}
+
+.file-browser-row {
+  height: 28px;
+}
+
+.file-browser-row:hover:not([aria-selected="true"]) {
   background: var(--surface-hover);
+}
+
+.file-browser-row[aria-selected="true"] .text-muted-foreground,
+.file-browser-row[aria-selected="true"] svg {
+  color: inherit;
+}
+
+.file-browser-breadcrumbs button:last-of-type {
+  color: var(--foreground);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.file-panel .file-panel-heading {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--background);
+  gap: 8px;
+}
+
+.file-panel[data-panel-active="true"] .file-panel-label {
+  color: var(--primary);
+}
+
+.file-panel[data-panel-active="true"] .file-panel-heading {
+  box-shadow: inset 0 2px 0 var(--primary);
+}
+
+[data-window-active="false"] .file-panel[data-panel-active="true"] .file-panel-heading {
+  box-shadow: inset 0 2px 0 var(--muted-foreground);
+}
+
+[data-window-active="false"] .file-panel[data-panel-active="true"] .file-panel-label {
+  color: var(--muted-foreground);
+}
+
+.file-browser-table th {
+  height: 28px;
+  padding: 0 8px;
+  font-size: var(--file-chrome-font-size);
+  background: var(--background);
+}
+
+.file-browser-table td {
+  padding: 0 8px;
+}
+
+.file-browser .file-browser-status,
+.transfer-queue,
+.compose-actions {
+  border: 0;
+  box-shadow: 0 -1px 0 var(--chrome-hairline);
+}
+
+.file-browser .file-browser-status {
+  height: 28px;
+  background: var(--background);
+}
+
+.file-directory-row:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.bottom-panel-header {
+  background: var(--panel-toolbar-bg);
+  box-shadow: 0 1px 0 var(--chrome-hairline);
+  z-index: 1;
 }
 
 [data-terminal-translucent="true"] .workspace-content-surface {

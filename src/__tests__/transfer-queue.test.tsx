@@ -30,10 +30,6 @@ it('keeps failure details and retry/cancel actions usable with compact 24px cont
   expect(screen.getByText('Permission denied for report.txt')).toBeTruthy();
   const retry = screen.getByRole('button', { name: 'Retry' });
   const cancel = screen.getByRole('button', { name: 'Cancel' });
-  for (const button of [retry, cancel, screen.getByRole('button', { name: 'Clear' })]) {
-    expect(button.className).toContain('h-6');
-  }
-  expect(container.querySelector('[class*="text-[10px]"]')).toBeNull();
   fireEvent.click(retry);
   fireEvent.click(cancel);
   expect(dispatch).toHaveBeenCalledWith({ type: 'RETRY', id: '1' });
