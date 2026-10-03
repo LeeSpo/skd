@@ -94,7 +94,10 @@ export default {
         },
         surface: {
           raised: 'var(--surface-raised)',
-          selected: 'var(--surface-selected)',
+          selected: {
+            DEFAULT: 'var(--surface-selected)',
+            foreground: 'var(--surface-selected-foreground)',
+          },
           hover: 'var(--surface-hover)',
         },
         workspace: 'var(--workspace-bg)',
@@ -111,6 +114,9 @@ export default {
         mono: ['var(--font-mono)'],
       },
       fontSize: {
+        'ui-body': ['var(--text-body)', { lineHeight: '18px' }],
+        'ui-label': ['var(--text-secondary)', { lineHeight: '14px' }],
+        'ui-page': ['var(--text-page-title)', { lineHeight: '28px' }],
         'ui-2xs': ['0.625rem', { lineHeight: '0.875rem' }],
         'ui-xs': ['0.6875rem', { lineHeight: '1rem' }],
         xs: ['0.75rem', { lineHeight: '1rem' }],

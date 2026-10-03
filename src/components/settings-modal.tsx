@@ -98,6 +98,7 @@ interface AppSettings {
 }
 
 const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> = {
+  system: ['#FFFFFF', '#1E1E1E', 'var(--system-accent, #007AFF)'],
   graphite: ['#181818', '#212121', '#8AB4F8'],
   midnight: ['#07101F', '#14223A', '#6B9BFA'],
   nordic: ['#20262F', '#303947', '#88C0D0'],
@@ -326,7 +327,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-foreground data-[state=active]:shadow-none px-3 py-1.5 text-[13px] transition-colors motion-reduce:transition-none"
+                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none px-3 py-1.5 text-[13px] transition-colors motion-reduce:transition-none"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span>{t(labelKey)}</span>
@@ -986,7 +987,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                           className={cn(
                             'rounded-md border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
                             selected
-                              ? 'border-primary bg-surface-selected ring-1 ring-primary/50'
+                              ? 'border-primary bg-accent ring-1 ring-primary/50'
                               : 'border-border',
                           )}
                         >

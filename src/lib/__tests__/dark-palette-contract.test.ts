@@ -89,7 +89,7 @@ const requiredVariables = [
   'scrollbar-thumb-hover',
 ] as const;
 
-function paletteVariables(palette: keyof typeof expectedCore): Record<string, string> {
+function paletteVariables(palette: string): Record<string, string> {
   const block = css.match(
     new RegExp(`\\.dark\\[data-color-palette="${palette}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`),
   )?.[1];
@@ -103,11 +103,11 @@ function paletteVariables(palette: keyof typeof expectedCore): Record<string, st
   );
 }
 
-function cupertinoLightVariables(): Record<string, string> {
+function lightVariables(palette: string): Record<string, string> {
   const block = css.match(
-    /\[data-color-palette="cupertino"\]\s*\{([\s\S]*?)\n\}/,
+    new RegExp(`(?<!\\.dark)\\[data-color-palette="${palette}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`),
   )?.[1];
-  expect(block, 'Cupertino light palette block').toBeDefined();
+  expect(block, `${palette} light palette block`).toBeDefined();
 
   return Object.fromEntries(
     Array.from(block?.matchAll(/--([\w-]+):\s*([^;]+);/g) ?? [], (match) => [
@@ -131,6 +131,54 @@ function contrastRatio(first: string, second: string): number {
   const secondLuminance = luminance(second);
   return (Math.max(firstLuminance, secondLuminance) + 0.05)
     / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+
+type RgbColor = { r: number; g: number; b: number; a: number };
+
+function parseColor(value: string): RgbColor {
+  const hex = value.match(/^#([0-9a-f]{6})$/);
+  if (hex) {
+    return {
+      r: Number.parseInt(hex[1].slice(0, 2), 16),
+      g: Number.parseInt(hex[1].slice(2, 4), 16),
+      b: Number.parseInt(hex[1].slice(4, 6), 16),
+      a: 1,
+    };
+  }
+  const rgb = value.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)\s*\)$/);
+  if (rgb) {
+    return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]), a: Number(rgb[4]) };
+  }
+  throw new Error(`Unsupported colour syntax: ${value}`);
+}
+
+function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
+  const channel = (value: number) => Math.round(value).toString(16).padStart(2, '0');
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
+}
+
+/** Resolves var() indirection; unset custom properties (e.g. --system-accent
+ *  in browser previews) fall back to their declared fallback value. */
+function resolveColor(variables: Record<string, string>, name: string): RgbColor {
+  const value = variables[name];
+  if (!value) throw new Error(`Missing --${name}`);
+  const reference = value.match(/^var\(\s*--([\w-]+)(?:\s*,\s*(.+))?\)$/);
+  if (reference) {
+    return variables[reference[1]]
+      ? resolveColor(variables, reference[1])
+      : parseColor(reference[2]!);
+  }
+  return parseColor(value);
+}
+
+/** Contrast of (possibly translucent) text over an opaque surface. */
+function textContrast(text: RgbColor, surface: RgbColor): number {
+  const blended = {
+    r: text.r * text.a + surface.r * (1 - text.a),
+    g: text.g * text.a + surface.g * (1 - text.a),
+    b: text.b * text.a + surface.b * (1 - text.a),
+  };
+  return contrastRatio(toHex(blended), toHex(surface));
 }
 
 describe('dark workspace palette contract', () => {
@@ -177,7 +225,7 @@ describe('dark workspace palette contract', () => {
   });
 
   it('Cupertino defines a complete, readable light appearance', () => {
-    const variables = cupertinoLightVariables();
+    const variables = lightVariables('cupertino');
     for (const variable of requiredVariables) {
       expect(variables[variable], `Cupertino light --${variable}`).toBeDefined();
     }
@@ -228,6 +276,73 @@ describe('dark workspace palette contract', () => {
       expect(contrastRatio(variables.primary, variables.background)).toBeGreaterThanOrEqual(3);
       expect(contrastRatio(variables['surface-selected'], variables.background)).toBeGreaterThanOrEqual(1.4);
       expect(contrastRatio(variables['surface-hover'], variables.background)).toBeGreaterThanOrEqual(1.2);
+    });
+  }
+});
+
+describe('System palette light and dark contract', () => {
+  // Selection is an accent fill (like Finder), so the readability pairings for
+  // muted text skip --surface-selected; selected text is checked separately.
+  const opaqueSurfaces = ['background', 'card', 'popover', 'surface-hover'] as const;
+
+  for (const mode of ['light', 'dark'] as const) {
+    const variablesFor = () => (mode === 'light' ? lightVariables('system') : paletteVariables('system'));
+
+    it(`System ${mode} keeps text and semantic states readable on workspace surfaces`, () => {
+      const variables = variablesFor();
+      for (const text of ['foreground', 'muted-foreground']) {
+        for (const surface of opaqueSurfaces) {
+          expect(
+            textContrast(resolveColor(variables, text), resolveColor(variables, surface)),
+            `System ${mode} ${text} on ${surface}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      for (const state of ['success', 'warning', 'destructive']) {
+        for (const surface of opaqueSurfaces) {
+          expect(
+            textContrast(resolveColor(variables, state), resolveColor(variables, surface)),
+            `System ${mode} ${state} on ${surface}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+        expect(
+          textContrast(resolveColor(variables, `${state}-foreground`), resolveColor(variables, state)),
+          `System ${mode} ${state}-foreground on ${state}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+
+    it(`System ${mode} fills selection with the accent and keeps filled text readable`, () => {
+      const variables = variablesFor();
+      expect(resolveColor(variables, 'surface-selected')).toEqual(resolveColor(variables, 'primary'));
+      // The accent colour is user-controlled (System Settings → Appearance) and
+      // macOS renders selection text in white on it; 3:1 holds for the built-in
+      // fallback accent and pathological accents follow the system behaviour.
+      expect(
+        textContrast(resolveColor(variables, 'surface-selected-foreground'), resolveColor(variables, 'surface-selected')),
+        `System ${mode} selected text`,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        textContrast(resolveColor(variables, 'primary-foreground'), resolveColor(variables, 'primary')),
+        `System ${mode} primary text`,
+      ).toBeGreaterThanOrEqual(3);
+    });
+
+    it(`System ${mode} keeps the focus colour visible against workspace surfaces`, () => {
+      const variables = variablesFor();
+      for (const surface of ['background', 'card', 'popover']) {
+        expect(
+          textContrast(resolveColor(variables, 'primary'), resolveColor(variables, surface)),
+          `System ${mode} primary on ${surface}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it(`System ${mode} defines the agreed semantic hierarchy`, () => {
+      const variables = variablesFor();
+      for (const variable of requiredVariables) {
+        expect(variables[variable], `System ${mode} --${variable}`).toBeDefined();
+      }
     });
   }
 });

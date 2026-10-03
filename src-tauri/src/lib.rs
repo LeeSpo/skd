@@ -240,7 +240,7 @@ pub fn run() {
         .setup({
             let connection_manager_clone = connection_manager.clone();
             move |app| {
-                crate::window_appearance::observe_accessibility(&app.handle());
+                crate::window_appearance::observe_appearance(&app.handle());
 
                 // Register native macOS menu and forward item events to the frontend
                 match build_app_menu(&app.handle(), default_menu_text) {
@@ -288,7 +288,7 @@ pub fn run() {
         })
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
-            commands::get_window_accessibility,
+            commands::get_window_appearance,
             commands::ssh_connect,
             commands::ssh_keyboard_interactive_respond,
             commands::ssh_cancel_connect,

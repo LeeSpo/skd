@@ -3775,14 +3775,14 @@ mod local_fs_tests {
     }
 }
 
-/// Query AppKit on its main thread; used only for window chrome accessibility.
+/// Query AppKit on its main thread; used for window chrome materials and accent.
 #[tauri::command]
-pub async fn get_window_accessibility(
+pub async fn get_window_appearance(
     app: AppHandle,
-) -> Result<crate::window_appearance::WindowAccessibility, String> {
+) -> Result<crate::window_appearance::WindowAppearance, String> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        let _ = sender.send(crate::window_appearance::accessibility());
+        let _ = sender.send(crate::window_appearance::appearance());
     })
     .map_err(|error| error.to_string())?;
     receiver.await.map_err(|error| error.to_string())

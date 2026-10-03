@@ -3,11 +3,28 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-interface WindowAccessibility {
+export interface WindowAppearance {
   reduceTransparency: boolean;
+  increaseContrast?: boolean;
+  /** macOS accent colour as `#rrggbb`, or null when it cannot be resolved. */
+  accentColor?: string | null;
 }
 
-/** Keep the native material and web chrome in the same appearance. */
+const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
+
+/** Apply native appearance inputs to the document root. */
+export function applyWindowAppearance(root: HTMLElement, state: WindowAppearance): void {
+  // Increased contrast and reduced transparency both require opaque chrome.
+  root.dataset.nativeMaterial = String(!state.reduceTransparency && !state.increaseContrast);
+  root.dataset.increaseContrast = String(!!state.increaseContrast);
+  if (state.accentColor && ACCENT_PATTERN.test(state.accentColor)) {
+    root.style.setProperty('--system-accent', state.accentColor);
+  } else {
+    root.style.removeProperty('--system-accent');
+  }
+}
+
+/** Keep the native material, accent colour and web chrome in the same appearance. */
 export function useWindowAppearance(): void {
   useEffect(() => {
     const root = document.documentElement;
@@ -17,16 +34,20 @@ export function useWindowAppearance(): void {
     let disposed = false;
     const unlisteners: UnlistenFn[] = [];
     const window = getCurrentWindow();
-    const updateAccessibility = (state: WindowAccessibility) => {
-      if (!disposed) root.dataset.nativeMaterial = String(!state.reduceTransparency);
+    const updateAppearance = (state: WindowAppearance) => {
+      if (!disposed) applyWindowAppearance(root, state);
     };
+    const refreshAppearance = () => invoke<WindowAppearance>('get_window_appearance').then(updateAppearance);
     const syncTheme = () => {
       // Automatic appearance must leave AppKit free to follow the system.
       const theme = root.dataset.themeMode === 'auto' ? null : root.classList.contains('dark') ? 'dark' : 'light';
-      void window.setTheme(theme).catch(() => {
-        // A failed native sync must still leave readable, opaque chrome.
-        if (!disposed) root.dataset.nativeMaterial = 'false';
-      });
+      void window.setTheme(theme)
+        // The accent colour resolves differently in light and dark appearances.
+        .then(refreshAppearance)
+        .catch(() => {
+          // A failed native sync must still leave readable, opaque chrome.
+          if (!disposed) root.dataset.nativeMaterial = 'false';
+        });
     };
     const retainListener = (unlisten: UnlistenFn) => {
       if (disposed) unlisten();
@@ -35,14 +56,14 @@ export function useWindowAppearance(): void {
     const observer = new MutationObserver(syncTheme);
     observer.observe(root, { attributes: true, attributeFilter: ['class', 'data-theme-mode'] });
 
-    // Subscribe before querying so an accessibility change cannot be lost.
+    // Subscribe before querying so an appearance change cannot be lost.
     void (async () => {
       try {
-        retainListener(await listen<WindowAccessibility>('window-accessibility-changed', ({ payload }) => {
-          updateAccessibility(payload);
+        retainListener(await listen<WindowAppearance>('window-appearance-changed', ({ payload }) => {
+          updateAppearance(payload);
         }));
         if (disposed) return;
-        updateAccessibility(await invoke<WindowAccessibility>('get_window_accessibility'));
+        await refreshAppearance();
         syncTheme();
         retainListener(await window.onFocusChanged(({ payload }) => {
           if (!disposed) root.dataset.windowActive = String(payload);
@@ -59,6 +80,8 @@ export function useWindowAppearance(): void {
       unlisteners.forEach(unlisten => unlisten());
       delete root.dataset.nativeMaterial;
       delete root.dataset.windowActive;
+      delete root.dataset.increaseContrast;
+      root.style.removeProperty('--system-accent');
     };
   }, []);
 }

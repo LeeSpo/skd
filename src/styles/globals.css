@@ -1,5 +1,3 @@
-@custom-variant dark (&:is(.dark *));
-
 :root {
   --font-size: 16px;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -60,6 +58,26 @@
   --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.12);
   --shadow-dialog: 0 8px 28px rgba(0, 0, 0, 0.16);
 
+  /* Sequoia-style material layers; CSS approximations of NSVisualEffectView
+     used only where [data-native-material="true"] allows translucency. */
+  --material-sidebar: color-mix(in srgb, var(--sidebar) 55%, transparent);
+  --material-titlebar: color-mix(in srgb, var(--panel-header-bg) 78%, transparent);
+  --material-inspector: color-mix(in srgb, var(--sidebar) 70%, transparent);
+  --material-menu: color-mix(in srgb, var(--popover) 72%, transparent);
+  --material-sheet: color-mix(in srgb, var(--popover) 86%, transparent);
+  --glass-filter: blur(24px) saturate(180%);
+
+  /* Hairlines and control geometry; macOS control proportions. */
+  --separator: var(--border);
+  --hairline: 0.5px solid var(--separator);
+  --control-h: 28px;
+  --control-h-sm: 24px;
+  --toolbar-btn: 28px;
+  --radius-control: 6px;
+  --radius-menu: 8px;
+  --radius-sheet: 12px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
+
   /* Chart colors */
   --chart-1: #2563eb;
   --chart-2: #22c55e;
@@ -95,6 +113,7 @@
   --panel-border: #d8d8dc;
   --surface-raised: #ffffff;
   --surface-selected: #dce8f8;
+  --surface-selected-foreground: var(--foreground);
   --surface-hover: #ededf0;
   --surface-content: #ffffff;
   --workspace-bg: #ffffff;
@@ -105,6 +124,9 @@
   --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
 
   /* App typography choices, not HIG-mandated pixel sizes. */
+  --text-body: 13px;
+  --text-secondary: 11px;
+  --text-page-title: 22px;
   --file-chrome-font-size: 0.75rem;
   --file-chrome-line-height: 1rem;
   --file-list-font-size: 0.8125rem;
@@ -113,6 +135,76 @@
   /* Font weights */
   --font-weight-medium: 500;
   --font-weight-normal: 400;
+}
+
+[data-color-palette="system"] {
+  color-scheme: light;
+
+  /* System — an app-defined approximation of macOS semantic colours, not native
+     dynamic colours. --system-accent comes from NSColor.controlAccentColor via
+     the native bridge; the fallback applies in browser previews or on failure. */
+  --background: #f6f6f6;
+  --foreground: rgb(0 0 0 / 0.85);
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: var(--system-accent, #007aff);
+  --primary-foreground: #ffffff;
+  --primary-hover: color-mix(in srgb, var(--primary) 88%, #000000);
+  --secondary: #e8e8e8;
+  --secondary-foreground: #1d1d1f;
+  --muted: #ebebeb;
+  --muted-foreground: rgb(0 0 0 / 0.6);
+  --accent: color-mix(in srgb, var(--primary) 16%, #ffffff);
+  --accent-foreground: #1d1d1f;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --success: #146c2e;
+  --success-foreground: #ffffff;
+  --warning: #8a5300;
+  --warning-foreground: #ffffff;
+  --border: #d9d9d9;
+  --separator: rgb(0 0 0 / 0.1);
+  --input: #cdcdcd;
+  --input-background: #ffffff;
+  --ring: var(--primary);
+  --switch-background: #d1d1d6;
+  --chart-1: var(--primary);
+  --chart-2: #248a3d;
+  --chart-3: #a05a00;
+  --chart-4: #b3261e;
+  --chart-5: #8944ab;
+  --sidebar: #e8e8e8;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: color-mix(in srgb, var(--primary) 16%, #ffffff);
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #d9d9d9;
+  --sidebar-ring: var(--primary);
+  --terminal-bg: #ffffff;
+  --terminal-fg: #1d1d1f;
+  --terminal-cursor: #1d1d1f;
+  --terminal-selection: color-mix(in srgb, var(--primary) 26%, transparent);
+  --status-connected: var(--success);
+  --status-connecting: var(--warning);
+  --status-disconnected: var(--destructive);
+  --status-pending: var(--primary);
+  --panel-header-bg: #f0f0f0;
+  --panel-toolbar-bg: #f6f6f6;
+  --panel-border: #d9d9d9;
+  --surface-raised: #ffffff;
+  --surface-selected: var(--primary);
+  --surface-selected-foreground: #ffffff;
+  --surface-hover: #e8e8e8;
+  --surface-content: #ffffff;
+  --workspace-bg: #ffffff;
+  --statusbar-bg: #f0f0f0;
+  --drop-zone: color-mix(in srgb, var(--primary) 18%, transparent);
+  --overlay: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.25);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
 }
 
 [data-color-palette="cupertino"] {
@@ -443,77 +535,72 @@
   --scrollbar-thumb-hover: rgba(245, 245, 247, 0.36);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary-hover: var(--primary-hover);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-input-background: var(--input-background);
-  --color-switch-background: var(--switch-background);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-terminal-bg: var(--terminal-bg);
-  --color-terminal-fg: var(--terminal-fg);
-  --color-terminal-cursor: var(--terminal-cursor);
-  --color-terminal-selection: var(--terminal-selection);
-  --color-status-connected: var(--status-connected);
-  --color-status-connecting: var(--status-connecting);
-  --color-status-disconnected: var(--status-disconnected);
-  --color-status-pending: var(--status-pending);
-  --color-panel-header: var(--panel-header-bg);
-  --color-panel-toolbar: var(--panel-toolbar-bg);
-  --color-panel-border: var(--panel-border);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-selected: var(--surface-selected);
-  --color-surface-hover: var(--surface-hover);
-  --color-surface-content: var(--surface-content);
-  --color-workspace: var(--workspace-bg);
-  --color-statusbar: var(--statusbar-bg);
-  --color-drop-zone: var(--drop-zone);
-  --color-overlay: var(--overlay);
-  --color-scrollbar-thumb: var(--scrollbar-thumb);
-  --color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
-  --text-ui-2xs: 0.625rem;
-  --text-ui-2xs--line-height: 0.875rem;
-  --text-ui-xs: 0.6875rem;
-  --text-ui-xs--line-height: 1rem;
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+.dark[data-color-palette="system"] {
+  color-scheme: dark;
+
+  /* System — dark counterpart; see the light block for scope and accent source. */
+  --background: #1e1e1e;
+  --foreground: rgb(255 255 255 / 0.85);
+  --card: #282828;
+  --card-foreground: #e5e5e5;
+  --popover: #323232;
+  --popover-foreground: #e5e5e5;
+  --primary: var(--system-accent, #0a84ff);
+  --primary-foreground: #ffffff;
+  --primary-hover: color-mix(in srgb, var(--primary) 85%, #ffffff);
+  --secondary: #3a3a3a;
+  --secondary-foreground: #e5e5e5;
+  --muted: #2c2c2c;
+  --muted-foreground: rgb(255 255 255 / 0.6);
+  --accent: color-mix(in srgb, var(--primary) 28%, #1e1e1e);
+  --accent-foreground: #e5e5e5;
+  --destructive: #ff7b72;
+  --destructive-foreground: #2a0705;
+  --success: #32d74b;
+  --success-foreground: #062b10;
+  --warning: #ffb340;
+  --warning-foreground: #2a1800;
+  --border: #3d3d3d;
+  --separator: rgb(255 255 255 / 0.12);
+  --input: #444444;
+  --input-background: #252525;
+  --ring: var(--primary);
+  --switch-background: #48484a;
+  --chart-1: var(--primary);
+  --chart-2: #32d74b;
+  --chart-3: #ffb340;
+  --chart-4: #ff7b72;
+  --chart-5: #bf5af2;
+  --sidebar: #2a2a2a;
+  --sidebar-foreground: #e5e5e5;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: color-mix(in srgb, var(--primary) 28%, #1e1e1e);
+  --sidebar-accent-foreground: #e5e5e5;
+  --sidebar-border: #3a3a3a;
+  --sidebar-ring: var(--primary);
+  --terminal-bg: #1e1e1e;
+  --terminal-fg: #e5e5e5;
+  --terminal-cursor: #e5e5e5;
+  --terminal-selection: color-mix(in srgb, var(--primary) 32%, transparent);
+  --status-connected: var(--success);
+  --status-connecting: var(--warning);
+  --status-disconnected: var(--destructive);
+  --status-pending: var(--primary);
+  --panel-header-bg: #282828;
+  --panel-toolbar-bg: #252525;
+  --panel-border: #3a3a3a;
+  --surface-raised: #323232;
+  --surface-selected: var(--primary);
+  --surface-selected-foreground: #ffffff;
+  --surface-hover: #303030;
+  --surface-content: #1e1e1e;
+  --workspace-bg: #1e1e1e;
+  --statusbar-bg: #282828;
+  --drop-zone: color-mix(in srgb, var(--primary) 22%, transparent);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.22);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
 }
 
 :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
@@ -608,7 +695,8 @@ body {
 
 .window-chrome [data-slot="button"]:active:not(:disabled) {
   color: var(--foreground);
-  background-color: var(--surface-selected);
+  /* Pressed controls darken; --surface-selected may be an accent fill. */
+  background-color: color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 
 .window-chrome [data-slot="button"]:focus-visible {
@@ -623,6 +711,12 @@ body {
 
 .shadow-dialog {
   box-shadow: var(--shadow-dialog);
+}
+
+/* Floating layers fall back to opaque surfaces when the native material is off. */
+:root:not([data-native-material="true"]) .glass-menu {
+  background: var(--popover);
+  backdrop-filter: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -702,12 +796,18 @@ body {
   background: transparent;
 }
 
+/* Overlay-style scrollbars, like macOS "show scroll bars when scrolling":
+   the thumb stays hidden until the scroll container is hovered. */
 *::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
+  background-color: transparent;
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
   transition: background-color 0.2s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
 }
 
 *::-webkit-scrollbar-thumb:hover {

@@ -384,6 +384,10 @@
       "auto": "Auto (System)"
     },
     "palette": {
+      "system": {
+        "name": "System",
+        "description": "Follows macOS appearance and your accent color"
+      },
       "graphite": {
         "name": "Graphite",
         "description": "Cursor-inspired neutrals with a soft blue accent"

@@ -36,13 +36,13 @@ describe('workspace color palettes', () => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults missing and invalid saved values to Graphite', () => {
+  it('defaults missing and invalid saved values to System', () => {
     expect(getSavedColorPalette()).toBe(DEFAULT_COLOR_PALETTE);
-    expect(normalizeColorPalette('unknown')).toBe('graphite');
+    expect(normalizeColorPalette('unknown')).toBe('system');
     expect(normalizeColorPalette('cupertino')).toBe('cupertino');
 
     localStorage.setItem('sshClientSettings', JSON.stringify({ colorPalette: 'unknown' }));
-    expect(getSavedColorPalette()).toBe('graphite');
+    expect(getSavedColorPalette()).toBe('system');
   });
 
   it('applies palette and theme state to the root element', () => {
@@ -73,6 +73,7 @@ describe('workspace color palettes', () => {
     applyColorPalette('graphite');
     expect(document.documentElement.dataset.colorPalette).toBe('graphite');
     expect(PALETTE_TERMINAL_THEMES).toEqual({
+      system: 'vs-code-dark',
       graphite: 'one-dark',
       midnight: 'tokyo-night',
       nordic: 'nord',

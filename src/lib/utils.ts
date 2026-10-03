@@ -7,11 +7,13 @@ export function cn(...inputs: ClassValue[]) {
 
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
-export type ColorPalette = 'graphite' | 'midnight' | 'nordic' | 'cupertino';
+export type ColorPalette = 'system' | 'graphite' | 'midnight' | 'nordic' | 'cupertino';
 
-export const DEFAULT_COLOR_PALETTE: ColorPalette = 'graphite';
+/** System follows macOS light/dark and the native accent colour. */
+export const DEFAULT_COLOR_PALETTE: ColorPalette = 'system';
 
 export const COLOR_PALETTES: readonly ColorPalette[] = [
+  'system',
   'graphite',
   'midnight',
   'nordic',
@@ -19,6 +21,8 @@ export const COLOR_PALETTES: readonly ColorPalette[] = [
 ];
 
 export const PALETTE_TERMINAL_THEMES: Record<ColorPalette, string> = {
+  // The default terminal theme already switches to its light variant in light mode.
+  system: 'vs-code-dark',
   graphite: 'one-dark',
   midnight: 'tokyo-night',
   nordic: 'nord',

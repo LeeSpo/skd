@@ -33,7 +33,7 @@ export function treeRowState(opts: {
     variant === "sidebar"
       ? cn(
           "rounded-md",
-          selected ? "bg-surface-selected text-sidebar-foreground" : "hover:bg-surface-hover",
+          selected ? "bg-surface-selected text-surface-selected-foreground" : "hover:bg-surface-hover",
         )
       : cn(
           selected && "bg-accent",
