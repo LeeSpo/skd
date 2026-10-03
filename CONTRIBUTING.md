@@ -91,7 +91,7 @@ cargo clippy -- -D warnings
   - All user-facing strings must use `react-i18next` (`useTranslation()`).
   - Source strings are maintained in `src/locales/en.json`.
   - **Never hardcode user-facing strings** in JSX, dialog titles, toast messages, tooltips, or placeholders.
-  - Do not translate protocol names (`"SSH"`, `"SFTP"`), layout preset identifiers, or Rust error details.
+  - Do not translate protocol names (`"SSH"`, `"SFTP"`) or Rust error details.
 - **Terminal (xterm.js) Input Guidelines**:
   - IME / Input Method: `attachCustomKeyEventHandler` must early-return `true` when `event.isComposing || event.keyCode === 229` to avoid swallowing or duplicating candidate selections (e.g. CJK typing).
   - React Event Handling: Never call `e.preventDefault()` on keydown events that target xterm's hidden `<textarea>`.

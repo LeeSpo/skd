@@ -2022,7 +2022,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               {/* Column Headers — outside ScrollArea so they never move */}
               <PanelToolbar
                 density="dense"
-                className={`gap-2 px-2 font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
+                className={`gap-2 px-2 text-[11px] font-medium text-muted-foreground ${FILE_BROWSER_LIST_TEXT}`}
               >
                 <SortableColumnHeader
                   label={t('fileBrowser.column.name')}
@@ -2105,8 +2105,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         <ContextMenu key={file.path}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`${FILE_BROWSER_LIST_TEXT} finder-file-row flex min-h-6 cursor-pointer select-none items-center gap-2 px-2 py-0.5 hover:bg-muted/50 ${
-                                selectedFiles.has(file.name) ? 'bg-accent' : ''
+                              className={`${FILE_BROWSER_LIST_TEXT} finder-file-row flex min-h-[22px] cursor-pointer select-none items-center gap-2 px-2 py-0.5 ${
+                                selectedFiles.has(file.name) ? 'bg-surface-selected text-surface-selected-foreground' : ''
                               }`}
                               role="row"
                               aria-selected={file.name === '..' ? undefined : selectedFiles.has(file.name)}

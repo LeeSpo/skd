@@ -16,7 +16,7 @@ describe('shared control design', () => {
     for (const field of [input, textarea]) {
       expect(field.classList.contains('bg-input-background')).toBe(true);
       expect(field.classList.contains('dark:bg-input/30')).toBe(false);
-      expect(field.classList.contains('focus-visible:ring-[2px]')).toBe(true);
+      expect(field.classList.contains('focus-visible:shadow-[var(--focus-ring)]')).toBe(true);
       expect(field.classList.contains('motion-reduce:transition-none')).toBe(true);
     }
     expect(input.getAttribute('aria-invalid')).toBe('true');
@@ -40,7 +40,7 @@ describe('shared control design', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open preferences' }));
     const dialog = screen.getByRole('dialog', { name: 'Preferences' });
     expect(dialog.classList.contains('bg-popover')).toBe(true);
-    expect(dialog.classList.contains('rounded-[14px]')).toBe(true);
+    expect(dialog.classList.contains('rounded-[12px]')).toBe(true);
     expect(dialog.classList.contains('h-[85vh]')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();

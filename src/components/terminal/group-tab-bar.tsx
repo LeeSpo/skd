@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Copy, RefreshCw, ArrowLeft, ArrowRight, XCircle, ArrowUp, ArrowDown, MoveRight, FolderSync, Terminal, FileCode } from 'lucide-react';
 import type { TerminalTab, SplitDirection } from '../../lib/terminal-group-types';
 import { getTabDisplayName } from '../../lib/terminal-group-utils';
+import { tabTooltip } from '../../lib/session-chrome';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
 import {
@@ -40,6 +41,8 @@ interface GroupTabBarProps {
   groupId: string;
   tabs: TerminalTab[];
   activeTabId: string | null;
+  /** `titlebar` fills the window toolbar. `pane` stays above a split terminal. */
+  variant?: 'titlebar' | 'pane';
   onNewConnection?: () => void;
   onNewLocalTerminal?: () => void | Promise<void>;
   onOpenSavedConnection?: (connectionId: string, targetGroupId: string) => void | Promise<void>;
@@ -55,6 +58,7 @@ export function GroupTabBar({
   groupId,
   tabs,
   activeTabId,
+  variant = 'pane',
   onNewConnection,
   onNewLocalTerminal,
   onOpenSavedConnection,
@@ -326,15 +330,55 @@ export function GroupTabBar({
     [dispatch, groupId],
   );
 
+  const titlebar = variant === 'titlebar';
+
+  const tabIcon = (tab: TerminalTab) => (
+    tab.tabType === 'file-browser' ? (
+      <FolderSync className="size-3.5 shrink-0 text-muted-foreground" />
+    ) : tab.tabType === 'editor' ? (
+      <FileCode className="size-3.5 shrink-0 text-muted-foreground" />
+    ) : (
+      <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+    )
+  );
+
+  const closeButton = (tab: TerminalTab) => (
+    <Button
+      variant="ghost"
+      size="toolbar"
+      data-tauri-drag-region="false"
+      className={`size-3.5 shrink-0 rounded-sm p-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 ${
+        titlebar ? 'absolute inset-0' : ''
+      }`}
+      aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleTabClose(tab.id);
+      }}
+    >
+      <X className="size-3" />
+    </Button>
+  );
+
   return (
     <>
-      <div className="terminal-tab-strip flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-1.5">
+      <div
+        data-variant={variant}
+        data-tauri-drag-region={titlebar ? true : undefined}
+        className={
+          titlebar
+            ? 'terminal-tab-strip flex h-full w-full min-w-0 items-center px-1'
+            : 'terminal-tab-strip flex h-[30px] shrink-0 items-center border-b border-panel-border bg-panel-header px-1.5'
+        }
+      >
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
-          className={`relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto transition-colors ${
-            isDragOver ? 'bg-surface-hover' : ''
-          }`}
+          data-tauri-drag-region={titlebar ? true : undefined}
+          className={`relative flex h-full min-w-0 flex-1 items-center overflow-x-auto ${
+            titlebar ? 'gap-0' : 'gap-1'
+          } ${isDragOver ? 'bg-surface-hover' : ''}`}
         >
           {tabs.map((tab, index) => (
             <React.Fragment key={tab.id}>
@@ -342,55 +386,54 @@ export function GroupTabBar({
               {dropIndex === index && (
                 <div className="w-px h-4 bg-primary shrink-0" />
               )}
+              {titlebar && index > 0 && tab.id !== activeTabId && tabs[index - 1]?.id !== activeTabId && dropIndex !== index && (
+                <div className="titlebar-tab-separator h-3.5 w-px shrink-0 bg-border" aria-hidden="true" />
+              )}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
                     data-tab-id={tab.id}
-                    title={t(`statusBar.${tab.connectionStatus}`)}
-                    className={`terminal-tab group box-border flex h-7 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-transparent px-2.5 ${
-                      tab.id === activeTabId
-                        ? 'bg-surface-content text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                    data-tauri-drag-region="false"
+                    title={tabTooltip(tab, getTabDisplayName(tab, tabs), t(`statusBar.${tab.connectionStatus}`))}
+                    className={`terminal-tab group box-border flex cursor-pointer select-none items-center gap-1.5 border border-transparent ${
+                      titlebar
+                        ? `h-7 min-w-[120px] max-w-[220px] flex-1 rounded-md px-2 ${
+                            tab.id === activeTabId ? 'titlebar-tab-active text-foreground' : 'titlebar-tab-idle text-muted-foreground'
+                          }`
+                        : `h-6 max-w-60 shrink-0 rounded-md px-2.5 ${
+                            tab.id === activeTabId
+                              ? 'bg-surface-content text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                          }`
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
                     onDragStart={handleNativeDragStart}
                     draggable={false}
                     onClick={() => handleTabSelect(tab.id)}
                   >
+                    {titlebar ? (
+                      <span className="relative size-3.5 shrink-0">
+                        <span className="group-hover:invisible group-focus-within:invisible">
+                          {tabIcon(tab)}
+                        </span>
+                        {closeButton(tab)}
+                      </span>
+                    ) : tabIcon(tab)}
+                    {tab.connectionStatus !== 'connected' && (
+                      <StatusDot
+                        variant={tab.connectionStatus}
+                        aria-label={t(`statusBar.${tab.connectionStatus}`)}
+                      />
+                    )}
                     <button
                       type="button"
+                      data-tauri-drag-region="false"
                       aria-pressed={tab.id === activeTabId}
-                      className="flex min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                      className="flex min-w-0 flex-1 items-center rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                     >
-                      {tab.tabType === 'file-browser' ? (
-                        <FolderSync className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ) : tab.tabType === 'editor' ? (
-                        <FileCode className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      {tab.connectionStatus !== 'connected' && (
-                        <StatusDot
-                          variant={tab.connectionStatus}
-                          aria-label={t(`statusBar.${tab.connectionStatus}`)}
-                        />
-                      )}
                       <span className="truncate text-[13px] leading-none">{getTabDisplayName(tab, tabs)}</span>
                     </button>
-
-                    <Button
-                      variant="ghost"
-                      size="toolbar"
-                      className="size-4 shrink-0 rounded-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-                      aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTabClose(tab.id);
-                      }}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
+                    {!titlebar && closeButton(tab)}
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
@@ -476,12 +519,14 @@ export function GroupTabBar({
           )}
         </div>
 
-        <NewTabMenu
-          groupId={groupId}
-          onOpenSavedConnection={onOpenSavedConnection}
-          onNewConnection={onNewConnection}
-          onNewLocalTerminal={onNewLocalTerminal}
-        />
+        <div data-tauri-drag-region="false" className="shrink-0">
+          <NewTabMenu
+            groupId={groupId}
+            onOpenSavedConnection={onOpenSavedConnection}
+            onNewConnection={onNewConnection}
+            onNewLocalTerminal={onNewLocalTerminal}
+          />
+        </div>
       </div>
 
       {/* Floating drag ghost — rendered via portal-like fixed positioning */}

@@ -204,9 +204,8 @@ On startup, `App.tsx` reads active sessions from `ConnectionStorageManager` and 
 
 ## Layout System
 
-VS Code-like resizable panel layout with presets:
+VS Code-like resizable panel layout:
 
-- **Presets**: Default, Minimal, Focus Mode, Full Stack, Zen
 - **Keyboard shortcuts**: `Ctrl+B` (left sidebar), `Ctrl+J` (bottom panel), `Ctrl+M` (right sidebar), `Ctrl+Z` (zen mode)
 - **Persistence**: Panel sizes auto-saved to localStorage per panel group
 - **Implementation**: `react-resizable-panels` library
@@ -264,6 +263,11 @@ VS Code-like resizable panel layout with presets:
     - **`attachCustomKeyEventHandler` must bail out during composition**: Always add `if (event.isComposing || event.keyCode === 229) return true;` as the very first check. Returning `true` hands the event to xterm's built-in `CompositionHelper`, which correctly manages the composition lifecycle. Without this, the custom handler can race with IME candidate selection (e.g. pressing Space to confirm a Chinese character) and swallow or duplicate input. VS Code's terminal does the same early-return.
     - **Never `preventDefault()` on keys that reach xterm's textarea**: React 18's event delegation registers a capture-phase listener on the root DOM node, which fires *before* xterm's own capture handler on its hidden `<textarea>`. If any ancestor React `onKeyDown` handler calls `e.preventDefault()` on Space or Enter, the browser will never insert the character into the textarea, breaking both direct input and IME paths (`_handleAnyTextareaChanges` checks the textarea value via `setTimeout(0)` — if the value didn't change, the character is lost). When adding `onKeyDown` to a wrapper around a terminal, always guard: `if (target.tagName === 'TEXTAREA' || target.closest('.xterm')) return;`
     - **Avoid per-keystroke overhead in `onData`**: Do not put `console.log()` or allocate objects (e.g. `new TextEncoder()`) inside the `onData` handler. In Tauri's WKWebView, `console.log` crosses the native bridge (~1–3 ms), and during fast typing (>10 chars/s) the accumulated latency pushes the JS event loop behind, causing dropped characters and IME desynchronisation. Hoist allocations outside the closure and remove hot-path logging.
+15. **Titlebar tabs, drag regions, and materials**:
+    - Single-group tab strips are portaled into a stable host node (`display: contents`) that is moved between the titlebar slot and the pane. Do not switch `createPortal`'s container element, or React remounts the tab bar and drops an in-progress drag.
+    - Blank titlebar space keeps `data-tauri-drag-region`. Any control inside that region must set `data-tauri-drag-region="false"`.
+    - Translucent CSS applies only when `data-native-material="true"`. Reduce Transparency, Increase Contrast, the browser preview, and a failed appearance bridge stay opaque.
+    - Do not put `backdrop-filter` on large sheets. The terminal's WebGL layer sits underneath, and a sheet-sized blur is both wrong and expensive. Menus and popovers may use `.glass-menu`.
 
 ---
 
@@ -288,7 +292,7 @@ skd is English-only. User-facing strings are centralized in `react-i18next` with
 - **Interpolation**: Use `t('key', { variable })` for dynamic values, not template literals
 - **Pluralization**: Use `_one` / `_other` suffixes with `count` param — never `(s)` hacks
 - **HTML in strings**: Use `<Trans>` component from `react-i18next` for strings containing markup
-- **Do NOT translate**: protocol values (`"SSH"`), keyboard symbols (`⌘N`), font names, Rust error messages in toast descriptions, layout preset internal names
+- **Do NOT translate**: protocol values (`"SSH"`), keyboard symbols (`⌘N`), font names, Rust error messages in toast descriptions
 - **Select option values**: Only translate display text, never the `value` attribute passed to backend
 - **After adding new strings**: Add keys to `en.json` only
 

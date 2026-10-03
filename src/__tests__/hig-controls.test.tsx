@@ -9,10 +9,8 @@ afterEach(cleanup);
 
 // App-specific class contracts, not measured contrast or native HIG compliance.
 function expectSemanticFocus(control: HTMLElement) {
-  expect(control.classList.contains('focus-visible:ring-primary/40')).toBe(true);
-  expect(control.classList.contains('focus-visible:ring-[2px]')).toBe(true);
-  expect(control.classList.contains('focus-visible:border-ring')).toBe(true);
-  expect(control.className).not.toMatch(/ring-ring\/|ring-destructive/);
+  expect(control.classList.contains('focus-visible:shadow-[var(--focus-ring)]')).toBe(true);
+  expect(control.className).not.toMatch(/ring-ring\/|ring-destructive|ring-primary\/40/);
 }
 
 describe('shared control focus and density', () => {
@@ -33,10 +31,10 @@ describe('shared control focus and density', () => {
       expect(field.classList.contains('rounded-md')).toBe(true);
       expect(field.classList.contains('text-[13px]')).toBe(true);
     }
-    expect(input.classList.contains('h-8')).toBe(true);
+    expect(input.classList.contains('h-7')).toBe(true);
     expect(textarea.classList.contains('min-h-16')).toBe(true);
     expect(select.getAttribute('data-size')).toBe('default');
-    expect(select.classList.contains('data-[size=default]:h-8')).toBe(true);
+    expect(select.classList.contains('data-[size=default]:h-7')).toBe(true);
   });
 
   it.each(['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'] as const)(
@@ -51,8 +49,8 @@ describe('shared control focus and density', () => {
   );
 
   it.each([
-    ['default', 'h-8'], ['sm', 'h-8'], ['lg', 'h-10'],
-    ['icon', 'size-8'], ['toolbar', 'size-6'], ['menubar', 'size-[26px]'],
+    ['default', 'h-7'], ['sm', 'h-6'], ['lg', 'h-9'],
+    ['icon', 'size-7'], ['toolbar', 'size-7'], ['menubar', 'size-7'],
   ] as const)('preserves the %s button size rather than imposing one height', (size, density) => {
     render(<Button size={size}>Action</Button>);
     expect(screen.getByRole('button', { name: 'Action' }).classList.contains(density)).toBe(true);
@@ -62,7 +60,7 @@ describe('shared control focus and density', () => {
     render(<Select disabled><SelectTrigger size="sm" aria-label="Protocol"><SelectValue placeholder="Choose" /></SelectTrigger></Select>);
     const select = screen.getByRole('combobox', { name: 'Protocol' }) as HTMLButtonElement;
     expect(select.getAttribute('data-size')).toBe('sm');
-    expect(select.classList.contains('data-[size=sm]:h-7')).toBe(true);
+    expect(select.classList.contains('data-[size=sm]:h-6')).toBe(true);
     expect(select.disabled).toBe(true);
   });
 

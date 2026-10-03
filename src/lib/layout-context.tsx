@@ -10,7 +10,6 @@ interface LayoutContextType {
   setLeftSidebarSize: (size: number) => void;
   setRightSidebarSize: (size: number) => void;
   setBottomPanelSize: (size: number) => void;
-  applyPreset: (presetName: string) => void;
   resetLayout: () => void;
 }
 
@@ -70,11 +69,6 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
     setLayout(prev => ({ ...prev, bottomPanelSize: size }));
   }, []);
 
-  const applyPreset = useCallback((presetName: string) => {
-    const newLayout = LayoutManager.applyPreset(presetName);
-    setLayout(newLayout);
-  }, []);
-
   const resetLayout = useCallback(() => {
     const newLayout = LayoutManager.resetLayout();
     setLayout(newLayout);
@@ -91,7 +85,6 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
         setLeftSidebarSize,
         setRightSidebarSize,
         setBottomPanelSize,
-        applyPreset,
         resetLayout,
       }}
     >

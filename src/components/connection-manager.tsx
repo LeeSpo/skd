@@ -496,14 +496,15 @@ export function ConnectionManager({
 
         <div className="relative shrink-0">
           {getIcon(node)}
-          {isConnected && (
-            <StatusDot
-              variant="connected"
-              className="absolute -bottom-0.5 -right-0.5 border border-sidebar"
-            />
-          )}
         </div>
         <span className="min-w-0 flex-1 truncate text-[13px]" title={node.name}>{node.name}</span>
+        {isConnected && (
+          <StatusDot
+            variant="connected"
+            aria-label={t('statusBar.connected')}
+            className="ml-1"
+          />
+        )}
       </div>
     );
 
@@ -694,7 +695,7 @@ export function ConnectionManager({
                   setSearch('');
                 }
               }}
-              className="sidebar-search h-7 pl-8 pr-7 text-xs"
+              className="sidebar-search h-[26px] rounded-[7px] pl-8 pr-7 text-xs"
             />
             {search && (
               <Button variant="ghost" size="toolbar" className="absolute right-0.5 top-0.5 size-6" aria-label={t('common.clear')} onClick={() => setSearch('')}>
@@ -755,7 +756,7 @@ export function ConnectionManager({
       {/* Connection Details */}
       {selectedConnection?.type === 'connection' && (
       <details className="group/details max-h-[40%] shrink-0 overflow-auto border-t border-sidebar-border">
-        <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 px-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
           <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open/details:rotate-90 motion-reduce:transition-none" />
           {t('connectionManager.connectionDetails')}
         </summary>

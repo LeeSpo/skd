@@ -54,7 +54,7 @@ function InteractiveToaster({
   className,
   duration = DEFAULT_TOAST_DURATION_MS,
   id,
-  position = "bottom-right",
+  position = "top-right",
   style,
   theme: themeProp,
   toastOptions,
@@ -102,7 +102,7 @@ function InteractiveToaster({
       toastOptions={{
         ...toastOptions,
         classNames: {
-          toast: "cursor-pointer rounded-xl border border-border shadow-dialog data-[dismissible=false]:cursor-default",
+          toast: "glass-menu cursor-pointer rounded-xl border border-border shadow-dialog data-[dismissible=false]:cursor-default",
           success: "border-success/30",
           error: "border-destructive/30",
           warning: "border-warning/30",
@@ -115,7 +115,7 @@ function InteractiveToaster({
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
-          "--border-radius": "6px",
+          "--border-radius": "12px",
           ...style,
         } as React.CSSProperties
       }

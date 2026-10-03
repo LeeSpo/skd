@@ -1,6 +1,22 @@
 # skd visual baseline
 
-## Current direction — macOS workspace (2026-10-03)
+## Current direction — Sequoia native (2026-10)
+
+The workspace targets the look of a macOS 15 Sequoia app (Finder, Safari compact tabs, System Settings). It stays React, Radix, and xterm.js inside the Tauri webview. There is no SwiftUI rewrite and no macOS 26 Liquid Glass.
+
+| Layer | Decision |
+| --- | --- |
+| Window material | One AppKit `sidebar` `NSVisualEffectView` behind the whole webview. It follows the window active state. |
+| Sidebar, titlebar, inspector chrome | Tinted with `--material-sidebar` / `--material-titlebar` / `--material-inspector` only when `data-native-material="true"`. |
+| Terminal | Opaque by default. Optional background opacity mixes the opaque theme colour; text is never faded with CSS `opacity`. WebGL is replaced by the canvas renderer while that background is translucent. `data-terminal-translucent` makes only `.workspace-content-surface` transparent. The bottom panel and inspector body stay opaque. |
+| Menus, popovers, tooltips, toasts | `.glass-menu` (`backdrop-filter`) with an opaque fallback. Menu highlight is the current palette `--primary` with white text. |
+| Sheets | `--material-sheet` tint, 12px radius, `bg-black/15` scrim, no backdrop-filter. Tall dialogs stay `inset-0 m-auto`. |
+| System palette | Default for users with no saved palette. `--primary` follows `--system-accent` from `NSColor.controlAccentColor`. Sidebar selection is a solid accent fill. The other palettes keep their own tokens and a 16% selection mix. |
+| Chrome | One 44px titlebar. A single group's tabs live in that bar. Two or more groups put a 30px strip on each pane and a title plus subtitle in the titlebar. The bottom status bar is gone. Controls are 28px, compact controls 24px. |
+
+The 2026-10-03 rule that only the sidebar may be translucent is superseded by the table above. Dense text (terminal, file lists, logs, form fields) still sits on an opaque or high-tint surface.
+
+## Previous direction — macOS workspace (2026-10-03)
 
 The workspace now uses a full-height host sidebar beside a solid terminal column. Native macOS sidebar material shows through the transparent main webview; controls remain React/Radix, and terminal rendering remains xterm.js. The layout draws on [Enso](https://github.com/amanfromsolan/enso) and the Apple toolbar/sidebar guidance linked below. It does not require a SwiftUI rewrite.
 

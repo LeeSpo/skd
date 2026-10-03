@@ -13,12 +13,6 @@ export interface LayoutConfig {
   zenMode: boolean;
 }
 
-export interface LayoutPreset {
-  name: string;
-  description: string;
-  config: LayoutConfig;
-}
-
 const DEFAULT_LAYOUT: LayoutConfig = {
   leftSidebarVisible: true,
   leftSidebarSize: 18,
@@ -64,83 +58,6 @@ export class LayoutManager {
    */
   static resetLayout(): LayoutConfig {
     localStorage.removeItem(LAYOUT_STORAGE_KEY);
-    return DEFAULT_LAYOUT;
-  }
-
-  /**
-   * Get predefined layout presets
-   */
-  static getPresets(): LayoutPreset[] {
-    return [
-      {
-        name: 'Default',
-        description: 'Terminal with connection manager only',
-        config: DEFAULT_LAYOUT,
-      },
-      {
-        name: 'Minimal',
-        description: 'Terminal only, all panels hidden',
-        config: {
-          leftSidebarVisible: false,
-          leftSidebarSize: 18,
-          rightSidebarVisible: false,
-          rightSidebarSize: 20,
-          bottomPanelVisible: false,
-          bottomPanelSize: 30,
-          zenMode: false,
-        },
-      },
-      {
-        name: 'Focus Mode',
-        description: 'Terminal with connection manager only',
-        config: {
-          leftSidebarVisible: true,
-          leftSidebarSize: 18,
-          rightSidebarVisible: false,
-          rightSidebarSize: 20,
-          bottomPanelVisible: false,
-          bottomPanelSize: 30,
-          zenMode: false,
-        },
-      },
-      {
-        name: 'Full Stack',
-        description: 'All panels visible for maximum visibility',
-        config: {
-          leftSidebarVisible: true,
-          leftSidebarSize: 18,
-          rightSidebarVisible: true,
-          rightSidebarSize: 20,
-          bottomPanelVisible: true,
-          bottomPanelSize: 35,
-          zenMode: false,
-        },
-      },
-      {
-        name: 'Zen Mode',
-        description: 'Distraction-free terminal experience',
-        config: {
-          leftSidebarVisible: false,
-          leftSidebarSize: 18,
-          rightSidebarVisible: false,
-          rightSidebarSize: 20,
-          bottomPanelVisible: false,
-          bottomPanelSize: 30,
-          zenMode: true,
-        },
-      },
-    ];
-  }
-
-  /**
-   * Apply a preset layout
-   */
-  static applyPreset(presetName: string): LayoutConfig {
-    const preset = this.getPresets().find(p => p.name === presetName);
-    if (preset) {
-      this.saveLayout(preset.config);
-      return preset.config;
-    }
     return DEFAULT_LAYOUT;
   }
 }

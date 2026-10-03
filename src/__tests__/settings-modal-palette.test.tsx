@@ -82,8 +82,7 @@ describe('SettingsModal workspace palettes', () => {
     fireEvent.mouseDown(interfaceTab);
     fireEvent.click(interfaceTab);
     await waitFor(() => expect(interfaceTab.getAttribute('aria-selected')).toBe('true'));
-    fireEvent.click(screen.getByRole('combobox', { name: 'Application Theme' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'Light', exact: true }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
     expect(document.documentElement.classList.contains('dark')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(document.documentElement.classList.contains('dark')).toBe(true);

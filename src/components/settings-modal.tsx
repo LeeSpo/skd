@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useBlocksTerminalTransparency } from '@/lib/use-window-appearance';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -7,7 +8,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { FormSection } from './ui/form-section';
 import { Separator } from './ui/separator';
 import { Slider } from './ui/slider';
 import { 
@@ -31,6 +32,7 @@ import {
   saveAppearanceSettings,
   dispatchTerminalAppearanceChanged,
   terminalThemes,
+  terminalContainerBackground,
   MACOS_MULTILINGUAL_TERMINAL_FONT,
   MIN_TERMINAL_SCROLLBACK,
   MAX_TERMINAL_SCROLLBACK,
@@ -86,7 +88,6 @@ interface AppSettings {
   colorPalette: ColorPalette;
   showConnectionManager: boolean;
   showSystemMonitor: boolean;
-  showStatusBar: boolean;
   enableNotifications: boolean;
   newSession: string;
   closeSession: string;
@@ -135,7 +136,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     colorPalette: DEFAULT_COLOR_PALETTE,
     showConnectionManager: true,
     showSystemMonitor: true,
-    showStatusBar: true,
     enableNotifications: true,
     
     // Keyboard shortcuts
@@ -265,7 +265,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
         colorPalette: DEFAULT_COLOR_PALETTE,
         showConnectionManager: true,
         showSystemMonitor: true,
-        showStatusBar: true,
         enableNotifications: true,
         newSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.newSession,
         closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
@@ -282,6 +281,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   };
 
   const [activeTab, setActiveTab] = useState('terminal');
+  const transparencyBlocked = useBlocksTerminalTransparency();
 
   // Tab definitions
   const tabItems = [
@@ -327,27 +327,21 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none px-3 py-1.5 text-[13px] transition-colors motion-reduce:transition-none"
+                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none px-2 py-1 text-[13px] transition-colors motion-reduce:transition-none"
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="size-4 shrink-0" />
                   <span>{t(labelKey)}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
 
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <h2 className="shrink-0 px-5 pt-5 text-[22px] font-bold tracking-tight">
+              {t(tabItems.find((item) => item.value === activeTab)?.labelKey ?? 'settings.title')}
+            </h2>
           <TabsContent value="terminal" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TerminalIcon className="h-4 w-4" />
-                  {t('settings.terminal.appearance')}
-                </CardTitle>
-                <CardDescription>
-                  {t('settings.terminal.appearanceDesc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.terminal.appearance')} footer={t('settings.terminal.appearanceDesc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="settings-terminal-fontFamily">{t('settings.terminal.fontFamily')}</Label>
@@ -515,12 +509,16 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </p>
                   </div>
                   <Switch id="settings-terminal-allowTransparency"
-                    checked={terminalAppearance.allowTransparency}
+                    checked={terminalAppearance.allowTransparency && !transparencyBlocked}
+                    disabled={transparencyBlocked}
                     onCheckedChange={(checked) => updateTerminalAppearance('allowTransparency', checked)}
                   />
                 </div>
+                {transparencyBlocked && (
+                  <p className="text-[11px] text-muted-foreground">{t('settings.terminal.transparencyBlocked')}</p>
+                )}
 
-                {terminalAppearance.allowTransparency && (
+                {terminalAppearance.allowTransparency && !transparencyBlocked && (
                   <div className="space-y-2">
                     <Label id="settings-terminal-opacity-label">{t('settings.terminal.opacity', { opacity: terminalAppearance.opacity })}</Label>
                     <Slider aria-labelledby="settings-terminal-opacity-label"
@@ -655,9 +653,13 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       fontSize: `${terminalAppearance.fontSize}px`,
                       lineHeight: terminalAppearance.lineHeight,
                       letterSpacing: `${terminalAppearance.letterSpacing}px`,
-                      backgroundColor: terminalThemes[terminalAppearance.theme]?.background || '#1e1e1e',
+                      backgroundColor: terminalContainerBackground({
+                        allowTransparency: terminalAppearance.allowTransparency && !transparencyBlocked,
+                        nativeMaterial: document.documentElement.dataset.nativeMaterial === 'true',
+                        opacity: terminalAppearance.opacity,
+                        opaqueBackground: terminalThemes[terminalAppearance.theme]?.background || '#1e1e1e',
+                      }),
                       color: terminalThemes[terminalAppearance.theme]?.foreground || '#d4d4d4',
-                      opacity: terminalAppearance.allowTransparency ? terminalAppearance.opacity / 100 : 1,
                     }}
                   >
                     {/* Background image layer */}
@@ -682,22 +684,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="editor" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Code2 className="h-4 w-4" />
-                  {t('settings.editor.title')}
-                </CardTitle>
-                <CardDescription>
-                  {t('settings.editor.desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.editor.title')} footer={t('settings.editor.desc')}>
                 {/* Theme & Font */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -824,22 +815,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     onCheckedChange={(checked) => setEditorConfig(prev => ({ ...prev, bracketMatching: checked }))}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="connection" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Network className="h-4 w-4" />
-                    {t('settings.connection.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('settings.connection.desc')}
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.connection.title')} footer={t('settings.connection.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="settings-connection-defaultProtocol">{t('settings.connection.defaultProtocol')}</Label>
@@ -887,22 +867,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     onCheckedChange={(checked) => updateSetting('autoReconnect', checked)}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="security" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    {t('settings.security.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('settings.security.desc')}
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.security.title')} footer={t('settings.security.desc')}>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-security-hostKeyVerification">{t('settings.security.hostKeyVerification')}</Label>
@@ -931,41 +900,34 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     {t('settings.security.autoLockTimeoutDesc')}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="interface" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Palette className="h-4 w-4" />
-                    {t('settings.interface.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('settings.interface.desc')}
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.interface.title')} footer={t('settings.interface.desc')}>
                 <div className="space-y-2">
-                  <Label htmlFor="settings-interface-appTheme">{t('settings.interface.appTheme')}</Label>
-                  <Select 
-                    value={settings.theme} 
-                    onValueChange={(value) => {
-                      updateSetting('theme', value);
-                      // Apply theme immediately for instant preview
-                      applyTheme(value as ThemeMode, settings.colorPalette);
-                    }}
+                  <Label id="settings-interface-appTheme">{t('settings.interface.appTheme')}</Label>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="settings-interface-appTheme"
+                    className="inline-flex h-7 rounded-[7px] bg-muted p-0.5"
                   >
-                    <SelectTrigger id="settings-interface-appTheme">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dark">{t('settings.theme.dark')}</SelectItem>
-                      <SelectItem value="light">{t('settings.theme.light')}</SelectItem>
-                      <SelectItem value="auto">{t('settings.theme.auto')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {(['light', 'dark', 'auto'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={settings.theme === mode}
+                        className={`h-6 rounded-[6px] px-3 text-[13px] ${settings.theme === mode ? 'bg-white text-foreground shadow-sm dark:bg-white/15' : 'text-muted-foreground'}`}
+                        onClick={() => {
+                          updateSetting('theme', mode);
+                          applyTheme(mode, settings.colorPalette);
+                        }}
+                      >
+                        {t(`settings.theme.${mode}`)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1032,14 +994,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                       onCheckedChange={(checked) => updateSetting('showSystemMonitor', checked)}
                     />
                   </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="settings-interface-statusBar">{t('settings.interface.statusBar')}</Label>
-                    <Switch id="settings-interface-statusBar"
-                      checked={settings.showStatusBar}
-                      onCheckedChange={(checked) => updateSetting('showStatusBar', checked)}
-                    />
-                  </div>
                 </div>
 
                 <Separator />
@@ -1056,22 +1010,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     onCheckedChange={(checked) => updateSetting('enableNotifications', checked)}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="keyboard" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Keyboard className="h-4 w-4" />
-                    {t('settings.keyboard.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('settings.keyboard.desc')}
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.keyboard.title')} footer={t('settings.keyboard.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('settings.keyboard.newSession')}</Label>
@@ -1115,22 +1058,11 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     {t('settings.keyboard.note')}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
 
           <TabsContent value="advanced" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    {t('settings.advanced.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('settings.advanced.desc')}
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <FormSection title={t('settings.advanced.title')} footer={t('settings.advanced.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="settings-advanced-logLevel">{t('settings.advanced.logLevel')}</Label>
@@ -1187,9 +1119,9 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                     />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </FormSection>
           </TabsContent>
+          </div>
         </Tabs>
 
         <div className="shrink-0 flex flex-wrap gap-2 justify-between px-5 py-3 border-t border-panel-border bg-panel-toolbar">

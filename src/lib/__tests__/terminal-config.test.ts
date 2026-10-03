@@ -11,6 +11,7 @@ import {
   MACOS_MULTILINGUAL_TERMINAL_FONT,
   migrateAppearanceSettings,
   terminalThemes,
+  terminalContainerBackground,
 } from '../terminal-config';
 
 describe('terminal multilingual font configuration', () => {
@@ -138,5 +139,22 @@ describe('palette-aware terminal backgrounds', () => {
     });
 
     expect(theme.background).toBe(terminalThemes['vs-code-light'].background);
+  });
+});
+
+describe('terminal container background', () => {
+  it('keeps the opaque colour unless transparency and native material are both on', () => {
+    expect(terminalContainerBackground({
+      allowTransparency: true,
+      nativeMaterial: false,
+      opacity: 80,
+      opaqueBackground: '#1e1e1e',
+    })).toBe('#1e1e1e');
+    expect(terminalContainerBackground({
+      allowTransparency: true,
+      nativeMaterial: true,
+      opacity: 80,
+      opaqueBackground: '#1e1e1e',
+    })).toBe('color-mix(in srgb, #1e1e1e 80%, transparent)');
   });
 });

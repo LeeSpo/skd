@@ -41,9 +41,11 @@ describe('LayoutManager quiet default', () => {
     } finally { log.mockRestore(); }
   });
 
-  it('keeps the full workspace available and resets only on request', () => {
-    expect(LayoutManager.applyPreset('Full Stack')).toMatchObject({
-      leftSidebarVisible: true, rightSidebarVisible: true, bottomPanelVisible: true,
+  it('keeps a saved workspace and resets only on request', () => {
+    LayoutManager.saveLayout({
+      leftSidebarVisible: true, leftSidebarSize: 18,
+      rightSidebarVisible: true, rightSidebarSize: 20,
+      bottomPanelVisible: true, bottomPanelSize: 35, zenMode: false,
     });
     expect(LayoutManager.loadLayout().bottomPanelVisible).toBe(true);
     expect(LayoutManager.resetLayout()).toMatchObject({

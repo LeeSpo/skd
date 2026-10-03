@@ -17,4 +17,19 @@ it('offers only functional native-button actions without decorative gradients', 
   expect(settings).toHaveBeenCalledOnce();
   expect(local).toHaveBeenCalledOnce();
   expect(container.querySelector('[class*="gradient"]')).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Recent' })).toBeNull();
+});
+
+it('lists recent connections and hides that column when the list is empty', () => {
+  const connect = vi.fn();
+  render(
+    <WelcomeScreen
+      onNewConnection={vi.fn()}
+      onOpenSettings={vi.fn()}
+      onQuickConnect={connect}
+      recentConnections={[{ id: 'db', name: 'prod-api', host: 'db.example', username: 'root' }]}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /prod-api/i }));
+  expect(connect).toHaveBeenCalledWith('db');
 });

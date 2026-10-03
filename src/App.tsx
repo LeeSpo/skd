@@ -2,11 +2,12 @@ import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } fro
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { MenuBar } from './components/menu-bar';
+import { ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { WindowToolbar } from './components/window-toolbar';
 import { WorkspaceLayout } from '@/components/workspace-layout';
 import { useWindowAppearance } from '@/lib/use-window-appearance';
 import { ConnectionManager } from './components/connection-manager';
-import { StatusBar } from './components/status-bar';
 import type { ConnectionConfig } from './components/connection-dialog';
 import { TerminalInputProvider } from './lib/terminal-input-context';
 import { WelcomeScreen } from './components/welcome-screen';
@@ -31,6 +32,8 @@ import { TerminalCallbacksProvider } from './lib/terminal-callbacks-context';
 import { StableTerminalGrid } from './components/terminal/grid-renderer';
 import { ErrorBoundary } from './components/error-boundary';
 import type { TerminalTab } from './lib/terminal-group-types';
+import { getTabDisplayName } from './lib/terminal-group-utils';
+import { sessionSubtitle } from './lib/session-chrome';
 import { Toaster } from './components/ui/sonner';
 import { HostKeyTrustDialog } from './components/host-key-trust-dialog';
 import { toast } from 'sonner';
@@ -222,7 +225,6 @@ function AppContent() {
     toggleBottomPanel,
     toggleZenMode,
     setBottomPanelSize,
-    applyPreset,
   } = useLayout();
 
   // Collect all tabs across all groups for compatibility with existing features
@@ -1458,16 +1460,11 @@ function AppContent() {
     }
   }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, handleConnectionDialogConnect, handleTabSelect, onHostKeyTrustRequired, state.activeGroupId, t]);
 
-  // Derive active connection info for StatusBar (compatible format)
-  const statusBarConnection = activeConnection ? {
-    name: activeConnection.name,
-    protocol: activeConnection.protocol || 'SSH',
-    host: activeConnection.host,
-    status: activeConnection.status,
-  } : undefined;
-
   // Check if there are any tabs across all groups
   const hasAnyTabs = allTabs.length > 0;
+  const hoistTabs = Object.keys(state.groups).length <= 1 && hasAnyTabs;
+  const sessionTitle = activeTab && activeGroup ? getTabDisplayName(activeTab, activeGroup.tabs) : undefined;
+  const sessionSubtitleText = activeTab && !hoistTabs ? sessionSubtitle(activeTab) : undefined;
   // Check if the grid has only one empty group (show welcome screen)
   const showWelcomeInMainArea = !hasAnyTabs && Object.keys(state.groups).length <= 1;
   // File-browser tabs don't need right sidebar (system monitor) or bottom panel (integrated file browser)
@@ -1492,6 +1489,7 @@ function AppContent() {
       requestClose({ type: 'close-tabs', tabs });
     },
     onOpenInEditorForTab: handleOpenInEditorForTab,
+    onOpenSettings: handleOpenSettings,
   }), [
     handleDuplicateTab,
     handleNewTab,
@@ -1501,6 +1499,7 @@ function AppContent() {
     handleEditConnectionForTab,
     handleTabClose,
     handleOpenInEditorForTab,
+    handleOpenSettings,
     requestClose,
   ]);
   const monitorActive =
@@ -1530,12 +1529,10 @@ function AppContent() {
           />
         )}
         toolbar={(
-          <MenuBar
-            workspaceTitle={activeConnection?.name}
-            groupId={state.activeGroupId}
-            onNewConnection={handleNewTab}
-            onNewLocalTerminal={handleNewLocalTab}
-            onOpenSavedConnection={handleOpenSavedConnection}
+          <WindowToolbar
+            workspaceTitle={sessionTitle}
+            workspaceSubtitle={sessionSubtitleText}
+            showSessionTitle={!hoistTabs}
             onOpenSettings={handleOpenSettings}
             onOpenPortForward={handleOpenPortForward}
             portForwardEnabled={canManagePortForward}
@@ -1543,7 +1540,6 @@ function AppContent() {
             onToggleRightSidebar={toggleRightSidebar}
             onToggleBottomPanel={toggleBottomPanel}
             onToggleZenMode={toggleZenMode}
-            onApplyPreset={applyPreset}
             leftSidebarVisible={layout.leftSidebarVisible}
             rightSidebarVisible={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels}
             bottomPanelVisible={layout.bottomPanelVisible && !hideBottomPanels}
@@ -1553,15 +1549,15 @@ function AppContent() {
           />
         )}
         inspector={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels ? (
-          <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="inspector-panel flex h-full min-h-0 flex-col gap-0 bg-surface-content">
-            <div className="flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-3">
-              <TabsList aria-label={t('app.systemMonitor')} className="h-7 w-full rounded-md bg-muted p-0.5">
-                <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="monitor">{t('app.monitor')}</TabsTrigger>
-                <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="logs">{t('app.logs')}</TabsTrigger>
+          <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="inspector-panel flex h-full min-h-0 flex-col gap-0 bg-transparent">
+            <div className="inspector-header flex h-9 shrink-0 items-center border-b border-panel-border px-3">
+              <TabsList aria-label={t('app.systemMonitor')} className="mx-auto h-7">
+                <TabsTrigger value="monitor">{t('app.monitor')}</TabsTrigger>
+                <TabsTrigger value="logs">{t('app.logs')}</TabsTrigger>
               </TabsList>
             </div>
 
-            <div className={tabContentWrapper("flex-1")}>
+            <div className={tabContentWrapper("inspector-body flex-1 bg-surface-content")}>
               <TabsContent value="monitor" forceMount className={tabContentPanel()}>
                 <div className="h-full overflow-hidden px-3 py-3">
                   {activeConnection ? (
@@ -1593,14 +1589,15 @@ function AppContent() {
             </div>
           </Tabs>
         ) : undefined}
-        status={<StatusBar activeConnection={statusBarConnection} />}
       >
-        <div className="h-full flex flex-col">
+        <div className="workspace-content-surface flex h-full flex-col">
           {showWelcomeInMainArea ? (
             <WelcomeScreen
               onNewConnection={handleNewTab}
               onNewLocalTerminal={handleNewLocalTab}
               onOpenSettings={handleOpenSettings}
+              recentConnections={recentConnections}
+              onQuickConnect={handleQuickConnect}
             />
           ) : (
             <ResizablePanelGroup direction="vertical" className="flex-1">
@@ -1628,16 +1625,27 @@ function AppContent() {
                     <Tabs
                       value={bottomPanelTab}
                       onValueChange={(value) => setBottomPanelTab(value as 'file-browser' | 'compose')}
-                      className="h-full flex flex-col"
+                      className="bottom-panel h-full flex flex-col bg-workspace"
                     >
-                      <TabsList variant="underline">
-                        <TabsTrigger variant="underline" value="file-browser">
-                          {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
-                        </TabsTrigger>
-                        <TabsTrigger variant="underline" value="compose">
-                          {t('app.composePane')}
-                        </TabsTrigger>
-                      </TabsList>
+                      <div className="relative flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-3">
+                        <TabsList aria-label={t('app.fileBrowser')} className="mx-auto h-7">
+                          <TabsTrigger value="file-browser">
+                            {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
+                          </TabsTrigger>
+                          <TabsTrigger value="compose">
+                            {t('app.composePane')}
+                          </TabsTrigger>
+                        </TabsList>
+                        <Button
+                          variant="ghost"
+                          size="menubar"
+                          className="absolute right-2"
+                          aria-label={t('menuBar.toggleBottomPanel')}
+                          onClick={toggleBottomPanel}
+                        >
+                          <ChevronDown className="size-4" />
+                        </Button>
+                      </div>
 
                       <div className={tabContentWrapper()}>
                         <TabsContent

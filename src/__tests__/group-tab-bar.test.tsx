@@ -14,10 +14,11 @@ const tabs: TerminalTab[] = ['connected', 'connecting', 'disconnected', 'pending
 }));
 
 describe('GroupTabBar visual pilot', () => {
-  it('renders inset editor tabs with a distinct active content fill', () => {
+  it('renders compact pane tabs with a distinct active content fill', () => {
     const { container } = render(<GroupTabBar groupId="g" tabs={tabs} activeTabId="0" />);
     const bar = container.querySelector('[data-tab-bar-group="g"]')?.parentElement;
-    expect(bar?.className).toContain('h-9');
+    expect(bar?.getAttribute('data-variant')).toBe('pane');
+    expect(bar?.className).toContain('h-[30px]');
     const active = container.querySelector('[data-tab-id="0"]');
     const idle = container.querySelector('[data-tab-id="1"]');
     expect(active?.className).toContain('bg-surface-content');
@@ -25,6 +26,21 @@ describe('GroupTabBar visual pilot', () => {
     expect(active?.className).toContain('shadow-sm');
     expect(idle?.className).toContain('text-muted-foreground');
     expect(idle?.className).toContain('hover:bg-surface-hover');
+  });
+
+  it('renders shared-width titlebar tabs and keeps them out of the window drag region', () => {
+    const { container } = render(<GroupTabBar variant="titlebar" groupId="g" tabs={tabs} activeTabId="0" />);
+    const bar = container.querySelector('[data-variant="titlebar"]');
+    expect(bar?.className).toContain('h-full');
+    expect(bar?.getAttribute('data-tauri-drag-region')).toBe('true');
+    const active = container.querySelector('[data-tab-id="0"]');
+    const idle = container.querySelector('[data-tab-id="1"]');
+    expect(active?.className).toContain('titlebar-tab-active');
+    expect(active?.className).toContain('min-w-[120px]');
+    expect(active?.getAttribute('data-tauri-drag-region')).toBe('false');
+    expect(idle?.className).toContain('titlebar-tab-idle');
+    expect(container.querySelector('.titlebar-tab-separator')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Close Host 1' }).getAttribute('data-tauri-drag-region')).toBe('false');
   });
 
   it('keeps abnormal states visible without a green dot on healthy tabs', () => {

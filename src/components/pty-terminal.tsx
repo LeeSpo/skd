@@ -11,6 +11,8 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   loadAppearanceSettings,
   getThemeAwareTerminalOptions,
+  getThemeAwareTerminalTheme,
+  terminalContainerBackground,
   TERMINAL_APPEARANCE_CHANGED_EVENT,
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
@@ -189,21 +191,45 @@ export function PtyTerminal({
     () => loadAppearanceSettings(),
     [appearanceKey, settingsRevision],
   );
-  const resolvedTerminalBackground =
-    getThemeAwareTerminalOptions(appearance).theme?.background ?? '#1e1e1e';
-  
-  // Track whether we need to switch renderers due to background image change
-  // This is necessary because WebGL renderer doesn't support transparency
+  const nativeMaterial = document.documentElement.dataset.nativeMaterial === 'true';
+  const opaqueTerminalBackground =
+    getThemeAwareTerminalTheme(appearance).background ?? '#1e1e1e';
+  const transparentBackground = appearance.allowTransparency && nativeMaterial;
+  const resolvedTerminalBackground = terminalContainerBackground({
+    allowTransparency: appearance.allowTransparency,
+    nativeMaterial,
+    opacity: appearance.opacity,
+    opaqueBackground: opaqueTerminalBackground,
+  });
+
+  // WebGL cannot clear a transparent background. Background images already
+  // force the canvas renderer for the same reason.
   const hasBackgroundImage = !!appearance.backgroundImage;
-  
-  // Remount when renderer mode changes — WebGL vs Canvas cannot be swapped in-place.
+
   const terminalKey = React.useMemo(() => {
     const renderer =
-      appearance.useWebglRenderer && !hasBackgroundImage ? 'webgl' : 'canvas';
+      appearance.useWebglRenderer && !hasBackgroundImage && !transparentBackground ? 'webgl' : 'canvas';
     const key = hasBackgroundImage ? 'bg' : 'no-bg';
     hadBackgroundImageRef.current = hasBackgroundImage;
-    return `${key}-${renderer}`;
-  }, [hasBackgroundImage, appearance.useWebglRenderer]);
+    return `${key}-${renderer}-${transparentBackground ? 'clear' : 'solid'}`;
+  }, [hasBackgroundImage, appearance.useWebglRenderer, transparentBackground]);
+
+  React.useEffect(() => {
+    if (!transparentBackground) return;
+    const root = document.documentElement;
+    const next = Number(root.dataset.terminalTranslucentCount ?? '0') + 1;
+    root.dataset.terminalTranslucentCount = String(next);
+    root.dataset.terminalTranslucent = 'true';
+    return () => {
+      const remaining = Number(root.dataset.terminalTranslucentCount ?? '1') - 1;
+      if (remaining <= 0) {
+        delete root.dataset.terminalTranslucentCount;
+        delete root.dataset.terminalTranslucent;
+      } else {
+        root.dataset.terminalTranslucentCount = String(remaining);
+      }
+    };
+  }, [transparentBackground]);
   
   React.useEffect(() => {
     if (!terminalRef.current) return;
@@ -1141,7 +1167,6 @@ export function PtyTerminal({
         xtermRef.current?.focus();
       }}
       style={{
-        opacity: appearance.allowTransparency ? appearance.opacity / 100 : 1,
         backgroundColor: resolvedTerminalBackground,
       }}
     >

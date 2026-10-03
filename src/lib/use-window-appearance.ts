@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -16,12 +16,32 @@ const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
 export function applyWindowAppearance(root: HTMLElement, state: WindowAppearance): void {
   // Increased contrast and reduced transparency both require opaque chrome.
   root.dataset.nativeMaterial = String(!state.reduceTransparency && !state.increaseContrast);
+  root.dataset.reduceTransparency = String(!!state.reduceTransparency);
   root.dataset.increaseContrast = String(!!state.increaseContrast);
   if (state.accentColor && ACCENT_PATTERN.test(state.accentColor)) {
     root.style.setProperty('--system-accent', state.accentColor);
   } else {
     root.style.removeProperty('--system-accent');
   }
+}
+
+/** True when Reduce Transparency or Increase Contrast requires an opaque terminal. */
+export function useBlocksTerminalTransparency(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-reduce-transparency', 'data-increase-contrast'],
+      });
+      return () => observer.disconnect();
+    },
+    () => {
+      const root = document.documentElement.dataset;
+      return root.reduceTransparency === 'true' || root.increaseContrast === 'true';
+    },
+    () => false,
+  );
 }
 
 /** Keep the native material, accent colour and web chrome in the same appearance. */
@@ -80,6 +100,7 @@ export function useWindowAppearance(): void {
       unlisteners.forEach(unlisten => unlisten());
       delete root.dataset.nativeMaterial;
       delete root.dataset.windowActive;
+      delete root.dataset.reduceTransparency;
       delete root.dataset.increaseContrast;
       root.style.removeProperty('--system-accent');
     };

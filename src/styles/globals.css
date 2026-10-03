@@ -77,6 +77,7 @@
   --radius-menu: 8px;
   --radius-sheet: 12px;
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
+  --grouped-bg: #f2f2f7;
 
   /* Chart colors */
   --chart-1: #2563eb;
@@ -200,6 +201,8 @@
   --surface-hover: #e8e8e8;
   --surface-content: #ffffff;
   --workspace-bg: #ffffff;
+  --sidebar-selection: var(--primary);
+  --sidebar-selection-foreground: #ffffff;
   --statusbar-bg: #f0f0f0;
   --drop-zone: color-mix(in srgb, var(--primary) 18%, transparent);
   --overlay: rgba(0, 0, 0, 0.18);
@@ -596,6 +599,8 @@
   --surface-hover: #303030;
   --surface-content: #1e1e1e;
   --workspace-bg: #1e1e1e;
+  --sidebar-selection: var(--primary);
+  --sidebar-selection-foreground: #ffffff;
   --statusbar-bg: #282828;
   --drop-zone: color-mix(in srgb, var(--primary) 22%, transparent);
   --overlay: rgba(0, 0, 0, 0.4);
@@ -713,10 +718,34 @@ body {
   box-shadow: var(--shadow-dialog);
 }
 
+.glass-menu {
+  background: var(--material-menu);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-radius: var(--radius-menu);
+}
+
 /* Floating layers fall back to opaque surfaces when the native material is off. */
-:root:not([data-native-material="true"]) .glass-menu {
+:root:not([data-native-material="true"]) .glass-menu,
+:root:not([data-native-material="true"]) .macos-sheet {
   background: var(--popover);
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+[data-slot="dropdown-menu-item"]:not([data-variant="destructive"]):focus [data-slot="dropdown-menu-shortcut"],
+[data-slot="context-menu-item"]:not([data-variant="destructive"]):focus [data-slot="context-menu-shortcut"] {
+  color: rgb(255 255 255 / 0.75);
+}
+
+.macos-sheet {
+  background: var(--material-sheet);
+  border-radius: var(--radius-sheet);
+}
+
+.macos-alert [data-slot="alert-dialog-header"] {
+  align-items: center;
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -783,6 +812,10 @@ body {
 /* Custom scrollbar styling */
 * {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
@@ -990,8 +1023,15 @@ html {
 
 .dark {
   --sidebar-tint: color-mix(in srgb, var(--sidebar) 46%, transparent);
+  --grouped-bg: rgb(255 255 255 / 0.05);
   --control-highlight: rgba(255, 255, 255, 0.06);
   --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+/* Later than the shared :root mix so System source lists use the accent fill. */
+:root[data-color-palette="system"] {
+  --sidebar-selection: var(--primary);
+  --sidebar-selection-foreground: #ffffff;
 }
 
 html[data-window-kind="main"],
@@ -1033,6 +1073,33 @@ html[data-window-kind="main"] body {
 
 .workspace-sidebar .bg-surface-selected {
   background: var(--sidebar-selection);
+  color: var(--sidebar-selection-foreground, var(--surface-selected-foreground));
+}
+
+.workspace-content-surface {
+  background: var(--workspace-bg);
+}
+
+[data-native-material="true"] .workspace-toolbar,
+[data-native-material="true"] .inspector-header {
+  background: var(--material-titlebar);
+}
+
+[data-native-material="true"] .inspector-panel {
+  background: var(--material-inspector);
+}
+
+.titlebar-tab-active {
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: var(--control-shadow);
+}
+
+.dark .titlebar-tab-active {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.titlebar-tab-idle:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
 .workspace-sidebar details {
@@ -1055,6 +1122,7 @@ html[data-window-kind="main"] body {
 
 [data-window-active="false"] .workspace-sidebar .bg-surface-selected {
   background: color-mix(in srgb, var(--foreground) 8%, var(--sidebar));
+  color: var(--sidebar-foreground);
 }
 
 .terminal-tab-strip {
@@ -1068,11 +1136,6 @@ html[data-window-kind="main"] body {
 .workspace-statusbar {
   border-top-color: var(--chrome-hairline);
   background: var(--workspace-bg);
-}
-
-/* Shared compact controls carry the same geometry through every feature. */
-[data-slot="button"]:not(:disabled):active {
-  transform: translateY(0.5px);
 }
 
 [data-slot="input"],
@@ -1132,12 +1195,29 @@ html[data-window-kind="main"] body {
   border-color: var(--chrome-hairline);
 }
 
-.finder-file-row:nth-child(even):not(.bg-accent) {
+.finder-file-row {
+  min-height: 22px;
+}
+
+.finder-file-row:nth-child(even):not([aria-selected="true"]) {
   background: color-mix(in srgb, var(--foreground) 2.5%, transparent);
 }
 
-.finder-file-row:hover:not(.bg-accent) {
+.finder-file-row:hover:not([aria-selected="true"]) {
   background: var(--surface-hover);
+}
+
+[data-terminal-translucent="true"] .workspace-content-surface {
+  background: transparent;
+}
+
+.bottom-panel,
+.inspector-body {
+  background: var(--workspace-bg);
+}
+
+[data-native-material="true"] .preferences-navigation {
+  background: var(--material-sidebar);
 }
 
 .inspector-panel [data-slot="card"] {

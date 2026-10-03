@@ -547,6 +547,18 @@ function isLightBackground(bg: string | undefined): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128;
 }
 
+/** Background for the terminal container. Text stays opaque; only the fill thins. */
+export function terminalContainerBackground(opts: {
+  allowTransparency: boolean;
+  nativeMaterial: boolean;
+  opacity: number;
+  opaqueBackground: string;
+}): string {
+  if (!opts.allowTransparency || !opts.nativeMaterial) return opts.opaqueBackground;
+  const amount = Math.min(100, Math.max(0, opts.opacity));
+  return `color-mix(in srgb, ${opts.opaqueBackground} ${amount}%, transparent)`;
+}
+
 export function getThemeAwareTerminalOptions(appearance: TerminalAppearanceSettings): ITerminalOptions {
   const theme = getThemeAwareTerminalTheme(appearance);
   const needsTransparency = appearance.allowTransparency || !!appearance.backgroundImage;

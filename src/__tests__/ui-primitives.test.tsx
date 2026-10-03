@@ -59,19 +59,19 @@ describe('PanelChrome', () => {
 });
 
 describe('Tabs variants', () => {
-  it('renders underline variant on list and trigger', () => {
+  it('renders the segmented control as the default tab list', () => {
     render(
       <Tabs defaultValue="a">
-        <TabsList variant="underline" data-testid="list">
-          <TabsTrigger variant="underline" value="a">
+        <TabsList data-testid="list">
+          <TabsTrigger value="a">
             Tab A
           </TabsTrigger>
         </TabsList>
       </Tabs>,
     );
-    expect(screen.getByTestId('list').getAttribute('data-variant')).toBe('underline');
-    expect(screen.getByRole('tab').getAttribute('data-variant')).toBe('underline');
-    expect(screen.getByTestId('list').className).toContain('border-b');
+    expect(screen.getByTestId('list').className).toContain('h-7');
+    expect(screen.getByTestId('list').className).toContain('rounded-[7px]');
+    expect(screen.getByRole('tab').className).toContain('data-[state=active]:bg-white');
   });
 });
 

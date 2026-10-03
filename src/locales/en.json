@@ -296,6 +296,7 @@
       "cursorBlinkDesc": "Enable cursor blinking animation",
       "allowTransparency": "Allow Transparency",
       "allowTransparencyDesc": "Enable transparent terminal background",
+      "transparencyBlocked": "Turn off Reduce Transparency or Increase Contrast in System Settings to use a translucent terminal.",
       "opacity": "Opacity: {{opacity}}%",
       "backgroundImage": "Background Image",
       "changeImage": "Change Image",
@@ -435,7 +436,9 @@
     "orPickFromSidebar": "Saved connections are always within reach in the sidebar.",
     "title": "Your workspace, connected.",
     "localTerminal": "Open a local terminal",
-    "localTerminalDesc": "Work with the shell on this Mac"
+    "localTerminalDesc": "Work with the shell on this Mac",
+    "recent": "Recent",
+    "version": "Version {{version}}"
   },
   "menuBar": {
     "file": "File",
@@ -474,12 +477,6 @@
     "minimize": "Minimize",
     "zoom": "Zoom",
     "fullscreen": "Enter Full Screen",
-    "layoutPresets": "Layout Presets",
-    "defaultLayout": "Default Layout",
-    "minimalTerminalOnly": "Minimal – Terminal Only",
-    "focusMode": "Focus Mode",
-    "fullStackAllPanels": "Full Stack – All Panels",
-    "zenMode": "Zen Mode",
     "toggleConnectionManager": "Toggle Connection Manager",
     "toggleBottomPanel": "Toggle Bottom Panel",
     "toggleFileBrowser": "Toggle File Browser",

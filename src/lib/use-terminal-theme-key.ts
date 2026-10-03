@@ -11,6 +11,8 @@ export function useTerminalThemeKey(): number {
         if (
           mutation.attributeName === 'class'
           || mutation.attributeName === 'data-color-palette'
+          || mutation.attributeName === 'data-native-material'
+          || mutation.attributeName === 'data-reduce-transparency'
           || mutation.attributeName === 'style'
         ) {
           setThemeKey((key) => key + 1);
@@ -21,7 +23,7 @@ export function useTerminalThemeKey(): number {
 
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class', 'data-color-palette', 'style'],
+      attributeFilter: ['class', 'data-color-palette', 'data-native-material', 'data-reduce-transparency', 'style'],
     });
 
     return () => observer.disconnect();
