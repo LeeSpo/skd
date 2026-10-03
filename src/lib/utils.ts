@@ -42,6 +42,7 @@ export function applyTheme(
   palette: ColorPalette = getSavedColorPalette(),
 ): void {
   const root = document.documentElement;
+  root.dataset.themeMode = theme;
   applyColorPalette(palette);
   
   if (theme === 'auto') {
@@ -91,7 +92,7 @@ export function initializeTheme(): void {
   applyTheme(theme, palette);
   
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    const currentTheme = getSavedTheme();
+    const currentTheme = document.documentElement.dataset.themeMode ?? getSavedTheme();
     if (currentTheme === 'auto') {
       document.documentElement.classList.toggle('dark', e.matches);
     }

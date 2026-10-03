@@ -1729,7 +1729,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
   }
 
   return (
-    <div className={`flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
+    <div className={`finder-browser flex h-full min-h-0 flex-col overflow-hidden bg-background ${resizingColumn ? 'cursor-col-resize select-none' : ''}`}>
       <PanelToolbar className={`${FILE_BROWSER_CHROME_TEXT} h-auto min-h-9 gap-1 overflow-x-auto whitespace-nowrap py-1 scrollbar-none`}>
           <Button
             variant={treeVisible ? 'secondary' : 'ghost'}
@@ -1965,7 +1965,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
       </PanelToolbar>
 
       {/* File List + Directory Tree */}
-      <div className="min-h-0 flex-1 overflow-hidden border-x border-b border-panel-border bg-background">
+      <div className="min-h-0 flex-1 overflow-hidden bg-background">
         <ResizablePanelGroup
           direction="horizontal"
           autoSaveId="integrated-file-browser-split"
@@ -2013,8 +2013,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                 <div className="absolute inset-0 bg-accent/20 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
                   <div className="bg-background/90 rounded-xl p-6 shadow-dialog">
                     <Upload className="h-12 w-12 mx-auto mb-3 text-primary" />
-                    <p className="font-medium">Drop files or folders to upload</p>
-                    <p className="text-sm text-muted-foreground mt-1">Upload to {currentPath}</p>
+                    <p className="font-medium">{t('fileBrowser.dropUpload')}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{t('fileBrowser.uploadTo', { path: currentPath })}</p>
                   </div>
                 </div>
               )}
@@ -2105,7 +2105,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         <ContextMenu key={file.path}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className={`${FILE_BROWSER_LIST_TEXT} flex cursor-pointer select-none gap-2 px-2 py-px hover:bg-muted/50 ${
+                              className={`${FILE_BROWSER_LIST_TEXT} finder-file-row flex min-h-6 cursor-pointer select-none items-center gap-2 px-2 py-0.5 hover:bg-muted/50 ${
                                 selectedFiles.has(file.name) ? 'bg-accent' : ''
                               }`}
                               role="row"

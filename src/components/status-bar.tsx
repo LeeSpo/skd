@@ -29,7 +29,7 @@ export function StatusBar({ activeConnection }: StatusBarProps) {
     t('statusBar.disconnected')
   );
   return (
-    <div className="flex h-[22px] shrink-0 items-center justify-between gap-4 border-t border-panel-border bg-statusbar px-3 text-[12px] text-muted-foreground">
+    <div className="workspace-statusbar flex h-6 shrink-0 items-center justify-between gap-4 border-t border-panel-border bg-statusbar px-3 text-[11px] text-muted-foreground">
       <div className="flex min-w-0 items-center gap-3">
         {activeConnection && (
           <>

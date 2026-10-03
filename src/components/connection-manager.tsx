@@ -447,7 +447,7 @@ export function ConnectionManager({
       <div
         className={cn(
           treeRowState({ selected: isSelected, variant: 'sidebar' }),
-          'min-h-8 gap-1.5 py-1 pr-2 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
+          'min-h-7 gap-1.5 py-0.5 pr-2 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
           isDragging && 'opacity-50',
         )}
         style={treeIndent(level, 4, 12)}
@@ -611,11 +611,11 @@ export function ConnectionManager({
 
   return (
     <>
-    <div className="flex h-full min-w-0 flex-col bg-sidebar">
+    <div className="connection-browser flex h-full min-w-0 flex-col bg-transparent">
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col select-none">
-        <PanelHeader tone="sidebar" className="h-11 shrink-0 gap-1 border-b-0 px-3">
-          <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-sidebar-foreground">
+        <PanelHeader tone="sidebar" className="h-9 shrink-0 gap-1 border-b-0 px-3">
+          <h3 className="min-w-0 flex-1 truncate text-[11px] font-semibold text-muted-foreground">
             {t('connectionManager.connectionsHeader')}
           </h3>
 
@@ -679,9 +679,9 @@ export function ConnectionManager({
 
           </TooltipProvider>
         </PanelHeader>
-        <div className="space-y-2 px-3 pb-3 pt-2">
+        <div className="space-y-2 px-3 pb-2 pt-1">
           <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-muted-foreground" />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-[7px] size-3.5 text-muted-foreground" />
             <Input
               aria-label={t('connectionManager.searchConnections')}
               placeholder={t('connectionManager.searchConnections')}
@@ -694,10 +694,10 @@ export function ConnectionManager({
                   setSearch('');
                 }
               }}
-              className="h-8 pl-8 pr-7 text-xs"
+              className="sidebar-search h-7 pl-8 pr-7 text-xs"
             />
             {search && (
-              <Button variant="ghost" size="toolbar" className="absolute right-1 top-1 size-6" aria-label={t('common.clear')} onClick={() => setSearch('')}>
+              <Button variant="ghost" size="toolbar" className="absolute right-0.5 top-0.5 size-6" aria-label={t('common.clear')} onClick={() => setSearch('')}>
                 <X className="size-3" />
               </Button>
             )}

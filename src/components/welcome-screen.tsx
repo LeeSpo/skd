@@ -12,16 +12,16 @@ export function WelcomeScreen({ onNewConnection, onNewLocalTerminal, onOpenSetti
   const { t } = useTranslation();
 
   return (
-    <div className="flex h-full overflow-auto bg-workspace">
-      <div className="m-auto w-full max-w-lg px-8 py-10">
-        <div className="mb-7 flex size-16 items-center justify-center rounded-2xl border border-border bg-surface-raised shadow-sm">
+    <div className="welcome-workspace flex h-full overflow-auto bg-workspace">
+      <div className="m-auto w-full max-w-md px-8 py-10">
+        <div className="mb-6 flex size-14 items-center justify-center rounded-xl bg-secondary">
           <Terminal className="size-8 text-foreground" strokeWidth={1.5} aria-hidden="true" />
         </div>
-        <h1 className="text-[28px] font-semibold tracking-tight">{t('welcome.title')}</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight">{t('welcome.title')}</h1>
         <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-muted-foreground">{t('welcome.getStartedDesc')}</p>
 
-        <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
-          <Button variant="ghost" onClick={onNewConnection} className="h-auto w-full justify-start gap-3 rounded-none px-4 py-4 text-left">
+        <div className="mt-7 overflow-hidden rounded-lg bg-card">
+          <Button variant="ghost" onClick={onNewConnection} className="h-auto w-full justify-start gap-3 rounded-none px-4 py-3.5 text-left">
             <Server className="size-5 text-primary" strokeWidth={1.5} aria-hidden="true" />
             <span className="min-w-0 flex-1">
               <span className="block text-[13px]">{t('welcome.newConnection')}</span>
@@ -30,7 +30,7 @@ export function WelcomeScreen({ onNewConnection, onNewLocalTerminal, onOpenSetti
             <ArrowUpRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Button>
           {onNewLocalTerminal && (
-            <Button variant="ghost" onClick={onNewLocalTerminal} className="h-auto w-full justify-start gap-3 rounded-none border-t border-panel-border px-4 py-4 text-left">
+            <Button variant="ghost" onClick={onNewLocalTerminal} className="h-auto w-full justify-start gap-3 rounded-none border-t border-panel-border px-4 py-3.5 text-left">
               <Terminal className="size-5 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px]">{t('welcome.localTerminal')}</span>

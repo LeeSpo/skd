@@ -876,3 +876,196 @@ html {
   color: var(--muted-foreground);
   background: var(--input-background);
 }
+
+/* Window material is AppKit behind the webview. Only the navigation column
+   exposes it; terminal, tools and floating surfaces remain readable solids. */
+:root {
+  --sidebar-tint: color-mix(in srgb, var(--sidebar) 58%, transparent);
+  --sidebar-opaque: var(--sidebar);
+  --sidebar-selection: color-mix(in srgb, var(--primary) 16%, var(--sidebar));
+  --chrome-hairline: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --control-highlight: rgba(255, 255, 255, 0.45);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --sidebar-tint: color-mix(in srgb, var(--sidebar) 46%, transparent);
+  --control-highlight: rgba(255, 255, 255, 0.06);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+html[data-window-kind="main"],
+html[data-window-kind="main"] body {
+  background: transparent;
+}
+
+.workspace-shell {
+  background: var(--workspace-bg);
+}
+
+[data-native-material="true"] .workspace-shell {
+  background: transparent;
+}
+
+.workspace-sidebar {
+  background: var(--sidebar-opaque);
+  color: var(--sidebar-foreground);
+}
+
+[data-native-material="true"] .workspace-sidebar {
+  background: var(--sidebar-tint);
+}
+
+.workspace-sidebar .panel-header {
+  background: transparent;
+}
+
+.workspace-sidebar .sidebar-search {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.workspace-sidebar .sidebar-search:focus-visible {
+  border-color: var(--ring);
+  background: var(--input-background);
+}
+
+.workspace-sidebar .bg-surface-selected {
+  background: var(--sidebar-selection);
+}
+
+.workspace-sidebar details {
+  border-color: var(--chrome-hairline);
+}
+
+.sidebar-footer {
+  box-shadow: 0 -1px 0 var(--chrome-hairline);
+}
+
+.workspace-toolbar {
+  background: var(--panel-header-bg);
+  border-bottom: 1px solid var(--chrome-hairline);
+}
+
+[data-window-active="false"] .window-chrome,
+[data-window-active="false"] .sidebar-footer {
+  color: var(--muted-foreground);
+}
+
+[data-window-active="false"] .workspace-sidebar .bg-surface-selected {
+  background: color-mix(in srgb, var(--foreground) 8%, var(--sidebar));
+}
+
+.terminal-tab-strip {
+  border-bottom-color: var(--chrome-hairline);
+}
+
+.terminal-tab:has([aria-pressed="true"]) {
+  box-shadow: var(--control-shadow), inset 0 1px 0 var(--control-highlight);
+}
+
+.workspace-statusbar {
+  border-top-color: var(--chrome-hairline);
+  background: var(--workspace-bg);
+}
+
+/* Shared compact controls carry the same geometry through every feature. */
+[data-slot="button"]:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+[data-slot="input"],
+[data-slot="select-trigger"],
+[data-slot="textarea"] {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.025);
+}
+
+[data-slot="switch-thumb"] {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+[data-slot="tabs-trigger"][data-state="active"] {
+  box-shadow: var(--control-shadow), inset 0 1px 0 var(--control-highlight);
+}
+
+[data-slot="tabs-trigger"][data-variant="underline"],
+[data-slot="tabs-list"][aria-orientation="vertical"] [data-slot="tabs-trigger"] {
+  box-shadow: none;
+}
+
+[data-slot="dropdown-menu-content"],
+[data-slot="context-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="context-menu-sub-content"],
+[data-slot="select-content"],
+[data-slot="popover-content"] {
+  border-color: var(--chrome-hairline);
+  box-shadow: var(--shadow-menu), inset 0 1px 0 var(--control-highlight);
+}
+
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  box-shadow: var(--shadow-dialog), 0 24px 80px rgba(0, 0, 0, 0.18);
+}
+
+.preferences-dialog [data-slot="dialog-header"],
+.connection-dialog [data-slot="dialog-header"] {
+  background: var(--panel-header-bg);
+}
+
+.preferences-content [data-slot="card"] {
+  gap: 20px;
+}
+
+.preferences-content [data-slot="card-title"] {
+  font-size: 13px;
+}
+
+.preferences-content [data-slot="card-content"] > .border {
+  border-color: var(--chrome-hairline);
+  background: var(--surface-raised);
+}
+
+.finder-browser .panel-toolbar {
+  background: var(--panel-toolbar-bg);
+  border-color: var(--chrome-hairline);
+}
+
+.finder-file-row:nth-child(even):not(.bg-accent) {
+  background: color-mix(in srgb, var(--foreground) 2.5%, transparent);
+}
+
+.finder-file-row:hover:not(.bg-accent) {
+  background: var(--surface-hover);
+}
+
+.inspector-panel [data-slot="card"] {
+  border: 0;
+  border-bottom: 1px solid var(--chrome-hairline);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.inspector-panel [data-slot="card-header"] {
+  padding: 12px 0 0;
+}
+
+.inspector-panel [data-slot="card-content"] {
+  padding: 0 0 12px;
+}
+
+[data-sonner-toast] {
+  font-family: var(--font-sans);
+  border-radius: 10px;
+}
+
+@media (prefers-contrast: more) {
+  .workspace-sidebar {
+    background: var(--sidebar-opaque) !important;
+  }
+  :root {
+    --chrome-hairline: var(--muted-foreground);
+  }
+}

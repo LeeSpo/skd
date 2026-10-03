@@ -200,7 +200,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const handlePaletteChange = (colorPalette: ColorPalette) => {
     updateSetting('colorPalette', colorPalette);
     applyColorPalette(colorPalette);
-    updateTerminalAppearance('theme', PALETTE_TERMINAL_THEMES[colorPalette]);
   };
 
   const handleCancel = () => {
@@ -294,13 +293,13 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     { value: 'advanced', icon: Monitor, labelKey: 'settings.tab.advanced' },
   ] as const;
 
-  const tabContentClassName = 'flex-1 min-w-0 min-h-0 px-5 py-5 space-y-4 mt-0 overflow-y-auto [&>[data-slot=card]]:border-0 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:shadow-none [&>[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-header]]:pt-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-content]]:pb-0 [&_[data-slot=card-title]]:text-sm';
+  const tabContentClassName = 'preferences-content flex-1 min-w-0 min-h-0 px-5 py-5 space-y-4 mt-0 overflow-y-auto [&>[data-slot=card]]:border-0 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:shadow-none [&>[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-header]]:pt-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-content]]:pb-0 [&_[data-slot=card-title]]:text-sm';
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         position="tauriTall"
-        className="w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl"
+        className="preferences-dialog w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl"
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -318,7 +317,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           orientation="vertical"
           className="flex flex-row gap-0 flex-1 min-h-0 overflow-hidden"
         >
-          <div className="w-36 sm:w-44 shrink-0 overflow-y-auto border-r border-panel-border bg-sidebar p-2">
+          <div className="preferences-navigation w-36 sm:w-44 shrink-0 overflow-y-auto border-r border-panel-border bg-sidebar p-3">
             <TabsList
               aria-label={t('settings.title')}
               className="flex w-full flex-col items-stretch justify-start rounded-none bg-transparent h-auto p-0 gap-1"
@@ -327,7 +326,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-foreground data-[state=active]:shadow-none px-3 py-2 text-[13px] transition-colors motion-reduce:transition-none"
+                  className="w-full flex-none justify-start gap-2 rounded-md border-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover data-[state=active]:bg-surface-selected data-[state=active]:text-foreground data-[state=active]:shadow-none px-3 py-1.5 text-[13px] transition-colors motion-reduce:transition-none"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span>{t(labelKey)}</span>

@@ -3774,3 +3774,16 @@ mod local_fs_tests {
         assert_eq!(s, "2024-01-01 00:00:00");
     }
 }
+
+/// Query AppKit on its main thread; used only for window chrome accessibility.
+#[tauri::command]
+pub async fn get_window_accessibility(
+    app: AppHandle,
+) -> Result<crate::window_appearance::WindowAccessibility, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(crate::window_appearance::accessibility());
+    })
+    .map_err(|error| error.to_string())?;
+    receiver.await.map_err(|error| error.to_string())
+}

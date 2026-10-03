@@ -22,7 +22,7 @@ function Tabs({
 const tabsListVariants = cva("inline-flex items-center justify-center", {
   variants: {
     variant: {
-      pill: "bg-muted text-muted-foreground h-9 w-fit rounded-xl p-[3px] flex",
+      pill: "bg-muted text-muted-foreground h-8 w-fit rounded-md p-[3px] flex",
       underline:
         "h-[35px] w-full justify-start rounded-none border-b border-border bg-transparent p-0",
     },
@@ -37,7 +37,7 @@ const tabsTriggerVariants = cva(
   {
     variants: {
       variant: {
-        pill: "data-[state=active]:bg-card dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-primary/40 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground h-[calc(100%-1px)] flex-1 rounded-md border border-transparent px-2 py-1 text-sm focus-visible:ring-[2px] focus-visible:outline-1",
+        pill: "data-[state=active]:bg-card dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-primary/40 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-surface-raised text-foreground dark:text-muted-foreground h-[calc(100%-1px)] flex-1 rounded-md border border-transparent px-2.5 py-1 text-[13px] focus-visible:ring-[2px] focus-visible:outline-1",
         underline:
           "relative h-[35px] rounded-none border-b-2 border-transparent bg-transparent px-3 py-1 text-xs text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none",
       },

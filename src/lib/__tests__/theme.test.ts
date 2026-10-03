@@ -16,6 +16,7 @@ describe('workspace color palettes', () => {
     localStorage.clear();
     document.documentElement.className = '';
     delete document.documentElement.dataset.colorPalette;
+    delete document.documentElement.dataset.themeMode;
     changeListeners.length = 0;
     vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({
       matches: false,
@@ -77,5 +78,19 @@ describe('workspace color palettes', () => {
       nordic: 'nord',
       cupertino: 'vs-code-dark',
     });
+  });
+
+  it('follows the previewed appearance mode without overwriting the saved mode', () => {
+    localStorage.setItem('sshClientSettings', JSON.stringify({ theme: 'dark' }));
+    initializeTheme();
+    applyTheme('auto');
+    changeListeners[0]?.({ matches: true } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    changeListeners[0]?.({ matches: false } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    applyTheme('dark');
+    changeListeners[0]?.({ matches: false } as MediaQueryListEvent);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('sshClientSettings')!)).toEqual({ theme: 'dark' });
   });
 });

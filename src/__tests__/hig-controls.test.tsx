@@ -33,10 +33,10 @@ describe('shared control focus and density', () => {
       expect(field.classList.contains('rounded-md')).toBe(true);
       expect(field.classList.contains('text-[13px]')).toBe(true);
     }
-    expect(input.classList.contains('h-9')).toBe(true);
+    expect(input.classList.contains('h-8')).toBe(true);
     expect(textarea.classList.contains('min-h-16')).toBe(true);
     expect(select.getAttribute('data-size')).toBe('default');
-    expect(select.classList.contains('data-[size=default]:h-9')).toBe(true);
+    expect(select.classList.contains('data-[size=default]:h-8')).toBe(true);
   });
 
   it.each(['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'] as const)(
@@ -51,8 +51,8 @@ describe('shared control focus and density', () => {
   );
 
   it.each([
-    ['default', 'h-9'], ['sm', 'h-8'], ['lg', 'h-10'],
-    ['icon', 'size-9'], ['toolbar', 'size-6'], ['menubar', 'size-[26px]'],
+    ['default', 'h-8'], ['sm', 'h-8'], ['lg', 'h-10'],
+    ['icon', 'size-8'], ['toolbar', 'size-6'], ['menubar', 'size-[26px]'],
   ] as const)('preserves the %s button size rather than imposing one height', (size, density) => {
     render(<Button size={size}>Action</Button>);
     expect(screen.getByRole('button', { name: 'Action' }).classList.contains(density)).toBe(true);
@@ -62,7 +62,7 @@ describe('shared control focus and density', () => {
     render(<Select disabled><SelectTrigger size="sm" aria-label="Protocol"><SelectValue placeholder="Choose" /></SelectTrigger></Select>);
     const select = screen.getByRole('combobox', { name: 'Protocol' }) as HTMLButtonElement;
     expect(select.getAttribute('data-size')).toBe('sm');
-    expect(select.classList.contains('data-[size=sm]:h-8')).toBe(true);
+    expect(select.classList.contains('data-[size=sm]:h-7')).toBe(true);
     expect(select.disabled).toBe(true);
   });
 

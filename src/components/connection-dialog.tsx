@@ -739,7 +739,7 @@ export function ConnectionDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         position="tauriTall"
-        className="h-[min(680px,85vh)] w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-[760px]"
+        className="connection-dialog h-[min(680px,85vh)] w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-[680px]"
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
           <DialogTitle className="flex items-center gap-2 text-base">

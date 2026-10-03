@@ -1,6 +1,43 @@
 # skd visual baseline
 
-## Current direction — macOS × Cursor (2026-09-18)
+## Current direction — macOS workspace (2026-10-03)
+
+The workspace now uses a full-height host sidebar beside a solid terminal column. Native macOS sidebar material shows through the transparent main webview; controls remain React/Radix, and terminal rendering remains xterm.js. The layout draws on [Enso](https://github.com/amanfromsolan/enso) and the Apple toolbar/sidebar guidance linked below. It does not require a SwiftUI rewrite.
+
+### Geometry and behavior
+
+| Element | Current decision |
+| --- | --- |
+| Host sidebar | Full window height, 200–360 CSS px when resizing; native traffic lights have an 80px inset; search and compact 28px rows; preferences in the footer |
+| Main column | Opaque terminal/content surfaces; 44px toolbar, 36px terminal tab strip with 28px inset tabs, 24px status bar |
+| Toolbar | Session title, panel toggles, new-session menu and More Actions; layout presets, Zen mode and port forwarding remain available |
+| Tools | Files and Compose below the terminal; monitor/logs in the right inspector; existing visibility, layout presets and stored sizes remain authoritative |
+| Controls | System typography, 13px menu/form text, 32px default buttons/fields, restrained shadows and segmented controls; no enclosing cards around workspace panes |
+| Dialogs | Settings categories beside independently scrolling content; connection form bounded to 680px width; both retain fixed action footers and viewport-safe centering |
+| Files | Compact aligned rows, subtle alternating backgrounds, single navigation toolbar and existing filter/transfer behavior |
+
+Graphite, Midnight, Nordic and Cupertino retain their palette tokens and light/dark support. Choosing an interface palette no longer changes the terminal theme. Existing ANSI colors, font preferences, connection records, shortcuts and session serialization are preserved. Layout toggles retain the mounted terminal subtree.
+
+### Native material and fallback
+
+- Tauri applies the AppKit `sidebar` window effect with `followsWindowActiveState`. Only the sidebar exposes the effect; the main content and floating menus/dialogs remain opaque.
+- The main window uses Tauri's `macos-private-api` feature and `macOSPrivateApi` configuration for transparency. This implementation targets the existing macOS `.app`/`.dmg` distribution path; App Store compatibility is not part of this change.
+- The native appearance follows explicit light/dark previews. Automatic mode clears the native override so macOS can continue following the system; cancellation restores the saved mode without rewriting preferences.
+- AppKit's Reduce Transparency preference is queried on the main thread and observed live. Browser previews, native bridge failure and increased contrast use an opaque sidebar fallback. Inactive windows use quieter chrome and selection.
+- The separate file-viewer window keeps its opaque root and does not initialize the sidebar appearance bridge.
+
+### Verification
+
+- Frontend tests cover terminal mount continuity through sidebar/inspector toggles, saved layout state, native appearance preview/cancellation, automatic mode, accessibility changes and subscription cleanup. Existing theme, connection, terminal, file-browser and control tests remain in the full suite.
+- Native inspection before the user requested stopping Computer Use covered the source-built application at approximately 1280×800 and 960×600: settings and connection-form scrolling/footer reachability, all four dark palette previews, light Graphite/Cupertino previews, cancellation and the local file panel. Local terminal output survived resizing, panel toggles and appearance previews; pasted Chinese and spaces rendered correctly.
+- The final 200px sidebar constraint was code-reviewed; the automatic-mode correction has regression tests. The final source was built after Computer Use stopped. Actual system preference changes, full-screen transitions, composed IME input, VoiceOver and live remote SSH/SFTP transfers were not manually verified in this pass. Native screenshots are not a complete rendered contrast audit.
+- Final `bun run test`: 72 files and 634 tests passed. `bun run lint`: 0 errors, 180 existing warnings. `bun run tauri build --debug --bundles app`: TypeScript, Vite, Rust and macOS application bundling succeeded. `git diff --check`: clean. Existing jsdom canvas diagnostics and Vite's large-chunk advisory remain.
+- Rust test results: 154 passed; three existing local-delete-to-Trash tests failed. All three failures were reproduced against the unmodified HEAD in a separate temporary source copy: `test_delete_local_file`, `test_delete_local_directory`, `test_delete_local_file_moves_to_trash`.
+- Debug application bundle: `src-tauri/target/debug/bundle/macos/skd.app`. No release, upload or commit was created.
+
+The sections below are historical. Their earlier geometry, test totals and review gates do not describe the current implementation; this section supersedes them for the areas changed above.
+
+## Previous direction — macOS × Cursor (2026-09-18)
 
 macOS-informed structure with a Cursor-inspired neutral palette. Graphite uses a dark content canvas, slightly lighter window chrome, and raised floating surfaces. Keep terminal content primary, with system typography, restrained blue actions, inset selected rows and tabs, and visible keyboard focus. Existing palettes, saved layout and terminal ANSI/font choices remain user-controlled.
 

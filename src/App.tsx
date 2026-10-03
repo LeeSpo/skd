@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { MenuBar } from './components/menu-bar';
+import { WorkspaceLayout } from '@/components/workspace-layout';
+import { useWindowAppearance } from '@/lib/use-window-appearance';
 import { ConnectionManager } from './components/connection-manager';
 import { StatusBar } from './components/status-bar';
 import type { ConnectionConfig } from './components/connection-dialog';
@@ -107,6 +109,7 @@ interface ConnectionNode {
 }
 
 function AppContent() {
+  useWindowAppearance();
   const { t } = useTranslation();
   const [selectedConnection, setSelectedConnection] = useState<ConnectionNode | null>(null);
 
@@ -218,8 +221,6 @@ function AppContent() {
     toggleRightSidebar,
     toggleBottomPanel,
     toggleZenMode,
-    setLeftSidebarSize,
-    setRightSidebarSize,
     setBottomPanelSize,
     applyPreset,
   } = useLayout();
@@ -1509,215 +1510,181 @@ function AppContent() {
     && !hideRightPanels;
 
   return (
-    <div className="h-screen flex flex-col bg-workspace">
+    <div className="h-screen overflow-hidden text-foreground">
       <Suspense fallback={null}>
         <UpdateChecker checkSignal={updateCheckSignal} />
       </Suspense>
-      <MenuBar
-        workspaceTitle={activeConnection?.name}
+      <WorkspaceLayout
         onOpenSettings={handleOpenSettings}
-        onOpenPortForward={handleOpenPortForward}
-        portForwardEnabled={canManagePortForward}
-        onToggleLeftSidebar={toggleLeftSidebar}
-        onToggleRightSidebar={toggleRightSidebar}
-        onToggleBottomPanel={toggleBottomPanel}
-        onToggleZenMode={toggleZenMode}
-        onApplyPreset={applyPreset}
-        leftSidebarVisible={layout.leftSidebarVisible}
-        rightSidebarVisible={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels}
-        bottomPanelVisible={layout.bottomPanelVisible && !hideBottomPanels}
-        showBottomPanelToggle={showBottomPanelToggle}
-        showRightPanelToggle={showRightPanelToggle}
-        zenMode={layout.zenMode}
-      />
+        sidebar={(
+          <ConnectionManager
+            onConnectionSelect={handleConnectionSelect}
+            onConnectionConnect={handleConnectionConnect}
+            selectedConnectionId={selectedConnection?.id || null}
+            activeConnections={activeConnectionIds}
+            onNewConnection={handleNewTab}
+            onNewLocalTerminal={handleNewLocalTab}
+            onEditConnection={handleEditConnection}
+            recentConnections={recentConnections}
+            onQuickConnect={handleQuickConnect}
+          />
+        )}
+        toolbar={(
+          <MenuBar
+            workspaceTitle={activeConnection?.name}
+            groupId={state.activeGroupId}
+            onNewConnection={handleNewTab}
+            onNewLocalTerminal={handleNewLocalTab}
+            onOpenSavedConnection={handleOpenSavedConnection}
+            onOpenSettings={handleOpenSettings}
+            onOpenPortForward={handleOpenPortForward}
+            portForwardEnabled={canManagePortForward}
+            onToggleLeftSidebar={toggleLeftSidebar}
+            onToggleRightSidebar={toggleRightSidebar}
+            onToggleBottomPanel={toggleBottomPanel}
+            onToggleZenMode={toggleZenMode}
+            onApplyPreset={applyPreset}
+            leftSidebarVisible={layout.leftSidebarVisible}
+            rightSidebarVisible={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels}
+            bottomPanelVisible={layout.bottomPanelVisible && !hideBottomPanels}
+            showBottomPanelToggle={showBottomPanelToggle}
+            showRightPanelToggle={showRightPanelToggle}
+            zenMode={layout.zenMode}
+          />
+        )}
+        inspector={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels ? (
+          <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="inspector-panel flex h-full min-h-0 flex-col gap-0 bg-surface-content">
+            <div className="flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-3">
+              <TabsList aria-label={t('app.systemMonitor')} className="h-7 w-full rounded-md bg-muted p-0.5">
+                <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="monitor">{t('app.monitor')}</TabsTrigger>
+                <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="logs">{t('app.logs')}</TabsTrigger>
+              </TabsList>
+            </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" autoSaveId="skd-main-layout">
-          {/* Left Sidebar - Connection Manager */}
-          {layout.leftSidebarVisible && (
-            <>
-              <ResizablePanel
-                id="left-sidebar"
-                order={1}
-                defaultSize={layout.leftSidebarSize}
-                minSize={16}
-                maxSize={30}
-                onResize={(size) => setLeftSidebarSize(size)}
-              >
-                <ConnectionManager
-                  onConnectionSelect={handleConnectionSelect}
-                  onConnectionConnect={handleConnectionConnect}
-                  selectedConnectionId={selectedConnection?.id || null}
-                  activeConnections={activeConnectionIds}
-                  onNewConnection={handleNewTab}
-                  onNewLocalTerminal={handleNewLocalTab}
-                  onEditConnection={handleEditConnection}
-                  recentConnections={recentConnections}
-                  onQuickConnect={handleQuickConnect}
-                />
+            <div className={tabContentWrapper("flex-1")}>
+              <TabsContent value="monitor" forceMount className={tabContentPanel()}>
+                <div className="h-full overflow-hidden px-3 py-3">
+                  {activeConnection ? (
+                    <ErrorBoundary label={t('app.systemMonitor')}>
+                      <Suspense fallback={<PanelSurfaceFallback />}>
+                        <SystemMonitor
+                          connectionId={activeConnection.connectionId}
+                          active={monitorActive}
+                        />
+                      </Suspense>
+                    </ErrorBoundary>
+                  ) : null}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="logs" className={tabContentPanel()}>
+                {activeConnection ? (
+                  <ErrorBoundary label={t('app.logMonitor')}>
+                    <Suspense fallback={<PanelSurfaceFallback />}>
+                      <LogMonitor
+                        connectionId={activeConnection.connectionId}
+                        externalLogPath={externalLogPath}
+                        externalLogPathKey={externalLogPathKey}
+                      />
+                    </Suspense>
+                  </ErrorBoundary>
+                ) : null}
+              </TabsContent>
+            </div>
+          </Tabs>
+        ) : undefined}
+        status={<StatusBar activeConnection={statusBarConnection} />}
+      >
+        <div className="h-full flex flex-col">
+          {showWelcomeInMainArea ? (
+            <WelcomeScreen
+              onNewConnection={handleNewTab}
+              onNewLocalTerminal={handleNewLocalTab}
+              onOpenSettings={handleOpenSettings}
+            />
+          ) : (
+            <ResizablePanelGroup direction="vertical" className="flex-1">
+              {/* Terminal Grid Panel */}
+              <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
+                <TerminalCallbacksProvider value={terminalCallbacks}>
+                  <ErrorBoundary label="Terminal">
+                    <StableTerminalGrid />
+                  </ErrorBoundary>
+                </TerminalCallbacksProvider>
               </ResizablePanel>
 
-              <ResizableHandle dividerTone="sidebar" />
-            </>
-          )}
+              {layout.bottomPanelVisible && !hideBottomPanels && activeConnection && (
+                <>
+                  <ResizableHandle dividerTone="panel" />
 
-          {/* Main Content - Grid Renderer replaces ConnectionTabs + single terminal */}
-          <ResizablePanel
-            id="main-content"
-            order={2}
-            defaultSize={100 - (layout.leftSidebarVisible ? layout.leftSidebarSize : 0) - ((layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels) ? layout.rightSidebarSize : 0)}
-            minSize={30}
-          >
-            <div className="h-full flex flex-col">
-              {showWelcomeInMainArea ? (
-                <WelcomeScreen
-                  onNewConnection={handleNewTab}
-                  onNewLocalTerminal={handleNewLocalTab}
-                  onOpenSettings={handleOpenSettings}
-                />
-              ) : (
-                <ResizablePanelGroup direction="vertical" className="flex-1">
-                  {/* Terminal Grid Panel */}
-                  <ResizablePanel id="terminal-grid" order={1} defaultSize={layout.bottomPanelVisible ? 70 : 100} minSize={30}>
-                    <TerminalCallbacksProvider value={terminalCallbacks}>
-                      <ErrorBoundary label="Terminal">
-                        <StableTerminalGrid />
-                      </ErrorBoundary>
-                    </TerminalCallbacksProvider>
-                  </ResizablePanel>
+                  <ResizablePanel
+                    id="bottom-panel"
+                    order={2}
+                    defaultSize={layout.bottomPanelSize}
+                    minSize={20}
+                    maxSize={50}
+                    onResize={(size) => setBottomPanelSize(size)}
+                  >
+                    <Tabs
+                      value={bottomPanelTab}
+                      onValueChange={(value) => setBottomPanelTab(value as 'file-browser' | 'compose')}
+                      className="h-full flex flex-col"
+                    >
+                      <TabsList variant="underline">
+                        <TabsTrigger variant="underline" value="file-browser">
+                          {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
+                        </TabsTrigger>
+                        <TabsTrigger variant="underline" value="compose">
+                          {t('app.composePane')}
+                        </TabsTrigger>
+                      </TabsList>
 
-                  {layout.bottomPanelVisible && !hideBottomPanels && activeConnection && (
-                    <>
-                      <ResizableHandle dividerTone="panel" />
-
-                      <ResizablePanel
-                        id="bottom-panel"
-                        order={2}
-                        defaultSize={layout.bottomPanelSize}
-                        minSize={20}
-                        maxSize={50}
-                        onResize={(size) => setBottomPanelSize(size)}
-                      >
-                        <Tabs
-                          value={bottomPanelTab}
-                          onValueChange={(value) => setBottomPanelTab(value as 'file-browser' | 'compose')}
-                          className="h-full flex flex-col"
+                      <div className={tabContentWrapper()}>
+                        <TabsContent
+                          value="file-browser"
+                          className={tabContentPanel()}
                         >
-                          <TabsList variant="underline">
-                            <TabsTrigger variant="underline" value="file-browser">
-                              {isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
-                            </TabsTrigger>
-                            <TabsTrigger variant="underline" value="compose">
-                              {t('app.composePane')}
-                            </TabsTrigger>
-                          </TabsList>
-
-                          <div className={tabContentWrapper()}>
-                            <TabsContent
-                              value="file-browser"
-                              className={tabContentPanel()}
-                            >
-                              <ErrorBoundary
-                                label={isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
-                              >
-                                <Suspense fallback={<PanelSurfaceFallback />}>
-                                  <IntegratedFileBrowser
-                                    terminalCwd={activeTerminalCwd}
-                                    {...(isLocalTab
-                                      ? { mode: 'local' as const }
-                                      : {
-                                          mode: 'remote' as const,
-                                          connectionId: activeConnection.connectionId,
-                                          host: activeConnection.host,
-                                          isConnected: activeConnection.status === 'connected',
-                                          onClose: () => {},
-                                          onOpenInLogMonitor: handleOpenInLogMonitor,
-                                          onOpenInEditor: handleOpenInEditor,
-                                        })}
-                                  />
-                                </Suspense>
-                              </ErrorBoundary>
-                            </TabsContent>
-
-                            <TabsContent
-                              value="compose"
-                              className={tabContentPanel()}
-                            >
-                              <ErrorBoundary label={t('app.composePane')}>
-                                <Suspense fallback={<PanelSurfaceFallback />}>
-                                  <ComposePane />
-                                </Suspense>
-                              </ErrorBoundary>
-                            </TabsContent>
-                          </div>
-                        </Tabs>
-                      </ResizablePanel>
-                    </>
-                  )}
-                </ResizablePanelGroup>
-              )}
-            </div>
-          </ResizablePanel>
-
-          {layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels && (
-            <>
-              <ResizableHandle dividerTone="panel" />
-
-              {/* Right Sidebar - Monitor/Logs using activeConnection from context */}
-              <ResizablePanel
-                id="right-sidebar"
-                order={3}
-                defaultSize={layout.rightSidebarSize}
-                minSize={15}
-                maxSize={30}
-                onResize={(size) => setRightSidebarSize(size)}
-              >
-                <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="flex h-full min-h-0 flex-col gap-0 bg-sidebar">
-                  <div className="flex h-11 shrink-0 items-center border-b border-sidebar-border px-3">
-                    <TabsList aria-label={t('app.systemMonitor')} className="h-7 w-full rounded-md bg-muted p-0.5">
-                      <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="monitor">{t('app.monitor')}</TabsTrigger>
-                      <TabsTrigger className="rounded-sm text-xs focus-visible:ring-2" value="logs">{t('app.logs')}</TabsTrigger>
-                    </TabsList>
-                  </div>
-
-                  <div className={tabContentWrapper("flex-1")}>
-                    <TabsContent value="monitor" forceMount className={tabContentPanel()}>
-                      <div className="h-full overflow-hidden px-3 py-3">
-                        {activeConnection ? (
-                          <ErrorBoundary label={t('app.systemMonitor')}>
+                          <ErrorBoundary
+                            label={isLocalTab ? t('app.localFiles') : t('app.fileBrowser')}
+                          >
                             <Suspense fallback={<PanelSurfaceFallback />}>
-                              <SystemMonitor
-                                connectionId={activeConnection.connectionId}
-                                active={monitorActive}
+                              <IntegratedFileBrowser
+                                terminalCwd={activeTerminalCwd}
+                                {...(isLocalTab
+                                  ? { mode: 'local' as const }
+                                  : {
+                                      mode: 'remote' as const,
+                                      connectionId: activeConnection.connectionId,
+                                      host: activeConnection.host,
+                                      isConnected: activeConnection.status === 'connected',
+                                      onClose: () => {},
+                                      onOpenInLogMonitor: handleOpenInLogMonitor,
+                                      onOpenInEditor: handleOpenInEditor,
+                                    })}
                               />
                             </Suspense>
                           </ErrorBoundary>
-                        ) : null}
+                        </TabsContent>
+
+                        <TabsContent
+                          value="compose"
+                          className={tabContentPanel()}
+                        >
+                          <ErrorBoundary label={t('app.composePane')}>
+                            <Suspense fallback={<PanelSurfaceFallback />}>
+                              <ComposePane />
+                            </Suspense>
+                          </ErrorBoundary>
+                        </TabsContent>
                       </div>
-                    </TabsContent>
-
-                    <TabsContent value="logs" className={tabContentPanel()}>
-                      {activeConnection ? (
-                        <ErrorBoundary label={t('app.logMonitor')}>
-                          <Suspense fallback={<PanelSurfaceFallback />}>
-                            <LogMonitor
-                              connectionId={activeConnection.connectionId}
-                              externalLogPath={externalLogPath}
-                              externalLogPathKey={externalLogPathKey}
-                            />
-                          </Suspense>
-                        </ErrorBoundary>
-                      ) : null}
-                    </TabsContent>
-                  </div>
-                </Tabs>
-              </ResizablePanel>
-            </>
+                    </Tabs>
+                  </ResizablePanel>
+                </>
+              )}
+            </ResizablePanelGroup>
           )}
-        </ResizablePanelGroup>
-      </div>
-
-      <StatusBar activeConnection={statusBarConnection} />
+        </div>
+      </WorkspaceLayout>
 
       {/* Modals */}
       <Suspense fallback={null}>

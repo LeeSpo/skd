@@ -42,7 +42,7 @@ describe('SettingsModal workspace palettes', () => {
     expect(screen.getByRole('button', { name: 'Save Settings' })).toBeTruthy();
   });
 
-  it('previews and saves a palette with its suggested terminal theme', async () => {
+  it('previews and saves an interface palette without replacing the terminal theme', async () => {
     const onOpenChange = vi.fn();
     render(<SettingsModal open onOpenChange={onOpenChange} />);
 
@@ -60,7 +60,7 @@ describe('SettingsModal workspace palettes', () => {
       colorPalette: 'cupertino',
     });
     expect(JSON.parse(localStorage.getItem('terminalAppearance') ?? '{}')).toMatchObject({
-      theme: 'vs-code-dark',
+      theme: 'dracula',
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

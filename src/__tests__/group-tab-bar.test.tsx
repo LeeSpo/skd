@@ -17,12 +17,12 @@ describe('GroupTabBar visual pilot', () => {
   it('renders inset editor tabs with a distinct active content fill', () => {
     const { container } = render(<GroupTabBar groupId="g" tabs={tabs} activeTabId="0" />);
     const bar = container.querySelector('[data-tab-bar-group="g"]')?.parentElement;
-    expect(bar?.className).toContain('h-10');
+    expect(bar?.className).toContain('h-9');
     const active = container.querySelector('[data-tab-id="0"]');
     const idle = container.querySelector('[data-tab-id="1"]');
     expect(active?.className).toContain('bg-surface-content');
     expect(active?.className).toContain('rounded-md');
-    expect(active?.className).toContain('border-panel-border');
+    expect(active?.className).toContain('shadow-sm');
     expect(idle?.className).toContain('text-muted-foreground');
     expect(idle?.className).toContain('hover:bg-surface-hover');
   });

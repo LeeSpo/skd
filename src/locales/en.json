@@ -347,7 +347,7 @@
       "desc": "Customize the application interface and panels.",
       "appTheme": "Application Theme",
       "colorPalette": "Workspace Color Palette",
-      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Selecting one also suggests a matching terminal theme.",
+      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Your terminal theme is configured separately.",
       "panelVisibility": "Panel Visibility",
       "connectionManager": "Connection Manager",
       "systemMonitor": "System Monitor",
@@ -484,7 +484,8 @@
     "closeTab": "Close Tab",
     "closeTabNamed": "Close {{name}}",
     "window": "Window",
-    "workspace": "Workspace"
+    "workspace": "Workspace",
+    "moreActions": "More Actions"
   },
   "composePane": {
     "send": "Send",
@@ -741,7 +742,9 @@
       "cancelled": "Cancelled",
       "upload": "Upload",
       "download": "Download"
-    }
+    },
+    "dropUpload": "Drop files or folders to upload",
+    "uploadTo": "Upload to {{path}}"
   },
   "contextMenu": {
     "copy": "Copy",

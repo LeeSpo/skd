@@ -328,7 +328,7 @@ export function GroupTabBar({
 
   return (
     <>
-      <div className="flex h-11 shrink-0 items-center border-b border-panel-border bg-sidebar px-1.5">
+      <div className="terminal-tab-strip flex h-9 shrink-0 items-center border-b border-panel-border bg-panel-header px-1.5">
         <div
           ref={tabBarRef}
           data-tab-bar-group={groupId}
@@ -347,9 +347,9 @@ export function GroupTabBar({
                   <div
                     data-tab-id={tab.id}
                     title={t(`statusBar.${tab.connectionStatus}`)}
-                    className={`group box-border flex h-8 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-transparent px-2.5 ${
+                    className={`terminal-tab group box-border flex h-7 max-w-60 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-transparent px-2.5 ${
                       tab.id === activeTabId
-                        ? 'border-panel-border bg-surface-content text-foreground shadow-sm'
+                        ? 'bg-surface-content text-foreground shadow-sm'
                         : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                     } ${activeDrag?.tabId === tab.id ? 'opacity-40' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, tab.id, tab.name)}
