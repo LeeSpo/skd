@@ -102,7 +102,7 @@ function InteractiveToaster({
       toastOptions={{
         ...toastOptions,
         classNames: {
-          toast: "glass-menu cursor-pointer rounded-xl border border-border shadow-dialog data-[dismissible=false]:cursor-default",
+          toast: "glass-menu cursor-pointer border border-border shadow-dialog data-[dismissible=false]:cursor-default",
           success: "border-success/30",
           error: "border-destructive/30",
           warning: "border-warning/30",

@@ -1203,6 +1203,7 @@ html[data-window-kind="main"] body {
 [data-slot="select-content"],
 [data-slot="popover-content"] {
   border-color: var(--chrome-hairline);
+  border-radius: var(--radius-menu);
   box-shadow: var(--shadow-menu), inset 0 1px 0 var(--control-highlight);
 }
 
