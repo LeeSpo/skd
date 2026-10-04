@@ -22,41 +22,60 @@
 
 skd brings interactive SSH sessions, local shells, SFTP file management, and saved connection profiles into a single desktop workspace. It is intended for people who regularly move between terminal work and remote files and prefer a lightweight native macOS application over a browser-based console.
 
-![skd welcome workspace](docs/images/workspace.png)
+![skd welcome workspace](docs/images/workspace-light.png#gh-light-mode-only)
+![skd welcome workspace](docs/images/workspace-dark.png#gh-dark-mode-only)
 
 ## Highlights
 
 - **Terminal workspace** — Run local shells and interactive SSH PTY sessions in tab groups. Split panes, move tabs between groups, search terminal output, and drag files or folders into a terminal with POSIX-safe path escaping.
-- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication. HTTP, SOCKS4, and SOCKS5 proxies are supported.
+- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication. Configurable keepalive and connection timeouts, plus HTTP, SOCKS4, and SOCKS5 proxy support.
 - **Host-key verification** — Unknown SSH host keys are presented for an explicit trust decision and are saved in skd's own `known_hosts` store.
-- **File work** — Browse local and remote directories side by side, upload and download files or directories, rename and delete entries, and track transfers. The file panel can follow supported shell working-directory updates.
+- **File work** — Browse local and remote directories side by side, transfer files or directories through a streaming transfer queue, move local files to native macOS Trash, rename and delete entries, and track progress. The file panel automatically follows supported shell working-directory updates (OSC 7).
 - **Connection organization** — Keep non-secret connection profiles in a folder-based sidebar. Passwords, private-key content, and passphrases are stored through the macOS Keychain.
 - **Port forwarding** — Create OpenSSH-style local forwards, save bookmarks, test remote targets, and see listener/target health.
 - **Useful extras** — Edit supported remote text files with CodeMirror, choose terminal and application themes, and add optional remote system-monitor panels.
 - **Compatibility** — Standalone SFTP is supported. FTP and FTPS remain available for compatibility, but they are not the primary focus of the project.
 
-![New connection dialog with SSH, SFTP, and FTP options](docs/images/connection-setup.png)
+### Key shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `⌃B` (`Ctrl+B`) | Toggle connection manager sidebar |
+| `⌃J` (`Ctrl+J`) | Toggle integrated file browser panel |
+| `⌃M` (`Ctrl+M`) | Toggle remote system monitor panel |
+| `⌃Z` (`Ctrl+Z`) | Toggle Zen mode (hide all sidebars and panels) |
+| `⌃\` / `⌃⇧\` | Split terminal pane horizontally / vertically |
+| `⌘W` | Close active terminal tab or split pane |
+| `⌥ Drag` | Option-drag text selection (bypasses mouse reporting in `htop`, `tmux`, etc.) |
 
 ## Download and install
 
 Download the appropriate DMG from the [latest GitHub Release](https://github.com/LeeSpo/skd/releases/latest):
 
-| Your Mac | Release asset |
-| --- | --- |
+| Your Mac                 | Release asset                 |
+| ------------------------ | ----------------------------- |
 | Apple Silicon (M-series) | `skd_<version>_aarch64.dmg` |
-| Intel | `skd_<version>_x64.dmg` |
+| Intel                    | `skd_<version>_x64.dmg`     |
 
 1. Open the DMG and move `skd.app` to `/Applications`.
 2. Open the app from `/Applications`.
 3. Each release includes `SHA256SUMS`; verify the checksum when you need to validate a download.
 
 > [!NOTE]
-> Release builds are ad-hoc signed and are **not currently notarized by Apple**. macOS may block the first launch. After attempting to open the app, use **System Settings → Privacy & Security → Open Anyway** for a DMG obtained from this repository's official Release page. Do not bypass a security warning for an unverified download.
+> Release builds are ad-hoc signed and are **not currently notarized by Apple**. macOS may block the first launch. After attempting to open the app, use **System Settings → Privacy & Security → Open Anyway** for a DMG obtained from this repository's official Release page.
+>
+> If macOS warns that the app is damaged or cannot verify the developer, you can clear the quarantine attribute via Terminal:
+> ```bash
+> xattr -cr /Applications/skd.app
+> ```
+> Do not bypass a security warning for an unverified download.
 
 ## Security and data handling
 
 - Connection profiles and layout preferences stay on the local machine. Secret fields are kept separately in the macOS Keychain rather than exported with connection profiles.
+- The local WebSocket PTY bridge is strictly bound to `127.0.0.1` and secured with in-memory authentication tokens and Origin validation to prevent unauthorized local processes or browser tabs from accessing terminal sessions.
 - skd maintains its own application-specific `known_hosts` store; it does not use `~/.ssh/known_hosts`. Verify a new host fingerprint through an independent channel before trusting it.
+- Local file deletions move items to the native macOS Trash rather than permanently deleting them immediately.
 - skd is not a replacement for a managed credential vault, endpoint security controls, or an audited enterprise SSH solution. Review the code and release checksums before using it with sensitive infrastructure.
 - Never include passwords, private keys, passphrases, hostnames, or other secrets in GitHub issues or pull requests.
 
@@ -90,6 +109,8 @@ bun run build
 
 # Rust backend
 cd src-tauri && cargo test
+cargo clippy -- -D warnings
+cargo fmt --check
 
 # macOS .app and .dmg bundle
 bun run tauri build

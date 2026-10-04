@@ -18,8 +18,8 @@ Thank you for your interest in contributing to **skd**! skd is a macOS-only ligh
 
 1. Clone your fork:
    ```bash
-   git clone https://github.com/<your-username>/skd-shell.git
-   cd skd-shell
+   git clone https://github.com/<your-username>/skd.git
+   cd skd
    ```
 
 2. Install dependencies:
