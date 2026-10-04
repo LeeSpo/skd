@@ -211,7 +211,7 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
               {gpuStats.length > 0 && gpuHistory.size > 0 && (
                 <div>
                   <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.combinedUsageHistory')}</div>
-                  <div className="h-24 text-foreground">
+                  <div className="h-24 min-w-0 w-full text-foreground">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart margin={{ top: 5, right: 2, left: 0, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
@@ -381,7 +381,7 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                     {gpuHistory.get(currentGpu.index)?.length ? (
                       <div>
                         <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.usageHistory')}</div>
-                        <div className="h-20 text-foreground">
+                        <div className="h-20 min-w-0 w-full text-foreground">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart
                               data={gpuHistory.get(currentGpu.index) || []}
@@ -463,7 +463,7 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                     {gpuHistory.get(currentGpu.index)?.some(h => h.temperature !== undefined) && (
                       <div>
                         <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.temperatureHistory')}</div>
-                        <div className="h-16 text-foreground">
+                        <div className="h-16 min-w-0 w-full text-foreground">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
                               data={gpuHistory.get(currentGpu.index) || []}

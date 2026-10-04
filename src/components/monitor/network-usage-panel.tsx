@@ -172,7 +172,7 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
 
           <div>
             <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.history')}</div>
-            <div className="h-24 text-foreground">
+            <div className="h-24 min-w-0 w-full text-foreground">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={networkHistory.map(item => ({

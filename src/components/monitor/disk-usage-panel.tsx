@@ -67,7 +67,7 @@ export function DiskUsagePanel({ connectionId, active = true }: MonitorPanelProp
               {t('systemMonitor.noDiskInfo')}
             </div>
           ) : (
-            <div className="rounded-md border h-40 overflow-auto">
+            <div className="h-40 min-w-0 overflow-auto rounded-md border">
               <table className="w-full caption-bottom text-sm">
                 <thead className="[&_tr]:border-b">
                   <tr className="border-b transition-colors">

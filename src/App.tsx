@@ -1563,17 +1563,17 @@ function AppContent() {
           />
         )}
         inspector={layout.rightSidebarVisible && hasAnyTabs && !hideRightPanels ? (
-          <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="inspector-panel flex h-full min-h-0 flex-col gap-0 bg-transparent">
-            <div className="inspector-header flex h-9 shrink-0 items-center border-b border-panel-border px-3">
+          <Tabs value={rightSidebarTab} onValueChange={setRightSidebarTab} className="inspector-panel flex h-full min-h-0 min-w-0 flex-col gap-0 overflow-hidden bg-transparent">
+            <div className="inspector-header flex h-9 shrink-0 items-center px-3">
               <TabsList aria-label={t('app.systemMonitor')} className="mx-auto h-7">
                 <TabsTrigger value="monitor">{t('app.monitor')}</TabsTrigger>
                 <TabsTrigger value="logs">{t('app.logs')}</TabsTrigger>
               </TabsList>
             </div>
 
-            <div className={tabContentWrapper("inspector-body flex-1 bg-surface-content")}>
+            <div className={tabContentWrapper("inspector-body flex-1 bg-transparent")}>
               <TabsContent value="monitor" forceMount className={tabContentPanel()}>
-                <div className="h-full overflow-hidden px-3 py-3">
+                <div className="h-full min-w-0 overflow-hidden px-3 py-3">
                   {activeConnection ? (
                     <ErrorBoundary label={t('app.systemMonitor')}>
                       <Suspense fallback={<PanelSurfaceFallback />}>

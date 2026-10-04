@@ -62,7 +62,7 @@ export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPane
       </div>
       <Card>
         <CardContent className="p-2">
-          <div className="h-24 text-foreground">
+          <div className="h-24 min-w-0 w-full text-foreground">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={latencyData} margin={{ top: 5, right: 2, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />

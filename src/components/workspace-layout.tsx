@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PanelLeftClose } from 'lucide-react';
+import { inspectorSizing } from '@/lib/inspector-sizing';
 import { useLayout } from '@/lib/layout-context';
 import { TitlebarSlotProvider } from '@/lib/titlebar-slot-context';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,11 @@ export function WorkspaceLayout({ sidebar, toolbar, children, inspector }: Works
   const minSidebarSize = 200 / width * 100;
   const maxSidebarSize = 360 / width * 100;
   const workspaceShare = 100 - (layout.leftSidebarVisible ? layout.leftSidebarSize : 0);
-  const inspectorShare = layout.rightSidebarSize / workspaceShare * 100;
+  const inspectorLayout = inspectorSizing(
+    width * Math.max(workspaceShare, 0) / 100,
+    layout.rightSidebarSize,
+    workspaceShare,
+  );
 
   return (
     <TitlebarSlotProvider>
@@ -63,12 +68,24 @@ export function WorkspaceLayout({ sidebar, toolbar, children, inspector }: Works
             {toolbar}
             <div className="min-h-0 flex-1 overflow-hidden">
               <ResizablePanelGroup direction="horizontal" autoSaveId="skd-workspace-tools">
-                <ResizablePanel key="workspace-content" id="workspace-content" order={1} defaultSize={inspector ? 100 - inspectorShare : 100} minSize={45}>
+                <ResizablePanel key="workspace-content" id="workspace-content" order={1} className="min-w-0" defaultSize={inspector ? 100 - inspectorLayout.size : 100} minSize={45}>
                   {children}
                 </ResizablePanel>
-                {inspector && <ResizableHandle key="inspector-divider" dividerTone="panel" />}
+                {inspector && <ResizableHandle key="inspector-divider" />}
                 {inspector && (
-                  <ResizablePanel key="right-sidebar" id="right-sidebar" order={2} defaultSize={inspectorShare} minSize={18} maxSize={40} onResize={size => setRightSidebarSize(size * workspaceShare / 100)}>
+                  <ResizablePanel
+                    key="right-sidebar"
+                    id="right-sidebar"
+                    order={2}
+                    className="min-w-0"
+                    defaultSize={inspectorLayout.size}
+                    minSize={inspectorLayout.minSize}
+                    maxSize={inspectorLayout.maxSize}
+                    onResize={size => {
+                      if (!Number.isFinite(size) || size <= 0 || workspaceShare <= 0) return;
+                      setRightSidebarSize(size * workspaceShare / 100);
+                    }}
+                  >
                     {inspector}
                   </ResizablePanel>
                 )}

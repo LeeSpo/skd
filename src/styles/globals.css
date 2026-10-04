@@ -1019,8 +1019,10 @@ html {
   background: var(--input-background);
 }
 
-/* Window material is AppKit behind the webview. The sidebar and the titlebar
-   share one tint; terminal, tools and floating surfaces remain readable solids. */
+/* Window material is AppKit behind the webview. The connection sidebar and the
+   titlebar share one tint. The right inspector keeps the solid sidebar color so
+   charts and logs stay readable. The terminal, bottom tools and floating
+   surfaces stay opaque. */
 :root {
   --sidebar-tint: color-mix(in srgb, var(--sidebar) 58%, transparent);
   --sidebar-opaque: var(--sidebar);
@@ -1049,7 +1051,8 @@ html[data-window-kind="main"] body {
   background: transparent;
 }
 
-.workspace-sidebar {
+.workspace-sidebar,
+.inspector-panel {
   background: var(--sidebar-opaque);
   color: var(--sidebar-foreground);
   /* Translucent washes sit on the sidebar material. Solid accent and surface
@@ -1059,7 +1062,8 @@ html[data-window-kind="main"] body {
   --sidebar-selection-foreground: var(--sidebar-foreground);
 }
 
-.dark .workspace-sidebar {
+.dark .workspace-sidebar,
+.dark .inspector-panel {
   --sidebar-row-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
   --sidebar-selection: color-mix(in srgb, var(--foreground) 13%, transparent);
 }
@@ -1108,12 +1112,24 @@ html[data-window-kind="main"] body {
   background: var(--sidebar-tint);
 }
 
-[data-native-material="true"] .inspector-header {
-  background: var(--material-titlebar);
+.inspector-header {
+  background: transparent;
 }
 
-[data-native-material="true"] .inspector-panel {
-  background: var(--material-inspector);
+.inspector-toolbar {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: var(--chrome-hairline);
+}
+
+.inspector-panel [data-slot="toggle"][data-state="on"] {
+  background: var(--sidebar-selection);
+  color: var(--sidebar-foreground);
+}
+
+.inspector-panel [data-slot="button"]:not(.bg-primary):hover:not(:disabled),
+.inspector-panel [data-slot="button"]:not(.bg-primary)[data-state="open"] {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-foreground);
 }
 
 .titlebar-tab-active {
@@ -1321,13 +1337,28 @@ html[data-window-kind="main"] body {
   background: transparent;
 }
 
-.bottom-panel,
-.inspector-body {
+.bottom-panel {
   background: var(--workspace-bg);
+}
+
+.inspector-body {
+  background: transparent;
 }
 
 .preferences-navigation {
   background: var(--sidebar);
+}
+
+/* Radix sizes this wrapper as a table, so charts measure their own content and widen the inspector. */
+.inspector-panel [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.inspector-panel .recharts-responsive-container {
+  max-width: 100%;
 }
 
 .inspector-panel [data-slot="card"] {
@@ -1336,6 +1367,15 @@ html[data-window-kind="main"] body {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.inspector-panel thead th,
+.inspector-panel thead th:hover {
+  background-color: var(--sidebar-opaque);
+}
+
+.inspector-panel tbody tr:hover {
+  background-color: var(--sidebar-row-hover);
 }
 
 .inspector-panel [data-slot="card-header"] {
@@ -1353,7 +1393,8 @@ html[data-window-kind="main"] body {
 
 @media (prefers-contrast: more) {
   .workspace-sidebar,
-  .workspace-toolbar {
+  .workspace-toolbar,
+  .inspector-panel {
     background: var(--sidebar-opaque) !important;
   }
   :root {

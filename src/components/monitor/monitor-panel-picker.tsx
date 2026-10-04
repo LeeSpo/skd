@@ -74,7 +74,7 @@ export function MonitorPanelPicker({ enabled, onChange }: MonitorPanelPickerProp
               pressed={isEnabled}
               onPressedChange={() => togglePanel(panel.id)}
               className={cn(
-                'h-6 px-1.5 text-[9px] gap-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
+                'h-6 gap-1 px-1.5 text-[9px]',
               )}
               aria-label={t(PANEL_LABEL_KEYS[panel.id])}
             >

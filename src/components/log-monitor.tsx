@@ -608,11 +608,11 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="h-full flex flex-col text-foreground">
+      <div className="flex h-full min-h-0 min-w-0 w-full flex-col text-foreground">
         {/* ── Row 1: Source selector ── */}
-        <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30 shrink-0">
+        <div className="inspector-toolbar flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1">
           <Select value={selectedSourceId} onValueChange={handleSourceChange}>
-            <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+            <SelectTrigger className="h-7 w-auto min-w-32 flex-1 basis-32 text-xs">
               <SelectValue placeholder={t('logMonitor.selectLogSource')} />
             </SelectTrigger>
             <SelectContent className="max-h-[300px]">
@@ -779,7 +779,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
 
         {/* ── Optional: Custom path input ── */}
         {showCustomInput && (
-          <div className="flex items-center gap-1.5 px-2 py-1 border-b bg-muted/20 shrink-0">
+          <div className="inspector-toolbar flex shrink-0 items-center gap-1.5 border-b px-2 py-1">
             <Input
               placeholder={t('logMonitor.customPathPlaceholder')}
               value={customPath}
@@ -808,9 +808,9 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
         )}
 
         {/* ── Row 2: Filters ── */}
-        <div className="flex items-center gap-1 px-2 py-1 border-b shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1">
           {/* Search input */}
-          <div className="relative flex-1 min-w-0">
+          <div className="relative min-w-28 flex-1 basis-28">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
             <Input
               placeholder={t('logMonitor.searchLogs')}
@@ -915,7 +915,7 @@ export function LogMonitor({ connectionId, externalLogPath, externalLogPathKey }
         {/* ── Log content area ── */}
         <div
           ref={scrollRef}
-          className="flex-1 min-h-0 overflow-auto font-mono text-xs leading-5"
+          className="min-h-0 min-w-0 flex-1 overflow-auto font-mono text-xs leading-5"
           onScroll={handleScroll}
         >
           {!selectedSourceId ? (

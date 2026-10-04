@@ -47,7 +47,7 @@ export function SystemMonitor({ connectionId, active = true }: SystemMonitorProp
   }
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full w-full min-w-0">
       <div className="space-y-2.5">
         <MonitorPanelPicker enabled={enabledPanels} onChange={handlePanelsChange} />
 
