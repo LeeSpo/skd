@@ -149,7 +149,8 @@ fn validate_handshake(
             return Err("multiple origins");
         }
         let origin = origin.to_str().map_err(|_| "invalid origin")?;
-        if !APP_ORIGINS.contains(&origin) && !(allow_dev_origins && DEV_ORIGINS.contains(&origin)) {
+        if !(APP_ORIGINS.contains(&origin) || (allow_dev_origins && DEV_ORIGINS.contains(&origin)))
+        {
             return Err("origin not allowed");
         }
     }
@@ -173,6 +174,8 @@ fn validate_handshake(
     Ok(())
 }
 
+// Tungstenite's handshake callback requires an unboxed ErrorResponse.
+#[allow(clippy::result_large_err)]
 async fn accept_authenticated_connection(
     stream: TcpStream,
     expected_token: &str,
@@ -310,8 +313,7 @@ fn output_flush_interval_ms(accumulated_len: usize) -> u128 {
 /// Interactive chunks flush immediately — release builds read the local PTY
 /// faster than dev and would otherwise batch past the 2 ms window.
 fn should_flush_pty_output(accumulated_len: usize, elapsed_ms: u128) -> bool {
-    accumulated_len >= OUTPUT_FLUSH_BYTES
-        || accumulated_len < INTERACTIVE_FLUSH_THRESHOLD
+    !(INTERACTIVE_FLUSH_THRESHOLD..OUTPUT_FLUSH_BYTES).contains(&accumulated_len)
         || elapsed_ms >= output_flush_interval_ms(accumulated_len)
 }
 

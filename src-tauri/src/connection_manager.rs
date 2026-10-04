@@ -2,19 +2,19 @@ use crate::connection_diagnostics::{
     ConnectDiagnosticError, ConnectProgressEvent, ConnectStage, CONNECT_PROGRESS_EVENT,
 };
 use crate::ftp_client::FtpClient;
-use crate::os_detect::OsInfoCache;
-use crate::port_forward::{LocalForwardInfo, PortForwardManager};
-use crate::sftp_client::StandaloneSftpClient;
 use crate::local_shell;
+use crate::os_detect::OsInfoCache;
+use crate::port_forward::{LocalForwardConfig, LocalForwardInfo, PortForwardManager};
 use crate::pty_session::PtySession;
+use crate::sftp_client::StandaloneSftpClient;
 use crate::ssh::{
     KeyboardInteractiveChallenge, KeyboardInteractiveResponder, SshClient, SshConfig,
 };
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -90,7 +90,10 @@ impl KeyboardInteractiveBroker {
         let (sender, receiver) = oneshot::channel();
 
         {
-            let mut pending = self.pending.lock().expect("keyboard-interactive lock poisoned");
+            let mut pending = self
+                .pending
+                .lock()
+                .expect("keyboard-interactive lock poisoned");
             pending.insert(
                 connection_id.to_string(),
                 PendingKeyboardInteractiveChallenge {
@@ -146,7 +149,7 @@ impl KeyboardInteractiveBroker {
             Ok(Ok(responses)) => Ok(responses),
             Ok(Err(_)) => Err(ConnectDiagnosticError::cancelled().into()),
             Err(_) => {
-                self.remove_if_current(connection_id, &challenge_id);
+                self.remove_if_current(connection_id, challenge_id);
                 Err(ConnectDiagnosticError::new(
                     crate::connection_diagnostics::ConnectErrorKind::KeyboardInteractiveTimeout,
                     ConnectStage::Authenticating,
@@ -164,12 +167,19 @@ impl KeyboardInteractiveBroker {
         responses: Vec<String>,
     ) -> Result<()> {
         let pending = {
-            let mut challenges = self.pending.lock().expect("keyboard-interactive lock poisoned");
+            let mut challenges = self
+                .pending
+                .lock()
+                .expect("keyboard-interactive lock poisoned");
             let Some(current) = challenges.get(connection_id) else {
-                return Err(anyhow!("No keyboard-interactive challenge is pending for this connection."));
+                return Err(anyhow!(
+                    "No keyboard-interactive challenge is pending for this connection."
+                ));
             };
             if current.challenge_id != challenge_id {
-                return Err(anyhow!("The keyboard-interactive challenge is no longer current."));
+                return Err(anyhow!(
+                    "The keyboard-interactive challenge is no longer current."
+                ));
             }
             if current.expected_responses != responses.len() {
                 return Err(anyhow!(
@@ -178,7 +188,9 @@ impl KeyboardInteractiveBroker {
                     responses.len()
                 ));
             }
-            challenges.remove(connection_id).expect("pending challenge disappeared")
+            challenges
+                .remove(connection_id)
+                .expect("pending challenge disappeared")
         };
 
         pending
@@ -195,7 +207,10 @@ impl KeyboardInteractiveBroker {
     }
 
     fn remove_if_current(&self, connection_id: &str, challenge_id: &str) {
-        let mut pending = self.pending.lock().expect("keyboard-interactive lock poisoned");
+        let mut pending = self
+            .pending
+            .lock()
+            .expect("keyboard-interactive lock poisoned");
         if pending
             .get(connection_id)
             .is_some_and(|challenge| challenge.challenge_id == challenge_id)
@@ -242,7 +257,8 @@ impl ConnectionManager {
     ) -> Result<()> {
         let mut client = SshClient::new();
         let cancel_token = self.register_pending_connection(&connection_id).await;
-        let timeout = tcp_timeout.unwrap_or_else(crate::connection_diagnostics::default_tcp_timeout);
+        let timeout =
+            tcp_timeout.unwrap_or_else(crate::connection_diagnostics::default_tcp_timeout);
         let progress_id = connection_id.clone();
         let app_for_progress = app.clone();
         let keyboard_interactive_responder = app.as_ref().map(|app| {
@@ -254,7 +270,9 @@ impl ConnectionManager {
                 let app = app.clone();
                 let connection_id = responder_connection_id.clone();
                 Box::pin(async move { broker.request(&app, &connection_id, challenge).await })
-                    as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>>> + Send>>
+                    as std::pin::Pin<
+                        Box<dyn std::future::Future<Output = Result<Vec<String>>> + Send>,
+                    >
             }) as KeyboardInteractiveResponder
         });
 
@@ -271,11 +289,15 @@ impl ConnectionManager {
         connect_result?;
 
         let mut connections = self.connections.write().await;
-        let session = client.session_handle().ok_or_else(|| anyhow!("SSH session missing"))?;
+        let session = client
+            .session_handle()
+            .ok_or_else(|| anyhow!("SSH session missing"))?;
         let old = connections.insert(connection_id.clone(), Arc::new(RwLock::new(client)));
         self.transfers.bind(connection_id, session);
         drop(connections);
-        if let Some(old) = old { let _ = old.write().await.disconnect().await; }
+        if let Some(old) = old {
+            let _ = old.write().await.disconnect().await;
+        }
 
         Ok(())
     }
@@ -324,7 +346,9 @@ impl ConnectionManager {
         self.transfers.unbind(connection_id);
         drop(connections);
         // Cancel transfers before awaiting any other connection cleanup.
-        self.port_forwards.stop_all_for_connection(connection_id).await;
+        self.port_forwards
+            .stop_all_for_connection(connection_id)
+            .await;
         if let Some(client) = client {
             let mut client = client.write().await;
             client.disconnect().await?;
@@ -335,15 +359,10 @@ impl ConnectionManager {
     }
 
     /// Start a local TCP → SSH direct-tcpip port forward on an active SSH session.
-    pub async fn start_local_forward(
+    pub(crate) async fn start_local_forward(
         &self,
         connection_id: String,
-        bookmark_id: Option<String>,
-        name: Option<String>,
-        local_bind_host: String,
-        local_port: u16,
-        remote_host: String,
-        remote_port: u16,
+        config: LocalForwardConfig,
     ) -> Result<LocalForwardInfo> {
         let client = self
             .get_connection(&connection_id)
@@ -357,16 +376,7 @@ impl ConnectionManager {
         };
 
         self.port_forwards
-            .start_local(
-                connection_id,
-                session,
-                bookmark_id,
-                name,
-                local_bind_host,
-                local_port,
-                remote_host,
-                remote_port,
-            )
+            .start_local(connection_id, session, config)
             .await
     }
 
@@ -430,14 +440,11 @@ impl ConnectionManager {
         if Self::is_ephemeral_local_id(connection_id)
             && self.get_connection_type(connection_id).await.is_none()
         {
-            self.create_local_connection(connection_id.to_string()).await?;
+            self.create_local_connection(connection_id.to_string())
+                .await?;
         }
 
-        let is_local = self
-            .get_connection_type(connection_id)
-            .await
-            .as_deref()
-            == Some("Local");
+        let is_local = self.get_connection_type(connection_id).await.as_deref() == Some("Local");
 
         // Cancel and remove any existing PTY session for this connection first.
         // This ensures the old SSH channel and reader task are torn down before
@@ -544,12 +551,7 @@ impl ConnectionManager {
             session.cancel.cancel();
         }
 
-        if self
-            .get_connection_type(connection_id)
-            .await
-            .as_deref()
-            == Some("Local")
-        {
+        if self.get_connection_type(connection_id).await.as_deref() == Some("Local") {
             let mut types = self.connection_types.write().await;
             types.remove(connection_id);
         }
@@ -601,11 +603,15 @@ impl ConnectionManager {
         emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
 
         let mut sftp_connections = self.sftp_connections.write().await;
-        let session = client.session_handle().ok_or_else(|| anyhow!("SFTP session missing"))?;
+        let session = client
+            .session_handle()
+            .ok_or_else(|| anyhow!("SFTP session missing"))?;
         let old = sftp_connections.insert(connection_id.clone(), client);
         self.transfers.bind(connection_id.clone(), session);
         drop(sftp_connections);
-        if let Some(mut old) = old { let _ = old.disconnect().await; }
+        if let Some(mut old) = old {
+            let _ = old.disconnect().await;
+        }
         let mut types = self.connection_types.write().await;
         types.insert(connection_id, "SFTP".to_string());
         Ok(())
@@ -620,7 +626,9 @@ impl ConnectionManager {
         let client = sftp_connections.remove(connection_id);
         self.transfers.unbind(connection_id);
         drop(sftp_connections);
-        if let Some(mut client) = client { client.disconnect().await?; }
+        if let Some(mut client) = client {
+            client.disconnect().await?;
+        }
         let mut types = self.connection_types.write().await;
         types.remove(connection_id);
         Ok(())
@@ -838,7 +846,9 @@ mod tests {
 
     #[test]
     fn test_is_ephemeral_local_id() {
-        assert!(ConnectionManager::is_ephemeral_local_id("local-1719561234567"));
+        assert!(ConnectionManager::is_ephemeral_local_id(
+            "local-1719561234567"
+        ));
         assert!(!ConnectionManager::is_ephemeral_local_id("connection-1"));
         assert!(!ConnectionManager::is_ephemeral_local_id("ssh-prod"));
     }

@@ -158,7 +158,10 @@ pub fn diagnostic_from_anyhow(err: &anyhow::Error) -> Option<&ConnectDiagnosticE
 }
 
 /// Map a free-form error into a diagnostic when the chain has no structured value.
-pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage) -> ConnectDiagnosticError {
+pub fn classify_connect_error(
+    err: &anyhow::Error,
+    fallback_stage: ConnectStage,
+) -> ConnectDiagnosticError {
     if let Some(diag) = diagnostic_from_anyhow(err) {
         return diag.clone();
     }
@@ -167,11 +170,7 @@ pub fn classify_connect_error(err: &anyhow::Error, fallback_stage: ConnectStage)
     let lower = message.to_lowercase();
 
     if lower.contains("cancelled by user") || lower.contains("connection cancelled") {
-        return ConnectDiagnosticError::new(
-            ConnectErrorKind::Cancelled,
-            fallback_stage,
-            message,
-        );
+        return ConnectDiagnosticError::new(ConnectErrorKind::Cancelled, fallback_stage, message);
     }
 
     if message.contains(crate::known_hosts::UNKNOWN_HOST_KEY_PREFIX) {
@@ -361,7 +360,11 @@ pub fn classify_tcp_io_error(err: &io::Error, host: &str, port: u16) -> ConnectD
 }
 
 /// Classify handshake / connect_stream errors (after TCP is up).
-pub fn classify_handshake_error(err: &anyhow::Error, host: &str, port: u16) -> ConnectDiagnosticError {
+pub fn classify_handshake_error(
+    err: &anyhow::Error,
+    host: &str,
+    port: u16,
+) -> ConnectDiagnosticError {
     let message = err.to_string();
     let lower = message.to_lowercase();
 
@@ -448,7 +451,8 @@ mod tests {
 
     #[test]
     fn classifies_dns_message() {
-        let err = anyhow::anyhow!("failed to lookup address information: Name or service not known");
+        let err =
+            anyhow::anyhow!("failed to lookup address information: Name or service not known");
         let diag = classify_connect_error(&err, ConnectStage::ResolvingDns);
         assert_eq!(diag.kind, ConnectErrorKind::DnsFailure);
         assert_eq!(diag.stage, ConnectStage::ResolvingDns);
@@ -539,7 +543,9 @@ mod tests {
 
     #[test]
     fn classifies_host_key_mismatch() {
-        let err = anyhow::anyhow!("Host key mismatch for example.com:22. Server fingerprint: a. Expected: b.");
+        let err = anyhow::anyhow!(
+            "Host key mismatch for example.com:22. Server fingerprint: a. Expected: b."
+        );
         let diag = classify_connect_error(&err, ConnectStage::SshHandshake);
         assert_eq!(diag.kind, ConnectErrorKind::HostKeyMismatch);
         assert_eq!(diag.stage, ConnectStage::VerifyingHostKey);

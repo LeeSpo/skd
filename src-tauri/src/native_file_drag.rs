@@ -168,14 +168,30 @@ mod platform {
                             |connection_id, remote_path, destination| {
                                 let manager = Arc::clone(&context.manager);
                                 async move {
-                                    use crate::transfer_queue::{Input, Direction, Source, Status};
-                                    let input = Input::path(connection_id, Direction::Download,
-                                        destination.to_string_lossy().into_owned(), remote_path, Source::Finder);
-                                    let ticket = manager.transfers.enqueue(vec![input], None, None, None)
-                                        .map_err(|e| e.to_string())?.remove(0);
-                                    let outcome = ticket.done.await.map_err(|_| "Transfer queue closed".to_string())?;
-                                    if outcome.status == Status::Completed { Ok(()) }
-                                    else { Err(outcome.error.unwrap_or_else(|| "Download failed".into())) }
+                                    use crate::transfer_queue::{Direction, Input, Source, Status};
+                                    let input = Input::path(
+                                        connection_id,
+                                        Direction::Download,
+                                        destination.to_string_lossy().into_owned(),
+                                        remote_path,
+                                        Source::Finder,
+                                    );
+                                    let ticket = manager
+                                        .transfers
+                                        .enqueue(vec![input], None, None, None)
+                                        .map_err(|e| e.to_string())?
+                                        .remove(0);
+                                    let outcome = ticket
+                                        .done
+                                        .await
+                                        .map_err(|_| "Transfer queue closed".to_string())?;
+                                    if outcome.status == Status::Completed {
+                                        Ok(())
+                                    } else {
+                                        Err(outcome
+                                            .error
+                                            .unwrap_or_else(|| "Download failed".into()))
+                                    }
                                 }
                             },
                         ))
@@ -185,13 +201,13 @@ mod platform {
                     Ok(_) => completion.call((std::ptr::null_mut(),)),
                     Err(error) => {
                         if error != crate::sftp_transfer::CANCEL_ERROR {
-                        let _ = context.app.emit(
-                            "native-file-drag-error",
-                            NativeDragErrorPayload {
-                                name: context.item.name.clone(),
-                                error: error.clone(),
-                            },
-                        );
+                            let _ = context.app.emit(
+                                "native-file-drag-error",
+                                NativeDragErrorPayload {
+                                    name: context.item.name.clone(),
+                                    error: error.clone(),
+                                },
+                            );
                         }
                         let domain = NSString::from_str("com.spo.skd.file-promise");
                         let cocoa_error =

@@ -30,6 +30,16 @@ fn next_forward_id() -> String {
     format!("pf-{millis}-{n}")
 }
 
+/// Normalized configuration for starting a local port forward.
+pub(crate) struct LocalForwardConfig {
+    pub bookmark_id: Option<String>,
+    pub name: Option<String>,
+    pub local_bind_host: String,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalForwardInfo {
     pub id: String,
@@ -64,17 +74,20 @@ impl PortForwardManager {
         }
     }
 
-    pub async fn start_local(
+    pub(crate) async fn start_local(
         &self,
         connection_id: String,
         session: Arc<Handle<Client>>,
-        bookmark_id: Option<String>,
-        name: Option<String>,
-        local_bind_host: String,
-        local_port: u16,
-        remote_host: String,
-        remote_port: u16,
+        config: LocalForwardConfig,
     ) -> Result<LocalForwardInfo> {
+        let LocalForwardConfig {
+            bookmark_id,
+            name,
+            local_bind_host,
+            local_port,
+            remote_host,
+            remote_port,
+        } = config;
         validate_forward_params(&local_bind_host, remote_host.as_str(), remote_port)?;
 
         if let Some(bookmark_id) = bookmark_id.as_deref() {

@@ -162,18 +162,18 @@ pub async fn download_cancellable(
         copy_stream_cancellable(&mut remote, local.as_mut().unwrap(), &mut reporter, cancel).await
     }
     .await;
-    let bytes = if result.is_err() {
-        let error = result.unwrap_err();
-        let _ = tokio::time::timeout(CLEANUP_TIMEOUT, async {
-            if let Some(local) = &mut local {
-                let _ = tokio::time::timeout(CLOSE_TIMEOUT, local.flush()).await;
-            }
-            let _ = close_file(&mut remote, Err(anyhow!(CANCEL_ERROR)), cancel).await;
-        })
-        .await;
-        return Err(error);
-    } else {
-        close_file(&mut remote, result, cancel).await?
+    let bytes = match result {
+        Ok(bytes) => close_file(&mut remote, Ok(bytes), cancel).await?,
+        Err(error) => {
+            let _ = tokio::time::timeout(CLEANUP_TIMEOUT, async {
+                if let Some(local) = &mut local {
+                    let _ = tokio::time::timeout(CLOSE_TIMEOUT, local.flush()).await;
+                }
+                let _ = close_file(&mut remote, Err(anyhow!(CANCEL_ERROR)), cancel).await;
+            })
+            .await;
+            return Err(error);
+        }
     };
     reporter.send(bytes);
     Ok(bytes)

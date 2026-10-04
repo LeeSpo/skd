@@ -13,17 +13,23 @@ pub struct WindowAppearance {
 /// Formats sRGB components in `0.0..=1.0` as a CSS hex colour.
 fn to_hex(red: f64, green: f64, blue: f64) -> String {
     let channel = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
-    format!("#{:02x}{:02x}{:02x}", channel(red), channel(green), channel(blue))
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(red),
+        channel(green),
+        channel(blue)
+    )
 }
 
 #[cfg(target_os = "macos")]
 fn accent_color() -> Option<String> {
     use objc2_app_kit::{NSColor, NSColorSpace};
-    let color = NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())?;
+    let color =
+        NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())?;
     Some(to_hex(
-        color.redComponent() as f64,
-        color.greenComponent() as f64,
-        color.blueComponent() as f64,
+        color.redComponent(),
+        color.greenComponent(),
+        color.blueComponent(),
     ))
 }
 

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
@@ -165,7 +165,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [resolve, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write

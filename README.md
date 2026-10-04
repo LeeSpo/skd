@@ -28,7 +28,7 @@ skd brings interactive SSH sessions, local shells, SFTP file management, and sav
 ## Highlights
 
 - **Terminal workspace** — Run local shells and interactive SSH PTY sessions in tab groups. Split panes, move tabs between groups, search terminal output, and drag files or folders into a terminal with POSIX-safe path escaping.
-- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication. Configurable keepalive and connection timeouts, plus HTTP, SOCKS4, and SOCKS5 proxy support.
+- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication, with configurable keepalive and connection timeouts. Connections currently go directly to the target host; the proxy settings in the connection dialog are not yet connected to the backend.
 - **Host-key verification** — Unknown SSH host keys are presented for an explicit trust decision and are saved in skd's own `known_hosts` store.
 - **File work** — Browse local and remote directories side by side, transfer files or directories through a streaming transfer queue, move local files to native macOS Trash, rename and delete entries, and track progress. The file panel automatically follows supported shell working-directory updates (OSC 7).
 - **Connection organization** — Keep non-secret connection profiles in a folder-based sidebar. Passwords, private-key content, and passphrases are stored through the macOS Keychain.
@@ -40,13 +40,15 @@ skd brings interactive SSH sessions, local shells, SFTP file management, and sav
 
 | Shortcut | Action |
 | --- | --- |
-| `⌃B` (`Ctrl+B`) | Toggle connection manager sidebar |
-| `⌃J` (`Ctrl+J`) | Toggle integrated file browser panel |
-| `⌃M` (`Ctrl+M`) | Toggle remote system monitor panel |
-| `⌃Z` (`Ctrl+Z`) | Toggle Zen mode (hide all sidebars and panels) |
-| `⌃\` / `⌃⇧\` | Split terminal pane horizontally / vertically |
+| `⌃B` (`Ctrl+B`) | Toggle connection manager sidebar when focus is outside terminal input and text fields |
+| `⌃J` (`Ctrl+J`) | Toggle integrated file browser panel when focus is outside terminal input and text fields |
+| `⌃M` (`Ctrl+M`) | Toggle remote system monitor panel when focus is outside terminal input and text fields |
+| `⌃Z` (`Ctrl+Z`) | Toggle Zen mode (hide all sidebars and panels) when focus is outside terminal input and text fields |
+| `⌃\` / `⌃⇧\` | Split terminal pane right / down when the terminal has focus |
 | `⌘W` | Close active terminal tab or split pane |
 | `⌥ Drag` | Option-drag text selection (bypasses mouse reporting in `htop`, `tmux`, etc.) |
+
+With focus outside terminal input and text fields, `Ctrl+\` and `Ctrl+Shift+\` currently toggle the connection manager sidebar because that binding takes precedence over the split shortcuts.
 
 ## Download and install
 
@@ -84,9 +86,9 @@ Download the appropriate DMG from the [latest GitHub Release](https://github.com
 ### Requirements
 
 - macOS (Apple Silicon or Intel)
-- Node.js 22+
+- Node.js 22.13+ within the 22.x series, or 24+
 - Bun
-- Rust stable with Rust 1.85 or newer
+- Current stable Rust (at least 1.88, as required by the locked dependencies)
 - Tauri 2 dependencies for macOS
 
 ```bash

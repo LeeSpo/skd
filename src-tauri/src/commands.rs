@@ -1,18 +1,18 @@
-use base64::Engine as _;
 use crate::connection_diagnostics::{
-    classify_connect_error, clamp_keepalive_interval_secs, clamp_tcp_timeout_secs, ConnectErrorKind,
-    ConnectStage,
+    clamp_keepalive_interval_secs, clamp_tcp_timeout_secs, classify_connect_error,
+    ConnectErrorKind, ConnectStage,
 };
 use crate::connection_manager::ConnectionManager;
-use crate::ftp_client::FtpConfig;
 use crate::file_move::{
     move_local_items, validate_move_request, MoveItemResult, MoveItemsRequest, MoveItemsResponse,
 };
+use crate::ftp_client::FtpConfig;
 use crate::native_file_drag::{NativeDragItem, NativeDragResponse};
 use crate::os_detect::{self, OsInfo};
-use crate::port_forward::LocalForwardInfo;
+use crate::port_forward::{LocalForwardConfig, LocalForwardInfo};
 use crate::sftp_client::{FileEntry, FileEntryType, SftpAuthMethod, SftpConfig};
 use crate::ssh::{AuthMethod, SshConfig};
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -249,12 +249,14 @@ pub async fn ssh_start_local_forward(
     state
         .start_local_forward(
             request.connection_id,
-            request.bookmark_id.filter(|id| !id.trim().is_empty()),
-            request.name.filter(|n| !n.trim().is_empty()),
-            local_bind_host,
-            request.local_port,
-            remote_host,
-            request.remote_port,
+            LocalForwardConfig {
+                bookmark_id: request.bookmark_id.filter(|id| !id.trim().is_empty()),
+                name: request.name.filter(|n| !n.trim().is_empty()),
+                local_bind_host,
+                local_port: request.local_port,
+                remote_host,
+                remote_port: request.remote_port,
+            },
         )
         .await
         .map_err(|e| e.to_string())
@@ -267,10 +269,7 @@ pub async fn ssh_stop_local_forward(
     forward_id: String,
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<CommandResponse, String> {
-    match state
-        .stop_local_forward(&connection_id, &forward_id)
-        .await
-    {
+    match state.stop_local_forward(&connection_id, &forward_id).await {
         Ok(_) => Ok(CommandResponse {
             success: true,
             output: Some("Port forward stopped".to_string()),
@@ -500,9 +499,9 @@ pub async fn get_system_stats(
     // Disk stats for root filesystem
     let disk_cmd = os_info.disk_cmd();
     let disk_output = client.execute_command(disk_cmd).await.unwrap_or_default();
-    let disk_parts: Vec<&str> = disk_output.trim().split_whitespace().collect();
+    let disk_parts: Vec<&str> = disk_output.split_whitespace().collect();
     let disk = DiskStats {
-        total: disk_parts.get(0).unwrap_or(&"0").to_string(),
+        total: disk_parts.first().unwrap_or(&"0").to_string(),
         used: disk_parts.get(1).unwrap_or(&"0").to_string(),
         available: disk_parts.get(2).unwrap_or(&"0").to_string(),
         use_percent: disk_parts
@@ -582,8 +581,16 @@ pub async fn sftp_download_file(
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<FileTransferResponse, String> {
     if !request.local_path.is_empty() {
-        return queued_path_transfer(request.connection_id, request.local_path, request.remote_path,
-            crate::transfer_queue::Direction::Download, None, state.inner(), None).await;
+        return queued_path_transfer(
+            request.connection_id,
+            request.local_path,
+            request.remote_path,
+            crate::transfer_queue::Direction::Download,
+            None,
+            state.inner(),
+            None,
+        )
+        .await;
     }
     let connection = state
         .get_connection(&request.connection_id)
@@ -593,8 +600,18 @@ pub async fn sftp_download_file(
     let client = connection.read().await;
 
     match client.download_file_to_memory(&request.remote_path).await {
-        Ok(data) => Ok(FileTransferResponse { success: true, bytes_transferred: Some(data.len() as u64), data: Some(data), error: None }),
-        Err(e) => Ok(FileTransferResponse { success: false, bytes_transferred: None, data: None, error: Some(e.to_string()) }),
+        Ok(data) => Ok(FileTransferResponse {
+            success: true,
+            bytes_transferred: Some(data.len() as u64),
+            data: Some(data),
+            error: None,
+        }),
+        Err(e) => Ok(FileTransferResponse {
+            success: false,
+            bytes_transferred: None,
+            data: None,
+            error: Some(e.to_string()),
+        }),
     }
 }
 
@@ -605,8 +622,16 @@ pub async fn sftp_upload_file(
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<FileTransferResponse, String> {
     if request.data.is_none() {
-        return queued_path_transfer(request.connection_id, request.local_path, request.remote_path,
-            crate::transfer_queue::Direction::Upload, None, state.inner(), None).await;
+        return queued_path_transfer(
+            request.connection_id,
+            request.local_path,
+            request.remote_path,
+            crate::transfer_queue::Direction::Upload,
+            None,
+            state.inner(),
+            None,
+        )
+        .await;
     }
     let connection = state
         .get_connection(&request.connection_id)
@@ -615,7 +640,9 @@ pub async fn sftp_upload_file(
 
     let client = connection.read().await;
 
-    let result = client.upload_file_from_bytes(request.data.as_ref().unwrap(), &request.remote_path).await;
+    let result = client
+        .upload_file_from_bytes(request.data.as_ref().unwrap(), &request.remote_path)
+        .await;
 
     match result {
         Ok(bytes) => Ok(FileTransferResponse {
@@ -809,7 +836,11 @@ pub async fn rename_file(
         .ok_or("Connection not found")?;
 
     let client = connection.read().await;
-    let command = format!("mv '{}' '{}'", shell_escape_single_quoted(&old_path), shell_escape_single_quoted(&new_path));
+    let command = format!(
+        "mv '{}' '{}'",
+        shell_escape_single_quoted(&old_path),
+        shell_escape_single_quoted(&new_path)
+    );
 
     match client.execute_command(&command).await {
         Ok(_) => Ok(true),
@@ -820,11 +851,7 @@ pub async fn rename_file(
 const MAX_PREVIEW_FILE_BYTES: u64 = 20 * 1024 * 1024;
 
 fn infer_mime_from_path(path: &str) -> &'static str {
-    let ext = path
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
     match ext.as_str() {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
@@ -975,10 +1002,7 @@ pub async fn read_remote_file_base64(
             "FTP connections do not support in-app file preview. Download the file instead."
                 .to_string(),
         ),
-        Some(other) => Err(format!(
-            "Unsupported protocol for file preview: {}",
-            other
-        )),
+        Some(other) => Err(format!("Unsupported protocol for file preview: {}", other)),
         None => {
             let connection = state
                 .get_connection(&connection_id)
@@ -988,8 +1012,10 @@ pub async fn read_remote_file_base64(
             let client = connection.read().await;
 
             // Refuse very large files to avoid memory / performance issues
-            let size_cmd =
-                format!("stat -c '%s' '{}' 2>/dev/null || stat -f '%z' '{}'", path, path);
+            let size_cmd = format!(
+                "stat -c '%s' '{}' 2>/dev/null || stat -f '%z' '{}'",
+                path, path
+            );
             let size_str = client
                 .execute_command(&size_cmd)
                 .await
@@ -2501,7 +2527,9 @@ pub async fn sftp_connect(
             password: request.password.unwrap_or_default(),
         },
         "publickey" => SftpAuthMethod::PublicKey {
-            key_content: request.key_content.ok_or("Private key content required for SFTP")?,
+            key_content: request
+                .key_content
+                .ok_or("Private key content required for SFTP")?,
             passphrase: request.passphrase,
         },
         _ => return Err("Invalid SFTP auth method".to_string()),
@@ -2664,8 +2692,12 @@ pub async fn list_remote_files(
 
 // Registry and cancellation protocol adapted from upstream PR #168 / 4a63fb8.
 fn transfer_response(outcome: crate::transfer_queue::Outcome) -> FileTransferResponse {
-    FileTransferResponse { success: outcome.status == crate::transfer_queue::Status::Completed,
-        bytes_transferred: outcome.bytes_transferred, data: None, error: outcome.error }
+    FileTransferResponse {
+        success: outcome.status == crate::transfer_queue::Status::Completed,
+        bytes_transferred: outcome.bytes_transferred,
+        data: None,
+        error: outcome.error,
+    }
 }
 
 #[tauri::command]
@@ -2676,82 +2708,188 @@ pub async fn enqueue_file_transfers(
     state: State<'_, Arc<ConnectionManager>>,
 ) -> Result<Vec<String>, String> {
     for item in &items {
-        if state.get_connection_type(&item.connection_id).await.as_deref() == Some("FTP") {
+        if state
+            .get_connection_type(&item.connection_id)
+            .await
+            .as_deref()
+            == Some("FTP")
+        {
             return Err("FTP_LEGACY_TRANSFER".into());
         }
     }
     let window = webview.label().to_string();
     let callback = on_event.map(|id| {
         let channel = id.channel_on::<_, crate::transfer_queue::JobEvent>(webview);
-        Arc::new(move |event| { let _ = channel.send(event); }) as crate::transfer_queue::EventCallback
+        Arc::new(move |event| {
+            let _ = channel.send(event);
+        }) as crate::transfer_queue::EventCallback
     });
-    let tickets = state.transfers.enqueue(items, Some(window), callback, None).map_err(|e| e.to_string())?;
+    let tickets = state
+        .transfers
+        .enqueue(items, Some(window), callback, None)
+        .map_err(|e| e.to_string())?;
     Ok(tickets.into_iter().map(|t| t.id).collect())
 }
 
 #[tauri::command]
-pub fn get_transfer_queue(state: State<'_, Arc<ConnectionManager>>) -> crate::transfer_queue::Snapshot { state.transfers.snapshot() }
-
-#[tauri::command]
-pub fn cancel_transfer(transfer_id: String, state: State<'_, Arc<ConnectionManager>>) -> bool { state.transfers.cancel(&transfer_id) }
-
-#[tauri::command]
-pub fn retry_transfer(transfer_id: String, webview: tauri::Webview, state: State<'_, Arc<ConnectionManager>>) -> Result<String, String> {
-    state.transfers.retry(&transfer_id, Some(webview.label().to_string())).map_err(|e| e.to_string())
+pub fn get_transfer_queue(
+    state: State<'_, Arc<ConnectionManager>>,
+) -> crate::transfer_queue::Snapshot {
+    state.transfers.snapshot()
 }
 
 #[tauri::command]
-pub fn clear_completed_transfers(state: State<'_, Arc<ConnectionManager>>) { state.transfers.clear_completed(); }
+pub fn cancel_transfer(transfer_id: String, state: State<'_, Arc<ConnectionManager>>) -> bool {
+    state.transfers.cancel(&transfer_id)
+}
+
+#[tauri::command]
+pub fn retry_transfer(
+    transfer_id: String,
+    webview: tauri::Webview,
+    state: State<'_, Arc<ConnectionManager>>,
+) -> Result<String, String> {
+    state
+        .transfers
+        .retry(&transfer_id, Some(webview.label().to_string()))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_completed_transfers(state: State<'_, Arc<ConnectionManager>>) {
+    state.transfers.clear_completed();
+}
 
 pub(crate) async fn queued_path_transfer(
-    connection_id: String, local_path: String, remote_path: String,
-    direction: crate::transfer_queue::Direction, transfer_id: Option<String>,
-    state: &Arc<ConnectionManager>, report: Option<crate::transfer_queue::ProgressCallback>,
+    connection_id: String,
+    local_path: String,
+    remote_path: String,
+    direction: crate::transfer_queue::Direction,
+    transfer_id: Option<String>,
+    state: &Arc<ConnectionManager>,
+    report: Option<crate::transfer_queue::ProgressCallback>,
 ) -> Result<FileTransferResponse, String> {
     use crate::transfer_queue::{Input, Source};
-    let mut input = Input::path(connection_id, direction, local_path, remote_path, Source::Legacy);
+    let mut input = Input::path(
+        connection_id,
+        direction,
+        local_path,
+        remote_path,
+        Source::Legacy,
+    );
     input.id = transfer_id;
-    let ticket = state.transfers.enqueue(vec![input], None, None, report).map_err(|e| e.to_string())?.remove(0);
-    let outcome = ticket.done.await.map_err(|_| "Transfer queue closed".to_string())?;
+    let ticket = state
+        .transfers
+        .enqueue(vec![input], None, None, report)
+        .map_err(|e| e.to_string())?
+        .remove(0);
+    let outcome = ticket
+        .done
+        .await
+        .map_err(|_| "Transfer queue closed".to_string())?;
     Ok(transfer_response(outcome))
 }
 
 #[tauri::command]
 pub async fn download_remote_file(
-    connection_id: String, remote_path: String, local_path: String,
+    connection_id: String,
+    remote_path: String,
+    local_path: String,
     state: State<'_, Arc<ConnectionManager>>,
-    on_progress: Option<tauri::ipc::JavaScriptChannelId>, transfer_id: Option<String>, webview: tauri::Webview,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
+    transfer_id: Option<String>,
+    webview: tauri::Webview,
 ) -> Result<FileTransferResponse, String> {
     if state.get_connection_type(&connection_id).await.as_deref() == Some("FTP") {
         let map = state.get_ftp_connection().await;
         let mut clients = map.write().await;
-        let result = clients.get_mut(&connection_id).ok_or("FTP connection not found")?.download_file(&remote_path, &local_path).await;
-        return Ok(match result { Ok(bytes) => FileTransferResponse { success: true, bytes_transferred: Some(bytes), data: None, error: None }, Err(e) => FileTransferResponse { success: false, bytes_transferred: None, data: None, error: Some(e.to_string()) } });
+        let result = clients
+            .get_mut(&connection_id)
+            .ok_or("FTP connection not found")?
+            .download_file(&remote_path, &local_path)
+            .await;
+        return Ok(match result {
+            Ok(bytes) => FileTransferResponse {
+                success: true,
+                bytes_transferred: Some(bytes),
+                data: None,
+                error: None,
+            },
+            Err(e) => FileTransferResponse {
+                success: false,
+                bytes_transferred: None,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        });
     }
     let report = on_progress.map(|id| {
         let channel = id.channel_on::<_, crate::sftp_transfer::TransferProgress>(webview);
-        Arc::new(move |event| { let _ = channel.send(event); }) as crate::transfer_queue::ProgressCallback
+        Arc::new(move |event| {
+            let _ = channel.send(event);
+        }) as crate::transfer_queue::ProgressCallback
     });
-    queued_path_transfer(connection_id, local_path, remote_path, crate::transfer_queue::Direction::Download, transfer_id, state.inner(), report).await
+    queued_path_transfer(
+        connection_id,
+        local_path,
+        remote_path,
+        crate::transfer_queue::Direction::Download,
+        transfer_id,
+        state.inner(),
+        report,
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn upload_remote_file(
-    connection_id: String, local_path: String, remote_path: String,
+    connection_id: String,
+    local_path: String,
+    remote_path: String,
     state: State<'_, Arc<ConnectionManager>>,
-    on_progress: Option<tauri::ipc::JavaScriptChannelId>, transfer_id: Option<String>, webview: tauri::Webview,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
+    transfer_id: Option<String>,
+    webview: tauri::Webview,
 ) -> Result<FileTransferResponse, String> {
     if state.get_connection_type(&connection_id).await.as_deref() == Some("FTP") {
         let map = state.get_ftp_connection().await;
         let mut clients = map.write().await;
-        let result = clients.get_mut(&connection_id).ok_or("FTP connection not found")?.upload_file(&local_path, &remote_path).await;
-        return Ok(match result { Ok(bytes) => FileTransferResponse { success: true, bytes_transferred: Some(bytes), data: None, error: None }, Err(e) => FileTransferResponse { success: false, bytes_transferred: None, data: None, error: Some(e.to_string()) } });
+        let result = clients
+            .get_mut(&connection_id)
+            .ok_or("FTP connection not found")?
+            .upload_file(&local_path, &remote_path)
+            .await;
+        return Ok(match result {
+            Ok(bytes) => FileTransferResponse {
+                success: true,
+                bytes_transferred: Some(bytes),
+                data: None,
+                error: None,
+            },
+            Err(e) => FileTransferResponse {
+                success: false,
+                bytes_transferred: None,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        });
     }
     let report = on_progress.map(|id| {
         let channel = id.channel_on::<_, crate::sftp_transfer::TransferProgress>(webview);
-        Arc::new(move |event| { let _ = channel.send(event); }) as crate::transfer_queue::ProgressCallback
+        Arc::new(move |event| {
+            let _ = channel.send(event);
+        }) as crate::transfer_queue::ProgressCallback
     });
-    queued_path_transfer(connection_id, local_path, remote_path, crate::transfer_queue::Direction::Upload, transfer_id, state.inner(), report).await
+    queued_path_transfer(
+        connection_id,
+        local_path,
+        remote_path,
+        crate::transfer_queue::Direction::Upload,
+        transfer_id,
+        state.inner(),
+        report,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -3535,10 +3673,7 @@ pub fn get_connection_secret(
 }
 
 #[tauri::command]
-pub fn delete_connection_secret(
-    connection_id: String,
-    secret_type: String,
-) -> Result<(), String> {
+pub fn delete_connection_secret(connection_id: String, secret_type: String) -> Result<(), String> {
     crate::credential_store::delete_connection_secret(&connection_id, &secret_type)
 }
 

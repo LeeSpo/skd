@@ -15,7 +15,7 @@ permissions:
 jobs:
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -68,7 +68,7 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      # Non-blocking until the codebase is clippy/fmt clean; promote later.
+      # Keep Clippy and formatting advisory; failures remain visible in annotations.
       - name: Clippy
         working-directory: src-tauri
         continue-on-error: true

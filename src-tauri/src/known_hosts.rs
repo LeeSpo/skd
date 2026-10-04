@@ -211,5 +211,4 @@ mod tests {
             assert!(matches!(result, VerifyResult::Unknown { .. }));
         });
     }
-
 }
