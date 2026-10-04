@@ -1211,7 +1211,8 @@ html[data-window-kind="main"] body {
   box-shadow: var(--shadow-dialog), 0 24px 80px rgba(0, 0, 0, 0.18);
 }
 
-.preferences-dialog {
+.preferences-dialog,
+.connection-dialog {
   background: var(--popover);
 }
 

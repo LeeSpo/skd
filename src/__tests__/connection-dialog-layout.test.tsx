@@ -78,8 +78,8 @@ describe('ConnectionDialog field layout', () => {
     );
 
     expect(screen.queryByRole('tab', { name: 'Auth' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Proxy' })).toBeNull();
     expect(screen.getByRole('tab', { name: 'Connection' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Proxy' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Advanced' })).toBeTruthy();
   });
 

@@ -99,7 +99,6 @@
     "tab": {
       "connection": "Connection",
       "auth": "Auth",
-      "proxy": "Proxy",
       "advanced": "Advanced"
     },
     "section": {
@@ -107,8 +106,6 @@
       "basicSettingsDesc": "Configure the basic connection parameters for your connection.",
       "authentication": "Authentication Method",
       "authenticationDesc": "Choose how to authenticate with the remote server.",
-      "proxySettings": "Proxy Settings",
-      "proxySettingsDesc": "Configure proxy settings if you need to connect through a proxy server.",
       "advancedSsh": "Advanced SSH Options",
       "advancedSshDesc": "Fine-tune SSH connection behavior and performance.",
       "advancedOptions": "Advanced Options",
@@ -124,11 +121,6 @@
       "password": "Password",
       "privateKey": "Private Key File",
       "passphrase": "Passphrase (optional)",
-      "proxyType": "Proxy Type",
-      "proxyHost": "Proxy Host",
-      "proxyPort": "Proxy Port",
-      "proxyUsername": "Proxy Username",
-      "proxyPassword": "Proxy Password",
       "keepAliveInterval": "Interval (seconds)",
       "maxCount": "Max Count"
     },
@@ -139,11 +131,7 @@
       "username": "root",
       "password": "Enter password",
       "privateKey": "~/.ssh/id_rsa or ~/.ssh/id_ed25519",
-      "passphrase": "Enter passphrase if key is encrypted",
-      "proxyHost": "proxy.example.com",
-      "proxyPort": "Proxy Port",
-      "proxyUsername": "Optional",
-      "proxyPassword": "Optional"
+      "passphrase": "Enter passphrase if key is encrypted"
     },
     "authMethod": {
       "password": "Password",
@@ -160,12 +148,6 @@
       "enableCompressionDesc": "Compress data to improve performance over slow connections",
       "keepAlive": "Keep Alive",
       "keepAliveDesc": "Send keep-alive messages to prevent connection timeout"
-    },
-    "proxy": {
-      "noProxy": "No Proxy",
-      "httpProxy": "HTTP Proxy",
-      "socks4": "SOCKS4",
-      "socks5": "SOCKS5"
     },
     "saveAsConnection": "Save as persistent connection",
     "rememberPassword": "Remember Password",

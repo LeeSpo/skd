@@ -50,7 +50,6 @@ import { toast } from 'sonner';
 import {
   Server,
   FolderOpen,
-  Network,
   Terminal as TerminalIcon,
 } from 'lucide-react';
 import { getDefaultPort, getAuthMethods, getHiddenFields } from '@/lib/protocol-config';
@@ -79,13 +78,6 @@ export interface ConnectionConfig {
   privateKeyPath?: string;
   privateKeyContent?: string;
   passphrase?: string;
-
-  // Advanced options
-  proxyType?: 'none' | 'http' | 'socks4' | 'socks5';
-  proxyHost?: string;
-  proxyPort?: number;
-  proxyUsername?: string;
-  proxyPassword?: string;
 
   // FTP specific
   ftpsEnabled?: boolean;
@@ -116,11 +108,6 @@ export function ConnectionDialog({
     privateKeyPath: '',
     privateKeyContent: '',
     passphrase: '',
-    proxyType: 'none',
-    proxyHost: '',
-    proxyPort: 8080,
-    proxyUsername: '',
-    proxyPassword: '',
     compression: true,
     keepAlive: true,
     keepAliveInterval: 60,
@@ -768,13 +755,6 @@ export function ConnectionDialog({
               <span>{t('connectionDialog.tab.connection')}</span>
             </TabsTrigger>
             <TabsTrigger
-              value="proxy"
-              className="h-6 gap-1.5 rounded-md px-3 py-1 text-xs"
-            >
-              <Network className="h-3.5 w-3.5" />
-              <span>{t('connectionDialog.tab.proxy')}</span>
-            </TabsTrigger>
-            <TabsTrigger
               value="advanced"
               className="h-6 gap-1.5 rounded-md px-3 py-1 text-xs"
             >
@@ -1007,85 +987,6 @@ export function ConnectionDialog({
                       {t('connectionDialog.rememberPassword')}
                     </Label>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="proxy" className={tabContentClassName}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Network className="h-4 w-4" />
-                  {t('connectionDialog.section.proxySettings')}
-                </CardTitle>
-                <CardDescription>
-                  {t('connectionDialog.section.proxySettingsDesc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{t('connectionDialog.label.proxyType')}</Label>
-                  <Select
-                    value={config.proxyType}
-                    onValueChange={(value: string) => updateConfig({ proxyType: value as ConnectionConfig['proxyType'] })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t('connectionDialog.proxy.noProxy')}</SelectItem>
-                      <SelectItem value="http">{t('connectionDialog.proxy.httpProxy')}</SelectItem>
-                      <SelectItem value="socks4">{t('connectionDialog.proxy.socks4')}</SelectItem>
-                      <SelectItem value="socks5">{t('connectionDialog.proxy.socks5')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {config.proxyType !== 'none' && (
-                  <>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="col-span-2 space-y-2">
-                        <Label htmlFor="proxy-host">{t('connectionDialog.label.proxyHost')}</Label>
-                        <Input
-                          id="proxy-host"
-                          placeholder={t('connectionDialog.placeholder.proxyHost')}
-                          value={config.proxyHost}
-                          onChange={(e) => updateConfig({ proxyHost: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="proxy-port">{t('connectionDialog.label.proxyPort')}</Label>
-                        <Input
-                          id="proxy-port"
-                          type="number"
-                          value={config.proxyPort}
-                          onChange={(e) => updateConfig({ proxyPort: parseInt(e.target.value) || 8080 })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="proxy-username">{t('connectionDialog.label.proxyUsername')}</Label>
-                        <Input
-                          id="proxy-username"
-                          placeholder={t('connectionDialog.placeholder.proxyUsername')}
-                          onChange={(e) => updateConfig({ proxyUsername: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="proxy-password">{t('connectionDialog.label.proxyPassword')}</Label>
-                        <Input
-                          id="proxy-password"
-                          type="password"
-                          placeholder={t('connectionDialog.placeholder.proxyPassword')}
-                          value={config.proxyPassword}
-                          onChange={(e) => updateConfig({ proxyPassword: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  </>
                 )}
               </CardContent>
             </Card>

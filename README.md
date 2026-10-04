@@ -28,7 +28,7 @@ skd brings interactive SSH sessions, local shells, SFTP file management, and sav
 ## Highlights
 
 - **Terminal workspace** — Run local shells and interactive SSH PTY sessions in tab groups. Split panes, move tabs between groups, search terminal output, and drag files or folders into a terminal with POSIX-safe path escaping.
-- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication, with configurable keepalive and connection timeouts. Connections currently go directly to the target host; the proxy settings in the connection dialog are not yet connected to the backend.
+- **SSH connections** — Connect with passwords, private keys, or keyboard-interactive authentication, with configurable keepalive and connection timeouts. Connections go directly to the target host.
 - **Host-key verification** — Unknown SSH host keys are presented for an explicit trust decision and are saved in skd's own `known_hosts` store.
 - **File work** — Browse local and remote directories side by side, transfer files or directories through a streaming transfer queue, move local files to native macOS Trash, rename and delete entries, and track progress. The file panel automatically follows supported shell working-directory updates (OSC 7).
 - **Connection organization** — Keep non-secret connection profiles in a folder-based sidebar. Passwords, private-key content, and passphrases are stored through the macOS Keychain.
