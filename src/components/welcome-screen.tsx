@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ArrowUpRight, ChevronRight, Server, Settings2, Terminal } from 'lucide-react';
 import packageJson from '../../package.json';
+import appIcon from '../../src-tauri/icons/128x128@2x.png';
 import { Button } from './ui/button';
 
 export interface WelcomeConnection {
@@ -32,9 +33,7 @@ export function WelcomeScreen({
     <div className="welcome-workspace flex h-full overflow-auto bg-workspace">
       <div className={`m-auto flex w-full ${hasRecent ? 'max-w-3xl' : 'max-w-md'}`}>
         <div className="min-w-0 flex-1 px-8 py-10">
-          <div className="mb-6 flex size-16 items-center justify-center rounded-2xl bg-secondary">
-            <Terminal className="size-8 text-foreground" strokeWidth={1.5} aria-hidden="true" />
-          </div>
+          <img src={appIcon} alt="" aria-hidden="true" className="mb-6 size-16 object-contain" />
           <h1 className="text-[22px] font-bold tracking-tight">{t('welcome.title')}</h1>
           <p className="mt-1 text-[11px] text-muted-foreground">{t('welcome.version', { version: packageJson.version })}</p>
           <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-muted-foreground">{t('welcome.getStartedDesc')}</p>
