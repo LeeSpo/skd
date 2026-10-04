@@ -1,6 +1,6 @@
 [package]
 name = "skd"
-version = "0.3.1"
+version = "1.0.0"
 description = "A lightweight SSH/SFTP terminal workspace"
 authors = ["you"]
 edition = "2021"

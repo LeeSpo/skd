@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-04
+
+> **Major Milestone**: Version 1.0.0 marks a complete departure from the upstream fork's web-style interface. The frontend has been rebuilt from scratch specifically for macOS, adhering to Apple Human Interface Guidelines and macOS Sequoia visual design.
+
+### Added
+
+- **Native macOS Sequoia Visual Design**: Rebuilt the frontend from the ground up for macOS, featuring AppKit `NSVisualEffectView` sidebar vibrancy, native traffic-light inset spacing (`hiddenTitle`), and Sequoia material and geometry tokens (`--material-*`, glass filters, hairlines, and 28px/24px control sizes).
+- **Native Window Appearance Bridge & System Palette**: Added a Rust-to-AppKit appearance bridge that queries macOS accent colors (`NSColor.controlAccentColor`) and observes `NSSystemColorsDidChangeNotification`. Introduced a dynamic "System" palette (now default) following system light/dark mode and the user's macOS accent color.
+- **Titlebar Tab Strip Integration**: Implemented a responsive workspace tab bar that portals single-group terminal tabs directly into the 44px macOS titlebar for a compact Safari/Finder-like layout. When split into multiple groups, tabs gracefully move to 30px per-pane strips while the titlebar displays active session details.
+- **Configurable Connection Timeout & Keepalive**: Added UI settings and backend `russh` client configuration for SSH connection timeout, keepalive interval, and maximum keepalive counts.
+- **File Browser Column Customization**: Added support for toggling Size and Modified columns in the integrated file browser via an action menu, with column preferences saved across sessions.
+- **Real-Time Terminal Theme Accent Sync**: Automatically updates active terminal theme accent colors and re-renders xterm.js sessions when the macOS system accent color changes.
+- **Official App Branding**: Refreshed the welcome screen and window chrome with the official skd logo and updated application typography.
+
+### Changed
+
+- **Complete Frontend Architecture Rewrite**: Fully replaced the inherited upstream web-based layout with a native macOS-centric workspace hierarchy, full-height sidebar, and modular panel system.
+- **Unified 44px Window Toolbar**: Redesigned the window header into a single macOS toolbar (`WindowToolbar`), integrating session information, panel toggles, new-tab triggers, and window actions.
+- **Settings Modal Restructuring**: Redesigned the settings dialog with vertical category navigation, structured macOS form sections, independent content scrolling, and viewport-safe bounds.
+- **UI Primitives Tokenization**: Standardized all UI components (dialogs, alert dialogs, dropdowns, context menus, popovers, select menus, tooltips, toasts) around CSS variable tokens for border radii, controls, and glassmorphism styling.
+- **File Browser Layout & Navigation**: Overhauled the integrated file browser layout with compact rows, alternating backgrounds, and refined panel controls.
+- **Panel & Inspector Geometry**: Refined workspace panel sizing, inspector resizing logic, and borderless pane separation.
+
+### Removed
+
+- **Legacy Web Menu Bar & Status Bar**: Completely eliminated the legacy top menu bar (`menu-bar.tsx`) and bottom status bar (`status-bar.tsx`) in favor of native macOS window chrome and toolbar integration.
+- **Proxy Configuration**: Removed unused proxy configuration settings and UI from the SSH connection dialog.
+- **Obsolete Fork Code & Test Suites**: Pruned legacy UI components, unused layout logic, and obsolete contract test suites carried over from the original fork.
+
+
 ## [0.3.1] - 2026-10-02
 
 ### Added
