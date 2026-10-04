@@ -19,13 +19,42 @@ it('shares optional columns between panes and restores the choice on remount', a
   expect(screen.queryByRole('columnheader', { name: 'Perms' })).toBeNull();
   fireEvent.keyDown(screen.getAllByRole('button', { name: 'More file actions' })[0], { key: 'Enter' });
   fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Columns' }), { key: 'ArrowRight' });
-  fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Permissions' }));
+  const columnMenu = await screen.findByRole('menu', { name: 'Columns' });
+  const parentMenu = document.querySelector('[data-slot="dropdown-menu-content"]');
+  expect(parentMenu).toBeTruthy();
+  expect(parentMenu!.contains(columnMenu)).toBe(false);
+  expect(within(columnMenu).queryByRole('menuitemcheckbox', { name: 'Name' })).toBeNull();
+  expect(within(columnMenu).getByRole('menuitemcheckbox', { name: 'Size' }).getAttribute('aria-checked')).toBe('true');
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Permissions' }));
   expect(screen.getAllByRole('columnheader', { name: 'Perms', hidden: true })).toHaveLength(2);
-  expect(JSON.parse(localStorage.getItem('skd-file-browser-visible-columns')!)).toEqual(['permissions']);
+  expect(JSON.parse(localStorage.getItem('skd-file-browser-visible-columns')!)).toEqual({
+    size: true,
+    modified: true,
+    permissions: true,
+    owner: false,
+  });
   first.unmount();
   render(panel('remote'));
   await screen.findByText('report.txt');
   expect(screen.getByRole('columnheader', { name: 'Perms' })).toBeTruthy();
+});
+
+it('keeps the file name and lets size and modified be hidden', async () => {
+  localStorage.setItem('skd-file-browser-visible-columns', JSON.stringify(['owner']));
+  render(panel('local'));
+  await screen.findByText('report.txt');
+  expect(screen.getByRole('columnheader', { name: 'Size' })).toBeTruthy();
+  expect(screen.getByRole('columnheader', { name: 'Modified' })).toBeTruthy();
+
+  fireEvent.keyDown(screen.getByRole('button', { name: 'More file actions' }), { key: 'Enter' });
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Columns' }), { key: 'ArrowRight' });
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Size' }));
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Modified' }));
+
+  expect(screen.queryByRole('columnheader', { name: 'Size', hidden: true })).toBeNull();
+  expect(screen.queryByRole('columnheader', { name: 'Modified', hidden: true })).toBeNull();
+  expect(screen.getByRole('columnheader', { name: 'Name', hidden: true })).toBeTruthy();
+  expect(screen.getByText('report.txt')).toBeTruthy();
 });
 
 it('transfers the selection from each toolbar and keeps directory sync available', async () => {

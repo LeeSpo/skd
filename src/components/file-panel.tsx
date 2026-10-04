@@ -146,6 +146,8 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
   ) {
     const { t } = useTranslation();
     const { isColumnVisible } = useFileBrowserColumns();
+    const sizeVisible = isColumnVisible('size');
+    const modifiedVisible = isColumnVisible('modified');
     const permissionsVisible = showPermissions && isColumnVisible('permissions');
     const [currentPath, setCurrentPath] = useState(initialPath ?? "/");
     const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -656,11 +658,11 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                   {filter ? t('filePanel.empty.noMatches') : t('filePanel.empty.emptyDirectory')}
                 </div>
               ) : (
-                <table className={`file-browser-table w-full ${FILE_BROWSER_LIST_TEXT}`} style={{ tableLayout: "fixed", minWidth: 140 + colWidths.size + colWidths.modified + (permissionsVisible ? colWidths.permissions : 0) }}>
+                <table className={`file-browser-table w-full ${FILE_BROWSER_LIST_TEXT}`} style={{ tableLayout: "fixed", minWidth: 140 + (sizeVisible ? colWidths.size : 0) + (modifiedVisible ? colWidths.modified : 0) + (permissionsVisible ? colWidths.permissions : 0) }}>
                   <colgroup>
                     <col />
-                    <col style={{ width: colWidths.size }} />
-                    <col style={{ width: colWidths.modified }} />
+                    {sizeVisible && <col style={{ width: colWidths.size }} />}
+                    {modifiedVisible && <col style={{ width: colWidths.modified }} />}
                     {permissionsVisible && (
                       <col style={{ width: colWidths.permissions }} />
                     )}
@@ -675,48 +677,60 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                           {t('filePanel.column.name')}
                           <SortIndicator column="name" />
                         </span>
-                        <div
-                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
-                          onMouseDown={(e) =>
-                            handleColumnResize(e, "size", true)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </th>
-                      <th
-                        className="relative cursor-pointer select-none px-2 py-px text-right font-medium hover:bg-muted/80"
-                        onClick={() => handleSortClick("size")}
-                      >
-                        <span className="inline-flex items-center justify-end w-full">
-                          {t('filePanel.column.size')}
-                          <SortIndicator column="size" />
-                        </span>
-                        <div
-                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
-                          onMouseDown={(e) =>
-                            handleColumnResize(e, "modified", true)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </th>
-                      <th
-                        className="relative cursor-pointer select-none px-2 py-px text-left font-medium hover:bg-muted/80"
-                        onClick={() => handleSortClick("modified")}
-                      >
-                        <span className="inline-flex items-center">
-                          {t('filePanel.column.modified')}
-                          <SortIndicator column="modified" />
-                        </span>
-                        {permissionsVisible && (
+                        {(sizeVisible || modifiedVisible || permissionsVisible) && (
                           <div
                             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
                             onMouseDown={(e) =>
-                              handleColumnResize(e, "permissions", true)
+                              handleColumnResize(
+                                e,
+                                sizeVisible ? "size" : modifiedVisible ? "modified" : "permissions",
+                                true,
+                              )
                             }
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
                       </th>
+                      {sizeVisible && (
+                        <th
+                          className="relative cursor-pointer select-none px-2 py-px text-right font-medium hover:bg-muted/80"
+                          onClick={() => handleSortClick("size")}
+                        >
+                          <span className="inline-flex items-center justify-end w-full">
+                            {t('filePanel.column.size')}
+                            <SortIndicator column="size" />
+                          </span>
+                          {(modifiedVisible || permissionsVisible) && (
+                            <div
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
+                              onMouseDown={(e) =>
+                                handleColumnResize(e, modifiedVisible ? "modified" : "permissions", true)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                        </th>
+                      )}
+                      {modifiedVisible && (
+                        <th
+                          className="relative cursor-pointer select-none px-2 py-px text-left font-medium hover:bg-muted/80"
+                          onClick={() => handleSortClick("modified")}
+                        >
+                          <span className="inline-flex items-center">
+                            {t('filePanel.column.modified')}
+                            <SortIndicator column="modified" />
+                          </span>
+                          {permissionsVisible && (
+                            <div
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-20"
+                              onMouseDown={(e) =>
+                                handleColumnResize(e, "permissions", true)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                        </th>
+                      )}
                       {permissionsVisible && (
                         <th className="relative px-2 py-px text-left font-medium">
                           {t('filePanel.column.permissions')}
@@ -744,14 +758,18 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                                   <span className="truncate" title={entry.name}>{entry.name}</span>
                                 </div>
                               </td>
-                              <td className="overflow-hidden whitespace-nowrap px-2 py-px text-right text-muted-foreground">
-                                {entry.file_type === "File"
-                                  ? formatSize(entry.size)
-                                  : "—"}
-                              </td>
-                              <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-px text-muted-foreground">
-                                {entry.modified ?? "—"}
-                              </td>
+                              {sizeVisible && (
+                                <td className="overflow-hidden whitespace-nowrap px-2 py-px text-right text-muted-foreground">
+                                  {entry.file_type === "File"
+                                    ? formatSize(entry.size)
+                                    : "—"}
+                                </td>
+                              )}
+                              {modifiedVisible && (
+                                <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-px text-muted-foreground">
+                                  {entry.modified ?? "—"}
+                                </td>
+                              )}
                               {permissionsVisible && (
                                 <td className="overflow-hidden whitespace-nowrap px-2 py-px font-mono text-muted-foreground">
                                   {entry.permissions ?? "—"}

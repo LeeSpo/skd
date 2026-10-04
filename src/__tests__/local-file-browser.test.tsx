@@ -824,6 +824,35 @@ describe('IntegratedFileBrowser local mode', () => {
     });
   });
 
+  it('toggles follow from the button beside the path', async () => {
+    const view = render(<IntegratedFileBrowser mode="local" terminalCwd="/tmp/project" />);
+    const followButton = () => screen.getByRole('button', {
+      name: 'fileBrowser.toolbar.followTerminal',
+    });
+
+    expect(followButton().getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(followButton());
+    expect(followButton().getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem('skd-follow-terminal-cwd')).toBe('false');
+
+    view.rerender(<IntegratedFileBrowser mode="local" terminalCwd="/var/ignored" />);
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('get_home_directory');
+    });
+    expect(mockedInvoke).not.toHaveBeenCalledWith('list_local_files', {
+      path: '/var/ignored',
+    });
+
+    fireEvent.click(followButton());
+    expect(followButton().getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('list_local_files', {
+        path: '/var/ignored',
+      });
+    });
+  });
+
   it('keeps the current listing when a reported directory cannot be loaded', async () => {
     mockedInvoke.mockImplementation(async (command: string, args?: unknown) => {
       if (command === 'get_home_directory') return '/Users/test';

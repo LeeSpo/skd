@@ -230,6 +230,8 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   const { t } = useTranslation();
   const { isColumnVisible } = useFileBrowserColumns();
+  const sizeVisible = isColumnVisible('size');
+  const modifiedVisible = isColumnVisible('modified');
   const permissionsVisible = !isLocalMode && isColumnVisible('permissions');
   const ownerVisible = !isLocalMode && isColumnVisible('owner');
   const [currentPath, setCurrentPath] = useState(adapter.defaultHomePath);
@@ -1617,7 +1619,9 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
   // Count actual files/folders (excluding ".." navigation entry)
   const actualItemCount = filteredFiles.filter(file => file.name !== '..').length;
-  const listMinWidth = columnWidths.name + columnWidths.size + columnWidths.modified + 40
+  const listMinWidth = columnWidths.name + 40
+    + (sizeVisible ? columnWidths.size : 0)
+    + (modifiedVisible ? columnWidths.modified : 0)
     + (permissionsVisible ? columnWidths.permissions + 8 : 0)
     + (ownerVisible ? columnWidths.owner + 8 : 0);
 
@@ -1708,7 +1712,18 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
           </div>
 
 
-        {followTerminalCwd && <span className="shrink-0 text-primary" title={t('fileBrowser.toolbar.followTerminal')} aria-label={t('fileBrowser.toolbar.followTerminal')}><LocateFixed className="size-3.5" /></span>}
+        <Button
+          variant={followTerminalCwd ? 'secondary' : 'ghost'}
+          size="toolbar"
+          title={t(followTerminalCwd
+            ? 'fileBrowser.toolbar.stopFollowingTerminal'
+            : 'fileBrowser.toolbar.followTerminal')}
+          aria-label={t('fileBrowser.toolbar.followTerminal')}
+          aria-pressed={followTerminalCwd}
+          onClick={toggleFollowTerminalCwd}
+        >
+          <LocateFixed className="size-3.5" />
+        </Button>
         <Button variant="ghost" size="toolbar" aria-label={t('fileBrowser.toolbar.refresh')} title={t('fileBrowser.toolbar.refresh')} onClick={() => loadFiles()} disabled={isLoading}><RefreshCw className={`size-3.5 ${isLoading ? 'animate-spin' : ''}`} /></Button>
         {adapter.supportsUpload && (
           <DropdownMenu>
@@ -1849,24 +1864,28 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                   onSort={handleSort}
                   onResizeStart={handleResizeStart}
                 />
-                <SortableColumnHeader
-                  label={t('fileBrowser.column.size')}
-                  field="size"
-                  width={columnWidths.size}
-                  sortField={sortField}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                  onResizeStart={handleResizeStart}
-                />
-                <SortableColumnHeader
-                  label={t('fileBrowser.column.modified')}
-                  field="modified"
-                  width={columnWidths.modified}
-                  sortField={sortField}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                  onResizeStart={handleResizeStart}
-                />
+                {sizeVisible && (
+                  <SortableColumnHeader
+                    label={t('fileBrowser.column.size')}
+                    field="size"
+                    width={columnWidths.size}
+                    sortField={sortField}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    onResizeStart={handleResizeStart}
+                  />
+                )}
+                {modifiedVisible && (
+                  <SortableColumnHeader
+                    label={t('fileBrowser.column.modified')}
+                    field="modified"
+                    width={columnWidths.modified}
+                    sortField={sortField}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    onResizeStart={handleResizeStart}
+                  />
+                )}
                 {permissionsVisible && (
                   <SortableColumnHeader label={t('fileBrowser.column.permissions')} field="permissions" width={columnWidths.permissions} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} onResizeStart={handleResizeStart} />
                 )}
@@ -1942,12 +1961,16 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                         <span className="truncate" title={file.path}>{file.name}</span>
                       )}
                     </div>
-                    <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.size}px` }}>
-                      {file.type === 'file' ? formatFileSize(file.size) : '-'}
-                    </div>
-                    <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
-                      {file.name !== '..' ? formatDate(file.modified) : '-'}
-                    </div>
+                    {sizeVisible && (
+                      <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.size}px` }}>
+                        {file.type === 'file' ? formatFileSize(file.size) : '-'}
+                      </div>
+                    )}
+                    {modifiedVisible && (
+                      <div className="shrink-0 truncate text-muted-foreground" style={{ width: `${columnWidths.modified}px` }}>
+                        {file.name !== '..' ? formatDate(file.modified) : '-'}
+                      </div>
+                    )}
                     {permissionsVisible && <div className="shrink-0 truncate font-mono text-muted-foreground" style={{ width: columnWidths.permissions }}>{file.permissions}</div>}
                     {ownerVisible && <div className="shrink-0 truncate text-muted-foreground" style={{ width: columnWidths.owner }}>{file.owner}:{file.group}</div>}
                             </div>

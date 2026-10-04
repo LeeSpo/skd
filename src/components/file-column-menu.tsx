@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useFileBrowserColumns } from '@/lib/file-browser-columns';
+import { useFileBrowserColumns, type ToggleableFileColumn } from '@/lib/file-browser-columns';
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuSub,
@@ -10,20 +10,21 @@ import {
 export function FileColumnMenu({ permissions = false, owner = false }: { permissions?: boolean; owner?: boolean }) {
   const { t } = useTranslation();
   const { isColumnVisible, setColumnVisible } = useFileBrowserColumns();
+  const columns: ToggleableFileColumn[] = [
+    'size',
+    'modified',
+    ...(permissions ? ['permissions' as const] : []),
+    ...(owner ? ['owner' as const] : []),
+  ];
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>{t('fileBrowser.toolbar.columns')}</DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        {(['name', 'size', 'modified'] as const).map((column) => (
-          <DropdownMenuCheckboxItem key={column} checked disabled>
-            {t(`fileBrowser.column.${column}`)}
-          </DropdownMenuCheckboxItem>
-        ))}
-        {(['permissions', 'owner'] as const).filter((column) => column === 'permissions' ? permissions : owner).map((column) => (
+        {columns.map((column) => (
           <DropdownMenuCheckboxItem
             key={column}
             checked={isColumnVisible(column)}
-            onCheckedChange={(checked) => setColumnVisible(column, checked)}
+            onCheckedChange={(checked) => setColumnVisible(column, checked === true)}
             onSelect={(event) => event.preventDefault()}
           >
             {t(`fileBrowser.column.${column}`)}
