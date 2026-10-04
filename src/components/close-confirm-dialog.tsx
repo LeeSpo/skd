@@ -3,7 +3,7 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
+  MacosAlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -30,7 +30,7 @@ export function CloseConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onCancel(); }}>
-      <AlertDialogContent className="macos-alert sm:max-w-[320px]">
+      <MacosAlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {isQuit ? t('closeConfirm.quitTitle') : t('closeConfirm.title')}
@@ -50,7 +50,7 @@ export function CloseConfirmDialog({
             {isQuit ? t('closeConfirm.quitAnyway') : t('closeConfirm.closeAnyway')}
           </AlertDialogAction>
         </AlertDialogFooter>
-      </AlertDialogContent>
+      </MacosAlertDialogContent>
     </AlertDialog>
   );
 }

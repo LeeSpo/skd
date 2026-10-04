@@ -80,6 +80,19 @@ function AlertDialogContent({
   );
 }
 
+/** Compact centered alert. Same shell as the "Command still running" dialog. */
+function MacosAlertDialogContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  return (
+    <AlertDialogContent
+      className={cn("macos-alert sm:max-w-[320px]", className)}
+      {...props}
+    />
+  );
+}
+
 function AlertDialogHeader({
   className,
   ...props
@@ -165,6 +178,7 @@ export {
   AlertDialogOverlay,
   AlertDialogTrigger,
   AlertDialogContent,
+  MacosAlertDialogContent,
   AlertDialogHeader,
   AlertDialogFooter,
   AlertDialogTitle,

@@ -390,6 +390,12 @@ describe('IntegratedFileBrowser local mode', () => {
     fireEvent.keyDown(document, { key: 'Delete' });
 
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.className).toContain('macos-alert');
+    expect(dialog.className).toContain('max-w-[320px]');
+    expect(dialog.className).not.toContain('max-w-lg');
+    expect(dialog.className).not.toContain('inset-0');
+    expect(dialog.className).not.toContain('max-h-[85vh]');
     fireEvent.click(screen.getByRole('button', { name: 'fileBrowser.moveToTrash' }));
 
     await waitFor(() => {
@@ -615,6 +621,9 @@ describe('IntegratedFileBrowser local mode', () => {
     fireEvent.pointerUp(document, { pointerId: 9, clientX: 20, clientY: 20 });
 
     await screen.findByText('fileBrowser.moveConflictTitle');
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.className).toContain('macos-alert');
+    expect(dialog.className).not.toContain('inset-0');
     fireEvent.click(screen.getByText('fileBrowser.overwriteAndMove'));
 
     await waitFor(() => {

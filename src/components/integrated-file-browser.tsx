@@ -71,7 +71,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from './ui/context-menu';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, MacosAlertDialogContent } from "./ui/alert-dialog";
 import { toast } from 'sonner';
 import { isEditableTarget } from '@/lib/keyboard-shortcuts';
 import { interleaveContextMenuSections } from '@/lib/context-menu-sections';
@@ -2034,7 +2034,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deletingFiles.length > 0} onOpenChange={(open) => !open && setDeletingFiles([])}>
-        <AlertDialogContent position="tauri">
+        <MacosAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {deletingFiles.length > 1
@@ -2052,20 +2052,22 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
                   {t('fileBrowser.deleteFolderWarning')}
                 </span>
               )}
-              {!isLocalMode && t('fileBrowser.cannotBeUndone')}
+              {!isLocalMode && (
+                <span className="mt-2 block">{t('fileBrowser.cannotBeUndone')}</span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelDeleteFile}>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {t(isLocalMode ? 'fileBrowser.moveToTrash' : 'common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </MacosAlertDialogContent>
       </AlertDialog>
 
       <AlertDialog open={pendingMove !== null} onOpenChange={(open) => !open && setPendingMove(null)}>
-        <AlertDialogContent position="tauri">
+        <MacosAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('fileBrowser.moveConflictTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -2090,7 +2092,7 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
               {t('fileBrowser.overwriteAndMove')}
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </MacosAlertDialogContent>
       </AlertDialog>
 
     </div>
