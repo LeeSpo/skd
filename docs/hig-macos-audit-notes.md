@@ -202,7 +202,7 @@ For each area, record macOS/app version, appearance and accessibility settings, 
 
 ## Second-pass implementation checkpoint
 
-See [the visual baseline](ui-visual-baseline.md#hig-second-pass--targeted-remediation) for frozen color values and manual acceptance steps. This checkpoint does not mark the proposed checklist above as fully audited.
+This historical checkpoint records the second-pass changes below. For current UI behavior and review steps, see [the visual baseline](ui-visual-baseline.md#review-checklist). This checkpoint does not mark the proposed checklist above as fully audited.
 
 - Corrected dark destructive text contrast and Nordic success contrast. Tests now require success/warning/destructive on background/card/popover/selected/hover surfaces and semantic filled-control foreground pairs to meet 4.5:1 in all three dark palettes. This is a skd audit criterion informed by the numeric reference above, measured from opaque CSS tokens rather than rendered pixels.
 - Added a named, focusable path-edit button while retaining breadcrumbs. Path input ignores composition Enter/Escape, submits once on Enter, cancels on Escape and returns keyboard focus; blur submission does not reclaim focus. Three DOM regression tests cover these behaviors. Native button activation, IME and VoiceOver remain manual checks.
