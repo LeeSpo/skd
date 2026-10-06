@@ -153,8 +153,10 @@ impl Handler for SftpServer {
         let mut files = self.0.data.lock().unwrap();
         let file = files.entry(name).or_default();
         let start = offset as usize;
-        file.resize(start + data.len(), 0);
-        file[start..].copy_from_slice(&data);
+        let end = start + data.len();
+        let size = file.len().max(end);
+        file.resize(size, 0);
+        file[start..end].copy_from_slice(&data);
         Ok(ok(id))
     }
     async fn close(&mut self, id: u32, _: String) -> Result<SftpStatus, StatusCode> {
@@ -212,11 +214,37 @@ impl russh::server::Handler for SshServer {
     }
 }
 async fn transport(fixture: Arc<Fixture>) -> Session {
+    transport_with_rekey(fixture, None, false).await
+}
+
+async fn transport_with_rekey(
+    fixture: Arc<Fixture>,
+    client_rekey: Option<bool>,
+    compressed: bool,
+) -> Session {
     let (client, server) = tokio::io::duplex(64 * 1024);
     let mut config = russh::server::Config {
         auth_rejection_time: Duration::ZERO,
         ..Default::default()
     };
+    let mut client_config = russh::client::Config {
+        window_size: crate::ssh::CHANNEL_WINDOW_SIZE,
+        ..Default::default()
+    };
+    if let Some(client) = client_rekey {
+        let limits = if client {
+            &mut client_config.limits
+        } else {
+            &mut config.limits
+        };
+        limits.rekey_write_limit = 32 * 1024;
+        limits.rekey_read_limit = 32 * 1024;
+    }
+    if compressed {
+        config.preferred.compression =
+            std::borrow::Cow::Owned(vec![russh::compression::ZLIB_LEGACY]);
+        client_config.preferred.compression = config.preferred.compression.clone();
+    }
     config.keys.push(
         russh::keys::PrivateKey::random(
             &mut russh::keys::key::safe_rng(),
@@ -236,7 +264,7 @@ async fn transport(fixture: Arc<Fixture>) -> Session {
         .await;
     });
     let mut handle = russh::client::connect_stream(
-        Arc::new(russh::client::Config::default()),
+        Arc::new(client_config),
         client,
         crate::ssh::SshHandler::new("fixture".into(), 22, false, None),
     )
@@ -244,6 +272,62 @@ async fn transport(fixture: Arc<Fixture>) -> Session {
     .unwrap();
     assert!(handle.authenticate_none("test").await.unwrap().success());
     Arc::new(handle)
+}
+
+#[tokio::test]
+async fn bulk_transfers_survive_client_and_server_rekey_with_and_without_compression() {
+    // Reuse the queue's authenticated transport fixture, rather than adding
+    // Docker infrastructure. Incompressible payload forces the byte limits.
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    let data: Vec<u8> = (0..512 * 1024)
+        .map(|_| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        })
+        .collect();
+    for client_rekey in [false, true] {
+        for compressed in [false, true] {
+            let fixture = Fixture::new(None, 0);
+            fixture
+                .data
+                .lock()
+                .unwrap()
+                .insert("file".into(), data.clone());
+            let session =
+                transport_with_rekey(fixture.clone(), Some(client_rekey), compressed).await;
+            let queue = Arc::new(TransferQueue::default());
+            queue.bind("rekey".into(), session.clone());
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("target");
+            let ticket = queue
+                .enqueue(vec![download("rekey", &target)], None, None, None)
+                .unwrap()
+                .remove(0);
+            assert_eq!(outcome(ticket).await.status, Status::Completed);
+            assert_eq!(tokio::fs::read(&target).await.unwrap(), data);
+            let input = Input::path(
+                "rekey".into(),
+                Direction::Upload,
+                target.to_string_lossy().into(),
+                "uploaded".into(),
+                Source::Browser,
+            );
+            let ticket = queue
+                .enqueue(vec![input], None, None, None)
+                .unwrap()
+                .remove(0);
+            assert_eq!(outcome(ticket).await.status, Status::Completed);
+            assert_eq!(fixture.data.lock().unwrap()["uploaded"], data);
+            assert!(!session.is_closed());
+            queue.unbind("rekey");
+            session
+                .disconnect(russh::Disconnect::ByApplication, "", "English")
+                .await
+                .unwrap();
+        }
+    }
 }
 fn download(connection: &str, path: &std::path::Path) -> Input {
     Input::path(
@@ -284,7 +368,9 @@ async fn cancels_every_protocol_wait_and_preserves_partial_files() {
         let target = dir.path().join("target");
         let upload = matches!(phase, Phase::Write | Phase::Flush);
         if upload {
-            tokio::fs::write(&target, vec![7; 2 * 1024 * 1024])
+            // Exceed both the 4 MiB pipeline and the server's SSH credit so
+            // cancellation also covers a background writer blocked on I/O.
+            tokio::fs::write(&target, vec![7; 8 * 1024 * 1024])
                 .await
                 .unwrap();
         }
@@ -328,13 +414,31 @@ async fn cancels_every_protocol_wait_and_preserves_partial_files() {
         }
         fixture.release.add_permits(1);
         tokio::time::sleep(Duration::from_millis(30)).await;
-        assert_eq!(
-            *fixture.reads.lock().unwrap(),
-            reads,
-            "new READ after cancellation"
-        );
+        if phase == Phase::Read {
+            // The sequential test server parks while requests already sent by
+            // the pipeline accumulate. One short reply adds one tail repair,
+            // so at most a window plus that repair can arrive after release.
+            let window = (256 * 1024usize).div_ceil(32 * 1024) + 1;
+            assert!(*fixture.reads.lock().unwrap() <= window + 1);
+            let drained = *fixture.reads.lock().unwrap();
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            assert_eq!(
+                *fixture.reads.lock().unwrap(),
+                drained,
+                "READ pipeline continued after cancellation"
+            );
+        } else {
+            assert_eq!(
+                *fixture.reads.lock().unwrap(),
+                reads,
+                "new READ after cancellation"
+            );
+        }
         if phase == Phase::Write {
-            assert!(*fixture.writes.lock().unwrap() <= 8 && writes == 1);
+            // Cancellation permits only the already-issued 4 MiB window.
+            assert!(
+                *fixture.writes.lock().unwrap() <= (4 * 1024 * 1024 / (32 * 1024)) && writes == 1
+            );
         }
         queue.unbind("one");
     }

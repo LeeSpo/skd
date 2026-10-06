@@ -1,5 +1,34 @@
 // ── Key-loading unit tests (no SSH server required) ──────────────────────────
 
+// Regression adapted from upstream PR #187 / russh's compressor fix: an Ok
+// result with a full output buffer must not truncate incompressible packets.
+#[test]
+fn incompressible_packets_survive_compression_roundtrip() {
+    use russh::compression::{Compress, Compression, Decompress, ZLIB};
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    for len in [65_536, 200_000] {
+        let input: Vec<u8> = (0..len)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                (seed >> 24) as u8
+            })
+            .collect();
+        let mut compressor = Compress::None;
+        Compression::new(&ZLIB).init_compress(&mut compressor);
+        let mut compressed = Vec::new();
+        let bytes = compressor
+            .compress(&input, &mut compressed)
+            .unwrap()
+            .to_vec();
+        let mut decompressor = Decompress::None;
+        Compression::new(&ZLIB).init_decompress(&mut decompressor);
+        let mut output = Vec::new();
+        assert_eq!(decompressor.decompress(&bytes, &mut output).unwrap(), input);
+    }
+}
+
 #[cfg(test)]
 mod key_loading_tests {
     use crate::ssh::key_loader::expand_tilde;

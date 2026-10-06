@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **SFTP Transfer Pipelines**: Reused the single-connection READ/WRITE pipelines from R-Shell PR #187 in the shared transfer queue. Requests respect server limits and bounded memory budgets, with short reads repaired without discarding pending requests.
+- **SSH Dependencies**: Updated russh to 0.63.3 and russh-sftp to 2.4.0, retaining the existing crypto features and host-key verification. The minimum Rust version is now 1.89.
+
+### Fixed
+
+- **SSH Bulk Transfer Integrity**: Included upstream fixes for incompressible data truncation and SSH rekey handling. Transfer completion still requires successful CLOSE and advertised fsync, with bounded cancellation cleanup and partial-file preservation.
+
 ## [1.0.0] - 2026-10-04
 
 > **Major Milestone**: Version 1.0.0 marks a complete departure from the upstream fork's web-style interface. The frontend has been rebuilt from scratch specifically for macOS, adhering to Apple Human Interface Guidelines and macOS Sequoia visual design.

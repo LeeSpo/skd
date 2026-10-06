@@ -1,150 +1,5 @@
 use super::*;
-use std::io;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-use tokio::io::ReadBuf;
-
-#[derive(Default)]
-struct Counts {
-    read: usize,
-    written: usize,
-    max_read: usize,
-}
-
-struct GeneratedReader {
-    total: usize,
-    limit: usize,
-    fail_after: Option<usize>,
-    counts: Arc<Mutex<Counts>>,
-}
-
-impl AsyncRead for GeneratedReader {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        let mut counts = self.counts.lock().unwrap();
-        if self.fail_after.is_some_and(|limit| counts.read >= limit) {
-            return Poll::Ready(Err(io::Error::other("read failed")));
-        }
-        let n = (self.total - counts.read)
-            .min(self.limit)
-            .min(buf.remaining());
-        buf.initialize_unfilled()[..n].fill(0xa5);
-        buf.advance(n);
-        counts.read += n;
-        counts.max_read = counts.max_read.max(n);
-        assert!(
-            counts.read - counts.written <= BUFFER_BYTES,
-            "whole file was buffered"
-        );
-        Poll::Ready(Ok(()))
-    }
-}
-
-struct CountingWriter {
-    limit: usize,
-    fail_after: Option<usize>,
-    fail_flush: bool,
-    counts: Arc<Mutex<Counts>>,
-}
-
-impl AsyncWrite for CountingWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        let mut counts = self.counts.lock().unwrap();
-        if self.fail_after.is_some_and(|limit| counts.written >= limit) {
-            return Poll::Ready(Err(io::Error::other("write failed")));
-        }
-        let n = buf.len().min(self.limit);
-        assert!(buf[..n].iter().all(|byte| *byte == 0xa5));
-        counts.written += n;
-        Poll::Ready(Ok(n))
-    }
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(if self.fail_flush {
-            Err(io::Error::other("flush failed"))
-        } else {
-            Ok(())
-        })
-    }
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.poll_flush(cx)
-    }
-}
-
-fn streams(total: usize, short: bool) -> (GeneratedReader, CountingWriter, Arc<Mutex<Counts>>) {
-    let counts = Arc::new(Mutex::new(Counts::default()));
-    (
-        GeneratedReader {
-            total,
-            limit: if short { 333 } else { usize::MAX },
-            fail_after: None,
-            counts: counts.clone(),
-        },
-        CountingWriter {
-            limit: if short { 17 } else { usize::MAX },
-            fail_after: None,
-            fail_flush: false,
-            counts: counts.clone(),
-        },
-        counts,
-    )
-}
-
-#[tokio::test]
-async fn large_generated_file_is_written_before_eof_with_bounded_memory() {
-    let total = 64 * 1024 * 1024 + 7;
-    let (mut reader, mut writer, counts) = streams(total, false);
-    assert_eq!(
-        copy_stream(
-            &mut reader,
-            &mut writer,
-            &mut Reporter::new(None, Some(total as u64))
-        )
-        .await
-        .unwrap(),
-        total as u64
-    );
-    let counts = counts.lock().unwrap();
-    assert_eq!(counts.written, total);
-    assert_eq!(counts.max_read, BUFFER_BYTES);
-}
-
-#[tokio::test]
-async fn empty_and_short_reads_and_writes_are_supported() {
-    for total in [0, 1, BUFFER_BYTES * 3 + 13] {
-        let (mut reader, mut writer, counts) = streams(total, true);
-        assert_eq!(
-            copy_stream(&mut reader, &mut writer, &mut Reporter::new(None, None))
-                .await
-                .unwrap(),
-            total as u64
-        );
-        assert_eq!(counts.lock().unwrap().written, total);
-    }
-}
-
-#[tokio::test]
-async fn copy_propagates_read_write_and_flush_errors() {
-    for fault in ["read", "write", "flush"] {
-        let (mut reader, mut writer, _) = streams(BUFFER_BYTES * 4, false);
-        match fault {
-            "read" => reader.fail_after = Some(BUFFER_BYTES),
-            "write" => writer.fail_after = Some(BUFFER_BYTES),
-            _ => writer.fail_flush = true,
-        }
-        let error = copy_stream(&mut reader, &mut writer, &mut Reporter::new(None, None))
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains(fault));
-    }
-}
 
 #[test]
 fn reports_initial_throttled_and_final_snapshots_with_unknown_size() {
@@ -170,7 +25,9 @@ fn reports_initial_throttled_and_final_snapshots_with_unknown_size() {
 }
 
 // Real SFTP packets over a bounded in-memory transport, without SSH credentials.
-use russh_sftp::protocol::{Attrs, Data, FileAttributes, Handle, OpenFlags, Status, StatusCode};
+use russh_sftp::protocol::{
+    Attrs, Data, FileAttributes, Handle, OpenFlags, Packet, Status, StatusCode, Version,
+};
 use russh_sftp::server::Handler;
 
 #[derive(Default)]
@@ -181,6 +38,10 @@ struct Fixture {
     fail_read: bool,
     fail_write: bool,
     fail_close: bool,
+    fail_fsync: bool,
+    limits: bool,
+    size_hint: Option<u64>,
+    writes: Vec<(u64, usize)>,
 }
 
 struct Server(Arc<Mutex<Fixture>>);
@@ -198,6 +59,44 @@ impl Handler for Server {
     type Error = StatusCode;
     fn unimplemented(&self) -> StatusCode {
         StatusCode::OpUnsupported
+    }
+    async fn init(
+        &mut self,
+        _: u32,
+        _: std::collections::HashMap<String, String>,
+    ) -> Result<Version, StatusCode> {
+        let mut version = Version::new();
+        if self.0.lock().unwrap().limits {
+            version
+                .extensions
+                .insert("limits@openssh.com".into(), "1".into());
+            version
+                .extensions
+                .insert("fsync@openssh.com".into(), "1".into());
+        }
+        Ok(version)
+    }
+    async fn extended(
+        &mut self,
+        id: u32,
+        request: String,
+        _: Vec<u8>,
+    ) -> Result<Packet, StatusCode> {
+        match request.as_str() {
+            "limits@openssh.com" => Ok(russh_sftp::protocol::ExtendedReply {
+                id,
+                data: [1024u64, 4096, 4096, 0]
+                    .into_iter()
+                    .flat_map(u64::to_be_bytes)
+                    .collect(),
+            }
+            .into()),
+            "fsync@openssh.com" if self.0.lock().unwrap().fail_fsync => {
+                Err(StatusCode::PermissionDenied)
+            }
+            "fsync@openssh.com" => Ok(ok_status(id).into()),
+            _ => Err(StatusCode::OpUnsupported),
+        }
     }
     async fn open(
         &mut self,
@@ -223,7 +122,7 @@ impl Handler for Server {
             return Err(StatusCode::OpUnsupported);
         }
         let mut attrs = FileAttributes::empty();
-        attrs.size = Some(state.data.len() as u64);
+        attrs.size = Some(state.size_hint.unwrap_or(state.data.len() as u64));
         Ok(Attrs { id, attrs })
     }
     async fn read(
@@ -258,9 +157,15 @@ impl Handler for Server {
         if state.fail_write {
             return Err(StatusCode::PermissionDenied);
         }
+        if state.limits {
+            assert!(data.len() + 25 + "file".len() <= 1024);
+        }
+        state.writes.push((offset, data.len()));
         let start = offset as usize;
-        state.data.resize(start + data.len(), 0);
-        state.data[start..].copy_from_slice(&data);
+        let end = start + data.len();
+        let size = state.data.len().max(end);
+        state.data.resize(size, 0);
+        state.data[start..end].copy_from_slice(&data);
         Ok(ok_status(id))
     }
     async fn close(&mut self, id: u32, _: String) -> Result<Status, StatusCode> {
@@ -274,15 +179,54 @@ impl Handler for Server {
     }
 }
 
-async fn session(state: Arc<Mutex<Fixture>>) -> SftpSession {
-    let (client, server) = tokio::io::duplex(BUFFER_BYTES);
+#[tokio::test]
+async fn negotiated_limits_zero_size_hint_and_fsync_failure_preserve_completion_semantics() {
+    let fixture = Arc::new(Mutex::new(Fixture {
+        limits: true,
+        size_hint: Some(0),
+        ..Fixture::default()
+    }));
+    let sftp = session(fixture.clone()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source");
+    let target = dir.path().join("target");
+    let data: Vec<u8> = (0..65_537).map(|n| (n % 251) as u8).collect();
+    tokio::fs::write(&source, &data).await.unwrap();
+    assert_eq!(
+        upload(&sftp, source.to_str().unwrap(), "file", None)
+            .await
+            .unwrap(),
+        data.len() as u64
+    );
+    assert_eq!(
+        download(&sftp, "file", target.to_str().unwrap(), None)
+            .await
+            .unwrap(),
+        data.len() as u64
+    );
+    assert_eq!(tokio::fs::read(&target).await.unwrap(), data);
+    let mut writes = fixture.lock().unwrap().writes.clone();
+    writes.sort_unstable_by_key(|&(offset, _)| offset);
+    assert!(writes.windows(2).all(|p| p[0].0 + p[0].1 as u64 == p[1].0));
+    fixture.lock().unwrap().fail_fsync = true;
+    fixture.lock().unwrap().fail_close = true;
+    let error = upload(&sftp, source.to_str().unwrap(), "file", None)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("Permission denied"));
+}
+
+async fn session(state: Arc<Mutex<Fixture>>) -> TransferSession {
+    let (client, server) = tokio::io::duplex(64 * 1024);
     tokio::spawn(russh_sftp::server::run(server, Server(state)));
-    SftpSession::new(client).await.unwrap()
+    TransferSession::new(client, &CancellationToken::new())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
 async fn protocol_round_trip_empty_and_multiblock_without_progress_is_compatible() {
-    for total in [0, BUFFER_BYTES * 3 + 11] {
+    for total in [0, 64 * 1024 * 3 + 11] {
         let fixture = Arc::new(Mutex::new(Fixture::default()));
         let sftp = session(fixture.clone()).await;
         let dir = tempfile::tempdir().unwrap();
@@ -304,14 +248,14 @@ async fn protocol_round_trip_empty_and_multiblock_without_progress_is_compatible
         );
         assert_eq!(tokio::fs::read(&dest).await.unwrap(), data);
         assert_eq!(fixture.lock().unwrap().closed, 2);
-        sftp.close().await.unwrap();
+        sftp.raw.close_session().unwrap();
     }
 }
 
 #[tokio::test]
 async fn protocol_unknown_metadata_does_not_block_transfer_and_final_is_exact() {
     let fixture = Arc::new(Mutex::new(Fixture {
-        data: vec![42; BUFFER_BYTES + 1],
+        data: vec![42; 64 * 1024 + 1],
         unknown_size: true,
         ..Fixture::default()
     }));
@@ -328,7 +272,7 @@ async fn protocol_unknown_metadata_does_not_block_transfer_and_final_is_exact() 
     )
     .await
     .unwrap();
-    assert_eq!(bytes, BUFFER_BYTES as u64 + 1);
+    assert_eq!(bytes, 64 * 1024 + 1);
     let events = events.lock().unwrap();
     assert_eq!(events.first().unwrap().bytes_transferred, 0);
     assert_eq!(events.last().unwrap().bytes_transferred, bytes);
@@ -339,7 +283,7 @@ async fn protocol_unknown_metadata_does_not_block_transfer_and_final_is_exact() 
 #[tokio::test]
 async fn download_failure_leaves_partial_file_and_preserves_original_error() {
     let fixture = Arc::new(Mutex::new(Fixture {
-        data: vec![42; BUFFER_BYTES],
+        data: vec![42; 64 * 1024],
         fail_read: true,
         fail_close: true,
         ..Fixture::default()
@@ -399,7 +343,7 @@ async fn remote_write_and_close_failures_do_not_report_success() {
         }));
         let sftp = session(fixture.clone()).await;
         let src = tempfile::NamedTempFile::new().unwrap();
-        tokio::fs::write(src.path(), vec![42; BUFFER_BYTES])
+        tokio::fs::write(src.path(), vec![42; 64 * 1024])
             .await
             .unwrap();
         let events = Arc::new(Mutex::new(Vec::new()));
@@ -424,4 +368,21 @@ async fn remote_write_and_close_failures_do_not_report_success() {
             .iter()
             .all(|(_, closed)| *closed == 0));
     }
+}
+
+async fn download(
+    session: &TransferSession,
+    remote: &str,
+    local: &str,
+    progress: Option<&ProgressCallback>,
+) -> Result<u64> {
+    download_cancellable(session, remote, local, progress, &CancellationToken::new()).await
+}
+async fn upload(
+    session: &TransferSession,
+    local: &str,
+    remote: &str,
+    progress: Option<&ProgressCallback>,
+) -> Result<u64> {
+    upload_cancellable(session, local, remote, progress, &CancellationToken::new()).await
 }

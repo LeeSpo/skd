@@ -136,16 +136,27 @@ impl SshHandler {
 /// Thread-safe stage reporter shared with russh's host-key callback.
 pub type StageReporter = Arc<dyn Fn(ConnectStage) + Send + Sync>;
 
+/// Receive credit shared by the single-connection SFTP read pipeline.
+pub(crate) const CHANNEL_WINDOW_SIZE: u32 = 32 * 1024 * 1024;
+
 impl client::Handler for SshHandler {
     type Error = anyhow::Error;
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &PublicKey,
+        presented: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
         if let Some(report) = &self.stage_reporter {
             report(ConnectStage::VerifyingHostKey);
         }
+        let server_public_key = match presented {
+            PublicKeyOrCertificate::PublicKey { key, .. } => key,
+            PublicKeyOrCertificate::Certificate(_) => {
+                return Err(anyhow::anyhow!(
+                    "SSH host certificates are not supported; configure a plain host key."
+                ));
+            }
+        };
         if !self.verify_host_key {
             return Ok(true);
         }
@@ -284,6 +295,7 @@ pub async fn establish_authenticated_session(
     on_stage(ConnectStage::SshHandshake);
 
     let ssh_config = client::Config {
+        window_size: CHANNEL_WINDOW_SIZE,
         preferred: russh::Preferred {
             key: std::borrow::Cow::Borrowed(PREFERRED_HOST_KEY_ALGOS),
             ..russh::Preferred::DEFAULT

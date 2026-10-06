@@ -88,7 +88,7 @@ Download the appropriate DMG from the [latest GitHub Release](https://github.com
 - macOS (Apple Silicon or Intel)
 - Node.js 22.13+ within the 22.x series, or 24+
 - Bun
-- Current stable Rust (at least 1.88, as required by the locked dependencies)
+- Current stable Rust (at least 1.89, as required by the locked dependencies)
 - Tauri 2 dependencies for macOS
 
 ```bash
