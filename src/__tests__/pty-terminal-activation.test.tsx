@@ -397,6 +397,20 @@ describe('PtyTerminal activation', () => {
     expect(terminal.refresh).toHaveBeenCalledWith(0, terminal.rows - 1);
   });
 
+  it('filters the WebKit IME unknown keydown before passing composition to xterm', () => {
+    renderTerminal(true);
+    const handler = getCustomKeyHandler();
+    const unknown = { key: 'Unidentified', keyCode: 0, isComposing: true };
+    const event = new KeyboardEvent('keydown', { ...unknown, cancelable: true });
+
+    expect(handler(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(handler(new KeyboardEvent('keyup', unknown))).toBe(true);
+    expect(handler(new KeyboardEvent('keydown', { ...unknown, isComposing: false }))).toBe(true);
+    expect(handler(new KeyboardEvent('keydown', { key: 'CapsLock', keyCode: 20, isComposing: true }))).toBe(true);
+    expect(handler(new KeyboardEvent('keydown', { key: 'Process', keyCode: 229, isComposing: true }))).toBe(true);
+  });
+
   it('lets xterm handle Command+V paste without duplicate custom send on macOS', async () => {
     const readText = vi.fn().mockResolvedValue('mac paste');
     Object.defineProperty(navigator, 'platform', {

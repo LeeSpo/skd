@@ -18,6 +18,7 @@ import {
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
 import { bindTerminalSelectionMouseGuard, selectTerminalContent } from '@/lib/terminal-selection';
+import { shouldIgnoreImeKeyDown } from '@/lib/terminal-ime';
 import { TerminalSearchBar } from './terminal/terminal-search-bar';
 import { toast } from 'sonner';
 import { signalReady } from '../lib/restoration-manager';
@@ -370,6 +371,13 @@ export function PtyTerminal({
 
     // Custom key event handler to allow certain shortcuts to pass through to the app
     term.attachCustomKeyEventHandler((event) => {
+      // CapsLock switching in WebKit emits an unknown keydown during composition.
+      // Letting it reach xterm finalizes the text early, then compositionend sends
+      // it again. Ignore only that event and leave the native commit intact.
+      if (shouldIgnoreImeKeyDown(event)) {
+        return false;
+      }
+
       // During IME composition (Chinese/Japanese/Korean input methods, or any
       // input-method software), hand the event straight to xterm's internal
       // CompositionHelper.  Returning `true` means "let xterm process it",
