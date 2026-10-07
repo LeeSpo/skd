@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { TerminalAppearancePreview } from '@/components/terminal-appearance-preview';
 import { useBlocksTerminalTransparency } from '@/lib/use-window-appearance';
 import { DEFAULT_CONNECTION_TIMEOUT_SECS } from '@/lib/connection-settings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
@@ -13,12 +14,12 @@ import { Switch } from './ui/switch';
 import { FormSection } from './ui/form-section';
 import { Separator } from './ui/separator';
 import { Slider } from './ui/slider';
-import { 
-  Settings, 
-  Terminal as TerminalIcon, 
-  Shield, 
-  Palette, 
-  Keyboard, 
+import {
+  Settings,
+  Terminal as TerminalIcon,
+  Shield,
+  Palette,
+  Keyboard,
   Network,
   Monitor,
   Image,
@@ -27,15 +28,12 @@ import {
   RefreshCw,
   Code2
 } from 'lucide-react';
-import { 
-  TerminalAppearanceSettings, 
-  defaultAppearanceSettings, 
+import {
+  TerminalAppearanceSettings,
+  defaultAppearanceSettings,
   loadAppearanceSettings,
   saveAppearanceSettings,
   dispatchTerminalAppearanceChanged,
-  terminalThemes,
-  terminalBackgroundSize,
-  terminalContainerBackground,
   MACOS_MULTILINGUAL_TERMINAL_FONT,
   MENLO_TERMINAL_FONT,
   MONACO_TERMINAL_FONT,
@@ -107,6 +105,36 @@ const PALETTE_SWATCHES: Record<ColorPalette, readonly [string, string, string]> 
   cupertino: ['#F5F5F7', '#1C1C1E', '#0A84FF'],
 };
 
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  // Terminal settings
+  fontSize: 14,
+  fontFamily: 'Menlo, monospace',
+  colorScheme: 'dark',
+  cursorStyle: 'block',
+  scrollbackLines: 10000,
+
+  // Connection settings
+  connectionTimeout: DEFAULT_CONNECTION_TIMEOUT_SECS,
+  keepAliveInterval: 60,
+  autoReconnect: true,
+
+  // Security settings
+  hostKeyVerification: true,
+
+  // Interface settings
+  theme: 'dark',
+  colorPalette: DEFAULT_COLOR_PALETTE,
+  enableNotifications: true,
+
+  // Keyboard shortcuts
+  closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
+  nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
+  previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
+
+  // Advanced settings
+  checkUpdates: false
+};
+
 export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckForUpdates }: SettingsModalProps) {
   const { t } = useTranslation();
   const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearanceSettings>(defaultAppearanceSettings);
@@ -115,36 +143,8 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   const originalThemeRef = useRef<ThemeMode>(getSavedTheme());
   const preserveDraftRef = useRef(false);
   const closingForUpdateCheckRef = useRef(false);
-  
-  const [settings, setSettings] = useState<AppSettings>({
-    // Terminal settings
-    fontSize: 14,
-    fontFamily: 'Menlo, monospace',
-    colorScheme: 'dark',
-    cursorStyle: 'block',
-    scrollbackLines: 10000,
-    
-    // Connection settings
-    connectionTimeout: DEFAULT_CONNECTION_TIMEOUT_SECS,
-    keepAliveInterval: 60,
-    autoReconnect: true,
-    
-    // Security settings
-    hostKeyVerification: true,
-    
-    // Interface settings
-    theme: 'dark',
-    colorPalette: DEFAULT_COLOR_PALETTE,
-    enableNotifications: true,
-    
-    // Keyboard shortcuts
-    closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
-    nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
-    previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
-    
-    // Advanced settings
-    checkUpdates: false
-  });
+
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   // Load settings when modal opens
   useEffect(() => {
@@ -158,14 +158,15 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
       originalPaletteRef.current = normalizeColorPalette(
         document.documentElement.dataset.colorPalette,
       );
-      setSettings(prev => ({
-        ...prev,
+      setSettings({
+        ...DEFAULT_APP_SETTINGS,
+        theme: getSavedTheme(),
         colorPalette: getSavedColorPalette(),
-      }));
+      });
       const appearance = loadAppearanceSettings();
       setTerminalAppearance(appearance);
       setEditorConfig(loadEditorConfig());
-      
+
       // Load other settings from localStorage
       try {
         const savedSettings = localStorage.getItem(APP_SETTINGS_STORAGE_KEY);
@@ -189,13 +190,13 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
   }, [open]);
 
   const updateTerminalAppearance = <K extends keyof TerminalAppearanceSettings>(
-    key: K, 
+    key: K,
     value: TerminalAppearanceSettings[K]
   ) => {
     setTerminalAppearance(prev => ({ ...prev, [key]: value }));
   };
 
-  const updateSetting = (key: keyof typeof settings, value: any) => {
+  const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
@@ -253,42 +254,24 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
         theme: PALETTE_TERMINAL_THEMES[DEFAULT_COLOR_PALETTE],
       });
       setEditorConfig(DEFAULT_EDITOR_CONFIG);
-      
-      // Reset other settings to default values
-      setSettings({
-        fontSize: 14,
-        fontFamily: 'Menlo, monospace',
-        colorScheme: 'dark',
-        cursorStyle: 'block',
-        scrollbackLines: 10000,
-        connectionTimeout: DEFAULT_CONNECTION_TIMEOUT_SECS,
-        keepAliveInterval: 60,
-        autoReconnect: true,
-        hostKeyVerification: true,
-        theme: 'dark',
-        colorPalette: DEFAULT_COLOR_PALETTE,
-        enableNotifications: true,
-        closeSession: DEFAULT_APP_KEYBOARD_SHORTCUTS.closeSession,
-        nextTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.nextTab,
-        previousTab: DEFAULT_APP_KEYBOARD_SHORTCUTS.previousTab,
-        checkUpdates: false
-      });
-      
+
+      setSettings({ ...DEFAULT_APP_SETTINGS });
+
       // Apply default theme
       applyTheme('dark', DEFAULT_COLOR_PALETTE);
     }
   };
 
-  const [activeTab, setActiveTab] = useState('terminal');
+  const [activeTab, setActiveTab] = useState('appearance');
   const transparencyBlocked = useBlocksTerminalTransparency();
 
   // Tab definitions
   const tabItems = [
+    { value: 'appearance', icon: Palette, labelKey: 'settings.tab.appearance' },
     { value: 'terminal', icon: TerminalIcon, labelKey: 'settings.tab.terminal' },
     { value: 'editor', icon: Code2, labelKey: 'settings.tab.editor' },
     { value: 'connection', icon: Network, labelKey: 'settings.tab.connection' },
     { value: 'security', icon: Shield, labelKey: 'settings.tab.security' },
-    { value: 'interface', icon: Palette, labelKey: 'settings.tab.interface' },
     { value: 'keyboard', icon: Keyboard, labelKey: 'settings.tab.keyboard' },
     { value: 'advanced', icon: Monitor, labelKey: 'settings.tab.advanced' },
   ] as const;
@@ -299,7 +282,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         position="tauriTall"
-        className="preferences-dialog w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl"
+        className="preferences-dialog !inset-0 !m-auto w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-4xl"
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -339,13 +322,275 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
             <h2 className="shrink-0 px-5 pt-5 text-[length:var(--text-page-title)] font-bold tracking-tight">
               {t(tabItems.find((item) => item.value === activeTab)?.labelKey ?? 'settings.title')}
             </h2>
+          <TabsContent value="appearance" className={tabContentClassName}>
+            <FormSection title={t('settings.appearance.workspace')}>
+              <div className="space-y-2">
+                <Label id="settings-interface-appTheme">{t('settings.interface.appTheme')}</Label>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="settings-interface-appTheme"
+                  className="inline-flex h-7 rounded-[7px] bg-muted p-0.5"
+                >
+                  {(['light', 'dark', 'auto'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={settings.theme === mode}
+                      className={`h-6 rounded-[6px] px-3 text-[length:var(--text-body)] ${settings.theme === mode ? 'bg-white text-foreground shadow-sm dark:bg-white/15' : 'text-muted-foreground'}`}
+                      onClick={() => {
+                        updateSetting('theme', mode);
+                        applyTheme(mode, settings.colorPalette);
+                      }}
+                    >
+                      {t(`settings.theme.${mode}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <Label>{t('settings.interface.colorPalette')}</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('settings.interface.colorPaletteDesc')}
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {COLOR_PALETTES.map((palette) => {
+                    const selected = settings.colorPalette === palette;
+                    return (
+                      <button
+                        key={palette}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => handlePaletteChange(palette)}
+                        className={cn(
+                          'rounded-md border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
+                          selected
+                            ? 'border-primary bg-accent ring-1 ring-primary/50'
+                            : 'border-border',
+                        )}
+                      >
+                        <span className="mb-2 flex overflow-hidden rounded-md border border-white/10">
+                          {PALETTE_SWATCHES[palette].map((color) => (
+                            <span
+                              key={color}
+                              className="h-7 flex-1"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </span>
+                        <span className="block text-sm font-medium">
+                          {t(`settings.palette.${palette}.name`)}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {t(`settings.palette.${palette}.description`)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </FormSection>
+            <FormSection title={t('settings.appearance.terminal')} footer={t('settings.appearance.terminalDesc')}>
+              <div className="space-y-2">
+                <Label htmlFor="settings-terminal-colorTheme">{t('settings.terminal.colorTheme')}</Label>
+                <Select
+                  value={terminalAppearance.theme}
+                  onValueChange={(value) => updateTerminalAppearance('theme', value)}
+                >
+                  <SelectTrigger id="settings-terminal-colorTheme">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vs-code-dark">VS Code Dark</SelectItem>
+                    <SelectItem value="monokai">Monokai</SelectItem>
+                    <SelectItem value="solarized-dark">Solarized Dark</SelectItem>
+                    <SelectItem value="solarized-light">Solarized Light</SelectItem>
+                    <SelectItem value="dracula">Dracula</SelectItem>
+                    <SelectItem value="one-dark">One Dark</SelectItem>
+                    <SelectItem value="nord">Nord</SelectItem>
+                    <SelectItem value="gruvbox-dark">Gruvbox Dark</SelectItem>
+                    <SelectItem value="tokyo-night">Tokyo Night</SelectItem>
+                    <SelectItem value="matrix">Matrix</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="settings-terminal-allowTransparency">{t('settings.terminal.allowTransparency')}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t('settings.terminal.allowTransparencyDesc')}
+                  </p>
+                </div>
+                <Switch id="settings-terminal-allowTransparency"
+                  checked={terminalAppearance.allowTransparency && !transparencyBlocked}
+                  disabled={transparencyBlocked}
+                  onCheckedChange={(checked) => updateTerminalAppearance('allowTransparency', checked)}
+                />
+              </div>
+              {transparencyBlocked && (
+                <p className="text-[length:var(--text-secondary)] text-muted-foreground">{t('settings.terminal.transparencyBlocked')}</p>
+              )}
+
+              {terminalAppearance.allowTransparency && !transparencyBlocked && (
+                <div className="space-y-2">
+                  <Label id="settings-terminal-opacity-label">{t('settings.terminal.opacity', { opacity: terminalAppearance.opacity })}</Label>
+                  <Slider aria-labelledby="settings-terminal-opacity-label"
+                    value={[terminalAppearance.opacity]}
+                    onValueChange={([value]) => updateTerminalAppearance('opacity', value)}
+                    min={10}
+                    max={100}
+                    step={5}
+                  />
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Background Image Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Image className="h-4 w-4" />
+                  <Label className="text-base font-medium">{t('settings.terminal.backgroundImage')}</Label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="background-image-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > MAX_TERMINAL_BACKGROUND_IMAGE_BYTES) {
+                          alert(t('settings.terminal.imageSizeWarning'));
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const dataUrl = event.target?.result as string;
+                          updateTerminalAppearance('backgroundImage', dataUrl);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('background-image-upload')?.click()}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {terminalAppearance.backgroundImage ? t('settings.terminal.changeImage') : t('settings.terminal.uploadImage')}
+                  </Button>
+                  {terminalAppearance.backgroundImage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => updateTerminalAppearance('backgroundImage', '')}
+                      className="gap-2 text-destructive hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                      {t('settings.terminal.remove')}
+                    </Button>
+                  )}
+                </div>
+
+                {terminalAppearance.backgroundImage && (
+                  <div className="space-y-4 pl-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded border overflow-hidden flex-shrink-0">
+                        <img
+                          src={terminalAppearance.backgroundImage}
+                          alt={t('settings.appearance.backgroundPreview')}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.terminal.imagePreviewDesc')}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label id="settings-terminal-imageOpacity-label">{t('settings.terminal.imageOpacity', { opacity: terminalAppearance.backgroundImageOpacity })}</Label>
+                      <Slider aria-labelledby="settings-terminal-imageOpacity-label"
+                        value={[terminalAppearance.backgroundImageOpacity]}
+                        onValueChange={([value]) => updateTerminalAppearance('backgroundImageOpacity', value)}
+                        min={5}
+                        max={100}
+                        step={5}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label id="settings-terminal-imageBlur-label">{t('settings.terminal.imageBlur', { blur: terminalAppearance.backgroundImageBlur })}</Label>
+                      <Slider aria-labelledby="settings-terminal-imageBlur-label"
+                        value={[terminalAppearance.backgroundImageBlur]}
+                        onValueChange={([value]) => updateTerminalAppearance('backgroundImageBlur', value)}
+                        min={0}
+                        max={20}
+                        step={1}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="settings-terminal-imagePosition">{t('settings.terminal.imagePosition')}</Label>
+                      <Select
+                        value={terminalAppearance.backgroundImagePosition}
+                        onValueChange={(value: 'cover' | 'contain' | 'center' | 'tile') => updateTerminalAppearance('backgroundImagePosition', value)}
+                      >
+                        <SelectTrigger id="settings-terminal-imagePosition">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cover">{t('settings.imagePosition.cover')}</SelectItem>
+                          <SelectItem value="contain">{t('settings.imagePosition.contain')}</SelectItem>
+                          <SelectItem value="center">{t('settings.imagePosition.center')}</SelectItem>
+                          <SelectItem value="tile">{t('settings.imagePosition.tile')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+              <TerminalAppearancePreview appearance={terminalAppearance} />
+            </FormSection>
+            <FormSection title={t('settings.appearance.editor')} footer={t('settings.appearance.editorDesc')}>
+              <div className="space-y-2">
+                <Label htmlFor="settings-editor-theme">{t('settings.editor.theme')}</Label>
+                <Select
+                  value={editorConfig.theme}
+                  onValueChange={(value) => setEditorConfig(prev => ({ ...prev, theme: value }))}
+                >
+                  <SelectTrigger id="settings-editor-theme">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EDITOR_THEMES.map(theme => (
+                      <SelectItem key={theme.id} value={theme.id}>{theme.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </FormSection>
+          </TabsContent>
+
           <TabsContent value="terminal" className={tabContentClassName}>
+            <Button variant="link" className="h-auto justify-start whitespace-normal px-0 text-left" onClick={() => setActiveTab('appearance')}>
+              {t('settings.appearance.openSettings')}
+            </Button>
             <FormSection title={t('settings.terminal.appearance')} footer={t('settings.terminal.appearanceDesc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="settings-terminal-fontFamily">{t('settings.terminal.fontFamily')}</Label>
-                    <Select 
-                      value={terminalAppearance.fontFamily} 
+                    <Select
+                      value={terminalAppearance.fontFamily}
                       onValueChange={(value) => updateTerminalAppearance('fontFamily', value)}
                     >
                       <SelectTrigger id="settings-terminal-fontFamily">
@@ -409,32 +654,9 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="settings-terminal-colorTheme">{t('settings.terminal.colorTheme')}</Label>
-                    <Select 
-                      value={terminalAppearance.theme} 
-                      onValueChange={(value) => updateTerminalAppearance('theme', value)}
-                    >
-                      <SelectTrigger id="settings-terminal-colorTheme">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vs-code-dark">VS Code Dark</SelectItem>
-                        <SelectItem value="monokai">Monokai</SelectItem>
-                        <SelectItem value="solarized-dark">Solarized Dark</SelectItem>
-                        <SelectItem value="solarized-light">Solarized Light</SelectItem>
-                        <SelectItem value="dracula">Dracula</SelectItem>
-                        <SelectItem value="one-dark">One Dark</SelectItem>
-                        <SelectItem value="nord">Nord</SelectItem>
-                        <SelectItem value="gruvbox-dark">Gruvbox Dark</SelectItem>
-                        <SelectItem value="tokyo-night">Tokyo Night</SelectItem>
-                        <SelectItem value="matrix">Matrix</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="settings-terminal-cursorStyle">{t('settings.terminal.cursorStyle')}</Label>
-                    <Select 
-                      value={terminalAppearance.cursorStyle} 
+                    <Select
+                      value={terminalAppearance.cursorStyle}
                       onValueChange={(value: 'block' | 'underline' | 'bar') => updateTerminalAppearance('cursorStyle', value)}
                     >
                       <SelectTrigger id="settings-terminal-cursorStyle">
@@ -488,211 +710,17 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="settings-terminal-allowTransparency">{t('settings.terminal.allowTransparency')}</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t('settings.terminal.allowTransparencyDesc')}
-                    </p>
-                  </div>
-                  <Switch id="settings-terminal-allowTransparency"
-                    checked={terminalAppearance.allowTransparency && !transparencyBlocked}
-                    disabled={transparencyBlocked}
-                    onCheckedChange={(checked) => updateTerminalAppearance('allowTransparency', checked)}
-                  />
-                </div>
-                {transparencyBlocked && (
-                  <p className="text-[length:var(--text-secondary)] text-muted-foreground">{t('settings.terminal.transparencyBlocked')}</p>
-                )}
-
-                {terminalAppearance.allowTransparency && !transparencyBlocked && (
-                  <div className="space-y-2">
-                    <Label id="settings-terminal-opacity-label">{t('settings.terminal.opacity', { opacity: terminalAppearance.opacity })}</Label>
-                    <Slider aria-labelledby="settings-terminal-opacity-label"
-                      value={[terminalAppearance.opacity]}
-                      onValueChange={([value]) => updateTerminalAppearance('opacity', value)}
-                      min={10}
-                      max={100}
-                      step={5}
-                    />
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Background Image Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Image className="h-4 w-4" />
-                    <Label className="text-base font-medium">{t('settings.terminal.backgroundImage')}</Label>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      id="background-image-upload"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (file.size > MAX_TERMINAL_BACKGROUND_IMAGE_BYTES) {
-                            alert(t('settings.terminal.imageSizeWarning'));
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const dataUrl = event.target?.result as string;
-                            updateTerminalAppearance('backgroundImage', dataUrl);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => document.getElementById('background-image-upload')?.click()}
-                      className="gap-2"
-                    >
-                      <Upload className="h-4 w-4" />
-                      {terminalAppearance.backgroundImage ? t('settings.terminal.changeImage') : t('settings.terminal.uploadImage')}
-                    </Button>
-                    {terminalAppearance.backgroundImage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => updateTerminalAppearance('backgroundImage', '')}
-                        className="gap-2 text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                        {t('settings.terminal.remove')}
-                      </Button>
-                    )}
-                  </div>
-
-                  {terminalAppearance.backgroundImage && (
-                    <div className="space-y-4 pl-0">
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 rounded border overflow-hidden flex-shrink-0">
-                          <img 
-                            src={terminalAppearance.backgroundImage} 
-                            alt="Background preview" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.terminal.imagePreviewDesc')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label id="settings-terminal-imageOpacity-label">{t('settings.terminal.imageOpacity', { opacity: terminalAppearance.backgroundImageOpacity })}</Label>
-                        <Slider aria-labelledby="settings-terminal-imageOpacity-label"
-                          value={[terminalAppearance.backgroundImageOpacity]}
-                          onValueChange={([value]) => updateTerminalAppearance('backgroundImageOpacity', value)}
-                          min={5}
-                          max={100}
-                          step={5}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label id="settings-terminal-imageBlur-label">{t('settings.terminal.imageBlur', { blur: terminalAppearance.backgroundImageBlur })}</Label>
-                        <Slider aria-labelledby="settings-terminal-imageBlur-label"
-                          value={[terminalAppearance.backgroundImageBlur]}
-                          onValueChange={([value]) => updateTerminalAppearance('backgroundImageBlur', value)}
-                          min={0}
-                          max={20}
-                          step={1}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="settings-terminal-imagePosition">{t('settings.terminal.imagePosition')}</Label>
-                        <Select 
-                          value={terminalAppearance.backgroundImagePosition} 
-                          onValueChange={(value: 'cover' | 'contain' | 'center' | 'tile') => updateTerminalAppearance('backgroundImagePosition', value)}
-                        >
-                          <SelectTrigger id="settings-terminal-imagePosition">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cover">{t('settings.imagePosition.cover')}</SelectItem>
-                            <SelectItem value="contain">{t('settings.imagePosition.contain')}</SelectItem>
-                            <SelectItem value="center">{t('settings.imagePosition.center')}</SelectItem>
-                            <SelectItem value="tile">{t('settings.imagePosition.tile')}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                <div className="p-4 bg-muted rounded-lg">
-                  <div 
-                    className="font-mono text-sm p-3 rounded relative overflow-hidden"
-                    style={{
-                      fontFamily: terminalAppearance.fontFamily,
-                      fontSize: `${terminalAppearance.fontSize}px`,
-                      lineHeight: terminalAppearance.lineHeight,
-                      letterSpacing: `${terminalAppearance.letterSpacing}px`,
-                      backgroundColor: terminalContainerBackground({
-                        allowTransparency: terminalAppearance.allowTransparency && !transparencyBlocked,
-                        nativeMaterial: document.documentElement.dataset.nativeMaterial === 'true',
-                        opacity: terminalAppearance.opacity,
-                        opaqueBackground: terminalThemes[terminalAppearance.theme]?.background || '#1e1e1e',
-                      }),
-                      color: terminalThemes[terminalAppearance.theme]?.foreground || '#d4d4d4',
-                    }}
-                  >
-                    {/* Background image layer */}
-                    {terminalAppearance.backgroundImage && (
-                      <div 
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          backgroundImage: `url(${terminalAppearance.backgroundImage})`,
-                          backgroundSize: terminalBackgroundSize(terminalAppearance.backgroundImagePosition),
-                          backgroundPosition: 'center',
-                          backgroundRepeat: terminalAppearance.backgroundImagePosition === 'tile' ? 'repeat' : 'no-repeat',
-                          opacity: terminalAppearance.backgroundImageOpacity / 100,
-                          filter: terminalAppearance.backgroundImageBlur > 0 ? `blur(${terminalAppearance.backgroundImageBlur}px)` : 'none',
-                        }}
-                      />
-                    )}
-                    <div className="relative z-10">
-                      <div style={{ color: terminalThemes[terminalAppearance.theme]?.green }}>user@host</div>
-                      <div>$ ls -la</div>
-                      <div style={{ color: terminalThemes[terminalAppearance.theme]?.blue }}>drwxr-xr-x</div>
-                      <div style={{ color: terminalThemes[terminalAppearance.theme]?.yellow }}>-rw-r--r--</div>
-                    </div>
-                  </div>
-                </div>
+                <TerminalAppearancePreview appearance={terminalAppearance} />
               </FormSection>
           </TabsContent>
 
           <TabsContent value="editor" className={tabContentClassName}>
+            <Button variant="link" className="h-auto justify-start whitespace-normal px-0 text-left" onClick={() => setActiveTab('appearance')}>
+              {t('settings.appearance.openSettings')}
+            </Button>
             <FormSection title={t('settings.editor.title')} footer={t('settings.editor.desc')}>
-                {/* Theme & Font */}
+                {/* Font */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-editor-theme">{t('settings.editor.theme')}</Label>
-                    <Select
-                      value={editorConfig.theme}
-                      onValueChange={(value) => setEditorConfig(prev => ({ ...prev, theme: value }))}
-                    >
-                      <SelectTrigger id="settings-editor-theme">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EDITOR_THEMES.map(theme => (
-                          <SelectItem key={theme.id} value={theme.id}>{theme.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="settings-editor-fontFamily">{t('settings.editor.fontFamily')}</Label>
                     <Select
@@ -867,94 +895,6 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
               </FormSection>
           </TabsContent>
 
-          <TabsContent value="interface" className={tabContentClassName}>
-            <FormSection title={t('settings.interface.title')} footer={t('settings.interface.desc')}>
-                <div className="space-y-2">
-                  <Label id="settings-interface-appTheme">{t('settings.interface.appTheme')}</Label>
-                  <div
-                    role="radiogroup"
-                    aria-labelledby="settings-interface-appTheme"
-                    className="inline-flex h-7 rounded-[7px] bg-muted p-0.5"
-                  >
-                    {(['light', 'dark', 'auto'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="radio"
-                        aria-checked={settings.theme === mode}
-                        className={`h-6 rounded-[6px] px-3 text-[length:var(--text-body)] ${settings.theme === mode ? 'bg-white text-foreground shadow-sm dark:bg-white/15' : 'text-muted-foreground'}`}
-                        onClick={() => {
-                          updateSetting('theme', mode);
-                          applyTheme(mode, settings.colorPalette);
-                        }}
-                      >
-                        {t(`settings.theme.${mode}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div>
-                    <Label>{t('settings.interface.colorPalette')}</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t('settings.interface.colorPaletteDesc')}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {COLOR_PALETTES.map((palette) => {
-                      const selected = settings.colorPalette === palette;
-                      return (
-                        <button
-                          key={palette}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => handlePaletteChange(palette)}
-                          className={cn(
-                            'rounded-md border bg-card p-3 text-left transition-colors hover:bg-surface-hover',
-                            selected
-                              ? 'border-primary bg-accent ring-1 ring-primary/50'
-                              : 'border-border',
-                          )}
-                        >
-                          <span className="mb-2 flex overflow-hidden rounded-md border border-white/10">
-                            {PALETTE_SWATCHES[palette].map((color) => (
-                              <span
-                                key={color}
-                                className="h-7 flex-1"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </span>
-                          <span className="block text-sm font-medium">
-                            {t(`settings.palette.${palette}.name`)}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                            {t(`settings.palette.${palette}.description`)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="settings-interface-enableNotifications">{t('settings.interface.enableNotifications')}</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t('settings.interface.enableNotificationsDesc')}
-                    </p>
-                  </div>
-                  <Switch id="settings-interface-enableNotifications"
-                    checked={settings.enableNotifications}
-                    onCheckedChange={(checked) => updateSetting('enableNotifications', checked)}
-                  />
-                </div>
-              </FormSection>
-          </TabsContent>
-
           <TabsContent value="keyboard" className={tabContentClassName}>
             <FormSection title={t('settings.keyboard.title')} footer={t('settings.keyboard.desc')}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -993,6 +933,20 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           </TabsContent>
 
           <TabsContent value="advanced" className={tabContentClassName}>
+            <FormSection title={t('settings.advanced.notifications')}>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="settings-interface-enableNotifications">{t('settings.interface.enableNotifications')}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t('settings.interface.enableNotificationsDesc')}
+                  </p>
+                </div>
+                <Switch id="settings-interface-enableNotifications"
+                  checked={settings.enableNotifications}
+                  onCheckedChange={(checked) => updateSetting('enableNotifications', checked)}
+                />
+              </div>
+            </FormSection>
             <FormSection title={t('settings.advanced.title')} footer={t('settings.advanced.desc')}>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">

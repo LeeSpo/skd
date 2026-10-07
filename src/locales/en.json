@@ -246,17 +246,17 @@
     "title": "Settings & Preferences",
     "description": "Customize your SSH client experience and preferences",
     "tab": {
+      "appearance": "Appearance",
       "terminal": "Terminal",
       "editor": "Editor",
       "connection": "Connection",
       "security": "Security",
-      "interface": "Interface",
       "keyboard": "Keyboard",
       "advanced": "Advanced"
     },
     "terminal": {
-      "appearance": "Terminal Appearance",
-      "appearanceDesc": "Configure how the terminal looks and behaves.",
+      "appearance": "Terminal Text & Behavior",
+      "appearanceDesc": "Configure terminal fonts, spacing, cursor, and rendering.",
       "fontFamily": "Font Family",
       "fontSystemMultilingual": "System (Multilingual)",
       "fontMenlo": "Menlo (Latin only)",
@@ -325,7 +325,7 @@
       "desc": "Customize the application interface and panels.",
       "appTheme": "Application Theme",
       "colorPalette": "Workspace Color Palette",
-      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Your terminal theme is configured separately.",
+      "colorPaletteDesc": "Choose a workspace palette for light and dark appearances. Select terminal and editor themes in the sections below.",
       "enableNotifications": "Enable Notifications",
       "enableNotificationsDesc": "Show in-app toasts for successes, failures, and other events. Turning this off hides those toasts."
     },
@@ -342,7 +342,8 @@
       "desc": "Check for new releases.",
       "checkUpdates": "Check for Updates",
       "checkUpdatesDesc": "Automatically check GitHub for new releases",
-      "checkNow": "Check Now"
+      "checkNow": "Check Now",
+      "notifications": "Notifications"
     },
     "button": {
       "resetToDefaults": "Reset to Defaults",
@@ -386,6 +387,16 @@
       "contain": "Contain (fit inside)",
       "center": "Center (original size)",
       "tile": "Tile (repeat)"
+    },
+    "appearance": {
+      "workspace": "Interface Colors",
+      "terminal": "Terminal Colors & Background",
+      "terminalDesc": "Choose terminal colors and backgrounds here. Fonts and terminal behavior are configured in Terminal.",
+      "editor": "Editor Colors",
+      "editorDesc": "Choose an editor theme independently of the interface and terminal.",
+      "openSettings": "Go to Appearance settings",
+      "preview": "Terminal preview",
+      "backgroundPreview": "Background image preview"
     }
   },
   "welcome": {

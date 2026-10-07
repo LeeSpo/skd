@@ -149,6 +149,7 @@ function AppContent() {
     targetGroupId: string;
   } | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsModalMounted, setSettingsModalMounted] = useState(false);
   const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
   const [updateCheckSignal, setUpdateCheckSignal] = useState(0);
@@ -1196,6 +1197,7 @@ function AppContent() {
   }, [allTabs, connectionDialogSession, state.groups, state.activeGroupId, dispatch, onHostKeyTrustRequired, t]);
 
   const handleOpenSettings = useCallback(() => {
+    setSettingsModalMounted(true);
     setSettingsModalOpen(true);
   }, []);
 
@@ -1722,7 +1724,7 @@ function AppContent() {
           />
         )}
 
-        {settingsModalOpen && (
+        {settingsModalMounted && (
           <SettingsModal
             open={settingsModalOpen}
             onOpenChange={setSettingsModalOpen}

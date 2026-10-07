@@ -2,7 +2,7 @@
  * Editor configuration: types, defaults, load/save helpers.
  *
  * Persisted in localStorage under `skd-editor-config`.
- * Consumed by `CodeEditor` and surfaced in Settings → Editor tab.
+ * Consumed by `CodeEditor`; theme lives in Settings → Appearance, text and behavior in Editor.
  */
 
 import {
