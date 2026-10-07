@@ -1,0 +1,60 @@
+.inspector-header {
+  background: transparent;
+}
+
+.inspector-toolbar {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: var(--chrome-hairline);
+}
+
+.inspector-panel [data-slot="toggle"][data-state="on"] {
+  background: var(--sidebar-selection);
+  color: var(--sidebar-foreground);
+}
+
+.inspector-panel [data-slot="button"]:not(.bg-primary):hover:not(:disabled),
+.inspector-panel [data-slot="button"]:not(.bg-primary)[data-state="open"] {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-foreground);
+}
+
+.inspector-body {
+  background: transparent;
+}
+
+/* Radix sizes this wrapper as a table, so charts measure their own content and widen the inspector. */
+.inspector-panel [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.inspector-panel .recharts-responsive-container {
+  max-width: 100%;
+}
+
+.inspector-panel [data-slot="card"] {
+  border: 0;
+  border-bottom: 1px solid var(--chrome-hairline);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.inspector-panel thead th,
+.inspector-panel thead th:hover {
+  background-color: var(--sidebar-opaque);
+}
+
+.inspector-panel tbody tr:hover {
+  background-color: var(--sidebar-row-hover);
+}
+
+.inspector-panel [data-slot="card-header"] {
+  padding: 12px 0 0;
+}
+
+.inspector-panel [data-slot="card-content"] {
+  padding: 0 0 12px;
+}

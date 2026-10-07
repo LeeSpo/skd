@@ -136,7 +136,7 @@ function ComposePaneEditor({ connectionId, isConnected }: ComposePaneEditorProps
           disabled={!isConnected}
           aria-label={t('composePane.editorLabel')}
           placeholder={isConnected ? t('composePane.placeholder') : t('composePane.placeholderDisconnected')}
-          className="h-full w-full rounded-md border-0 resize-none font-mono text-[13px] leading-relaxed p-3 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground"
+          className="h-full w-full rounded-md border-0 resize-none font-mono text-[length:var(--text-body)] leading-relaxed p-3 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground"
           spellCheck={false}
         />
       </div>

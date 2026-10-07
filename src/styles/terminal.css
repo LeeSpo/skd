@@ -1,0 +1,51 @@
+/* Load after xterm.css. State belongs to each terminal container; :where keeps
+   the same specificity as the former per-instance scoping class. */
+.pty-terminal-container .xterm-viewport {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+  overflow-y: hidden;
+}
+
+.pty-terminal-container:where([data-scrollable="true"]) .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  overflow-y: auto;
+}
+
+.pty-terminal-container:where([data-scrollable="true"]) .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.pty-terminal-container:where([data-scrollable="true"]) .xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  min-height: 40px;
+}
+
+.pty-terminal-container:where([data-scrollable="true"]) .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.pty-terminal-container:where([data-scrollable="true"]) .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+  margin: 4px 0;
+}
+
+/* xterm also writes inline backgrounds. Keep these overrides limited to the
+   instance with an image, including its textarea used for IME input. */
+.pty-terminal-container:where([data-background-image="true"]) .xterm,
+.pty-terminal-container:where([data-background-image="true"]) .xterm-viewport,
+.pty-terminal-container:where([data-background-image="true"]) .xterm-screen,
+.pty-terminal-container:where([data-background-image="true"]) .xterm-rows,
+.pty-terminal-container:where([data-background-image="true"]) canvas {
+  background: transparent !important;
+}
+
+.pty-terminal-container:where([data-background-image="true"]) .xterm-helper-textarea {
+  background-color: transparent !important;
+}

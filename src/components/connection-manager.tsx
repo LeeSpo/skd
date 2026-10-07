@@ -497,7 +497,7 @@ export function ConnectionManager({
         <div className="relative shrink-0">
           {getIcon(node)}
         </div>
-        <span className="min-w-0 flex-1 truncate text-[13px]" title={node.name}>{node.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[length:var(--text-body)]" title={node.name}>{node.name}</span>
         {isConnected && (
           <StatusDot
             variant="connected"
@@ -616,7 +616,7 @@ export function ConnectionManager({
       {/* Connection Browser */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col select-none">
         <PanelHeader tone="sidebar" className="h-9 shrink-0 gap-1 border-b-0 px-3">
-          <h3 className="min-w-0 flex-1 truncate text-[11px] font-semibold text-muted-foreground">
+          <h3 className="min-w-0 flex-1 truncate text-[length:var(--text-secondary)] font-semibold text-muted-foreground">
             {t('connectionManager.connectionsHeader')}
           </h3>
 
@@ -733,7 +733,7 @@ export function ConnectionManager({
           {!hasSavedConnections && !search ? (
             <div className="flex flex-col items-center justify-center px-3 py-8 text-center">
               <Server className="mb-3 size-6 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
-              <p className="text-[13px] font-medium">{t('connectionManager.noConnectionsYet')}</p>
+              <p className="text-[length:var(--text-body)] font-medium">{t('connectionManager.noConnectionsYet')}</p>
               <p className="mb-4 mt-2 text-xs leading-relaxed text-muted-foreground">{t('connectionManager.emptyDescription')}</p>
               {onNewConnection && (
                 <Button onClick={onNewConnection} size="sm" variant="outline">
@@ -745,7 +745,7 @@ export function ConnectionManager({
           ) : (
             filteredConnections.length > 0 ? filteredConnections.map(connection => renderNode(connection)) : (
               <div role="status" className="px-3 py-8 text-center">
-                <p className="text-[13px] font-medium">{t('connectionManager.noSearchResults')}</p>
+                <p className="text-[length:var(--text-body)] font-medium">{t('connectionManager.noSearchResults')}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{t('connectionManager.searchHint')}</p>
               </div>
             )
@@ -756,7 +756,7 @@ export function ConnectionManager({
       {/* Connection Details */}
       {selectedConnection?.type === 'connection' && (
       <details className="group/details max-h-[40%] shrink-0 overflow-auto border-t border-sidebar-border">
-        <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 px-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 px-2 text-[length:var(--text-secondary)] font-semibold text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
           <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open/details:rotate-90 motion-reduce:transition-none" />
           {t('connectionManager.connectionDetails')}
         </summary>

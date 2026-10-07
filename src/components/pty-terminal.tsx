@@ -44,6 +44,7 @@ import { useWebviewFileDrop } from '../lib/use-webview-file-drop';
 import { openExternalUrl } from '../lib/open-external-url';
 import { cn } from '../lib/utils';
 import '@xterm/xterm/css/xterm.css';
+import '@/styles/terminal.css';
 
 interface PtyTerminalProps {
   connectionId: string;
@@ -122,10 +123,6 @@ export function PtyTerminal({
   const [hasScrollableContent, setHasScrollableContent] = React.useState(false);
   const hasScrollableContentRef = React.useRef(false);
 
-  // Unique CSS scoping class for this instance — prevents dynamic scrollbar rules
-  // injected via <style> from bleeding across multiple mounted terminals on the page.
-  const scopeId = React.useId().replace(/:/g, '');
-  
   // Track whether terminal was created with background image (determines renderer choice)
   const hadBackgroundImageRef = React.useRef<boolean | null>(null);
   // Track connection status to avoid duplicate notifications
@@ -1190,9 +1187,11 @@ export function PtyTerminal({
     <div 
       ref={containerRef}
       className={cn(
-        `relative h-full w-full pty-terminal-container pty-term-${scopeId} overflow-hidden`,
+        'relative h-full w-full pty-terminal-container overflow-hidden',
         isOsFileDragOver && 'ring-1 ring-inset ring-primary/40',
       )}
+      data-scrollable={hasScrollableContent}
+      data-background-image={hasBackgroundImage}
       onContextMenu={() => {
         setContextLinkUrl(hoveredLinkRef.current);
       }}
@@ -1240,61 +1239,6 @@ export function PtyTerminal({
       <div className="absolute inset-0 z-10">
         <div ref={terminalRef} className="h-full w-full" />
       </div>
-      <style>{`
-        /* Scrollbar appearance — scoped to this terminal instance */
-        .pty-term-${scopeId} .xterm-viewport {
-          scrollbar-color: var(--scrollbar-thumb) transparent;
-          scrollbar-width: ${hasScrollableContent ? 'thin' : 'none'};
-          scrollbar-gutter: ${hasScrollableContent ? 'stable' : 'auto'};
-          overflow-y: ${hasScrollableContent ? 'auto' : 'hidden'};
-        }
-        ${hasScrollableContent ? `
-        .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar {
-          width: 10px;
-          height: 10px;
-        }
-        .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-thumb {
-          background-color: var(--scrollbar-thumb);
-          border: 2px solid transparent;
-          border-radius: 999px;
-          background-clip: content-box;
-          min-height: 40px;
-        }
-        .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-thumb:hover {
-          background-color: var(--scrollbar-thumb-hover);
-        }
-        .pty-term-${scopeId} .xterm-viewport::-webkit-scrollbar-track {
-          background: transparent;
-          border-radius: 999px;
-          margin: 4px 0;
-        }` : ''}
-        /* Make xterm background transparent when background image is set */
-        ${appearance.backgroundImage ? `
-        .pty-term-${scopeId} .xterm {
-          background-color: transparent !important;
-          background: transparent !important;
-        }
-        .pty-term-${scopeId} .xterm-viewport {
-          background-color: transparent !important;
-          background: transparent !important;
-        }
-        .pty-term-${scopeId} .xterm-screen {
-          background-color: transparent !important;
-          background: transparent !important;
-        }
-        .pty-term-${scopeId} .xterm-rows {
-          background-color: transparent !important;
-          background: transparent !important;
-        }
-        .pty-term-${scopeId} canvas {
-          background-color: transparent !important;
-          background: transparent !important;
-        }
-        .pty-term-${scopeId} .xterm-helper-textarea {
-          background-color: transparent !important;
-        }
-        ` : ''}
-      `}</style>
     </div>
     </TerminalContextMenu>
   );

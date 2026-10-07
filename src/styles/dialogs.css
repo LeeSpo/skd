@@ -1,0 +1,26 @@
+.preferences-dialog,
+.connection-dialog {
+  background: var(--popover);
+}
+
+.preferences-dialog [data-slot="dialog-header"],
+.connection-dialog [data-slot="dialog-header"] {
+  background: var(--panel-header-bg);
+}
+
+.preferences-content [data-slot="card"] {
+  gap: 20px;
+}
+
+.preferences-content [data-slot="card-title"] {
+  font-size: var(--text-body);
+}
+
+.preferences-content [data-slot="card-content"] > .border {
+  border-color: var(--chrome-hairline);
+  background: var(--surface-raised);
+}
+
+.preferences-navigation {
+  background: var(--sidebar);
+}

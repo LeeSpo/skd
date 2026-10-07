@@ -1,0 +1,181 @@
+/* Keep inspector values readable inside a narrow, resizable connection sidebar. */
+.sidebar-connection-details .justify-between {
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.sidebar-connection-details .justify-between > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Unified window toolbar: keep pointer and keyboard states equally legible. */
+.window-chrome {
+  --chrome-hover: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --chrome-pressed: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --chrome-active: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.window-chrome [data-slot="button"] {
+  color: var(--muted-foreground);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.window-chrome [data-slot="button"]:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--foreground) 74%, transparent);
+  background-color: var(--chrome-hover);
+}
+
+.window-chrome [data-slot="button"][aria-pressed="true"],
+.window-chrome [data-slot="button"][data-state="open"] {
+  color: var(--foreground);
+  background-color: var(--chrome-pressed);
+}
+
+/* This control is only shown while the sidebar is open, so the pressed fill sat
+   there at rest and the lighter hover replaced it. */
+.sidebar-titlebar [data-slot="button"][aria-pressed="true"]:not(:hover):not(:active) {
+  background-color: transparent;
+  color: var(--muted-foreground);
+}
+
+.window-chrome [data-slot="button"]:active:not(:disabled) {
+  color: var(--foreground);
+  /* Pressed controls darken; --surface-selected may be an accent fill. */
+  background-color: var(--chrome-active);
+}
+
+.window-chrome [data-slot="button"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+html[data-window-kind="main"],
+html[data-window-kind="main"] body {
+  background: transparent;
+}
+
+.workspace-shell {
+  background: var(--workspace-bg);
+}
+
+[data-native-material="true"] .workspace-shell {
+  background: transparent;
+}
+
+.workspace-sidebar,
+.inspector-panel {
+  background: var(--sidebar-opaque);
+  color: var(--sidebar-foreground);
+  /* Translucent washes sit on the sidebar material. Solid accent and surface
+     fills read as blue or gray slabs. */
+  --sidebar-row-hover: color-mix(in srgb, var(--foreground) 6%, transparent);
+  --sidebar-selection: color-mix(in srgb, var(--foreground) 11%, transparent);
+  --sidebar-selection-foreground: var(--sidebar-foreground);
+}
+
+.dark .workspace-sidebar,
+.dark .inspector-panel {
+  --sidebar-row-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --sidebar-selection: color-mix(in srgb, var(--foreground) 13%, transparent);
+}
+
+[data-native-material="true"] .workspace-sidebar {
+  background: var(--sidebar-tint);
+}
+
+.workspace-sidebar .panel-header {
+  background: transparent;
+  border-bottom: 0;
+}
+
+.workspace-sidebar .sidebar-search {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.workspace-sidebar .sidebar-search:focus-visible {
+  border-color: var(--ring);
+  background: var(--input-background);
+}
+
+.workspace-sidebar .sidebar-row:hover {
+  background-color: var(--sidebar-row-hover);
+}
+
+.workspace-sidebar .sidebar-row-selected,
+.workspace-sidebar .sidebar-row-selected:hover {
+  background: var(--sidebar-selection);
+  color: var(--sidebar-selection-foreground, var(--surface-selected-foreground));
+}
+
+.workspace-sidebar .connection-browser [data-slot="button"]:hover:not(:disabled),
+.workspace-sidebar .connection-browser [data-slot="button"][data-state="open"] {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-foreground);
+}
+
+.workspace-content-surface {
+  background: var(--workspace-bg);
+}
+
+[data-native-material="true"] .workspace-toolbar {
+  background: var(--sidebar-tint);
+}
+
+.titlebar-tab-active {
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: var(--control-shadow);
+}
+
+.dark .titlebar-tab-active {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.titlebar-tab-idle:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.workspace-sidebar details {
+  border-color: var(--chrome-hairline);
+}
+
+.workspace-toolbar {
+  background: var(--panel-header-bg);
+  border-bottom: 1px solid var(--chrome-hairline);
+}
+
+[data-window-active="false"] .window-chrome {
+  color: var(--muted-foreground);
+}
+
+[data-window-active="false"] .workspace-sidebar .sidebar-row-selected,
+[data-window-active="false"] .workspace-sidebar .sidebar-row-selected:hover {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  color: var(--sidebar-foreground);
+}
+
+.terminal-tab-strip {
+  border-bottom-color: var(--chrome-hairline);
+}
+
+.terminal-tab:has([aria-pressed="true"]) {
+  box-shadow: var(--control-shadow), inset 0 1px 0 var(--control-highlight);
+}
+
+.bottom-panel-header {
+  background: var(--panel-toolbar-bg);
+  box-shadow: 0 1px 0 var(--chrome-hairline);
+  z-index: 1;
+}
+
+[data-terminal-translucent="true"] .workspace-content-surface {
+  background: transparent;
+}
+
+.bottom-panel {
+  background: var(--workspace-bg);
+}

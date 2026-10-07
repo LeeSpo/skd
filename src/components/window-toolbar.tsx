@@ -58,9 +58,9 @@ export function WindowToolbar({
           />
           {showSessionTitle && (
             <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center gap-2">
-              <span className="truncate text-[13px] font-semibold">{workspaceTitle || t('menuBar.workspace')}</span>
+              <span className="truncate text-[length:var(--text-body)] font-semibold">{workspaceTitle || t('menuBar.workspace')}</span>
               {workspaceSubtitle && (
-                <span className="truncate text-[11px] text-muted-foreground">{workspaceSubtitle}</span>
+                <span className="truncate text-[length:var(--text-secondary)] text-muted-foreground">{workspaceSubtitle}</span>
               )}
             </div>
           )}

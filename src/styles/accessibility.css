@@ -1,0 +1,32 @@
+/* Respect system accessibility preferences across all app-owned chrome. */
+@media (prefers-reduced-motion: reduce) {
+  .window-chrome [data-slot="button"] {
+    transition: none;
+  }
+
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root, :root[data-color-palette] {
+    --panel-border: var(--muted-foreground);
+    --sidebar-border: var(--muted-foreground);
+    --border: var(--muted-foreground);
+    --input: var(--muted-foreground);
+  }
+
+  .workspace-sidebar,
+  .workspace-toolbar,
+  .inspector-panel {
+    background: var(--sidebar-opaque) !important;
+  }
+
+  :root {
+    --chrome-hairline: var(--muted-foreground);
+  }
+}

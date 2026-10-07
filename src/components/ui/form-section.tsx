@@ -12,12 +12,12 @@ export function FormSection({ title, footer, children }: FormSectionProps) {
   return (
     <section className="space-y-1.5">
       {title ? (
-        <h3 className="px-3 text-[11px] font-semibold text-muted-foreground">{title}</h3>
+        <h3 className="px-3 text-[length:var(--text-secondary)] font-semibold text-muted-foreground">{title}</h3>
       ) : null}
       <div className="overflow-hidden rounded-[10px] bg-[var(--grouped-bg)]">
         <div className="space-y-4 p-3">{children}</div>
       </div>
-      {footer ? <p className="px-3 text-[11px] text-muted-foreground">{footer}</p> : null}
+      {footer ? <p className="px-3 text-[length:var(--text-secondary)] text-muted-foreground">{footer}</p> : null}
     </section>
   );
 }
@@ -34,8 +34,8 @@ export function FormRow({ label, description, htmlFor, children }: FormRowProps)
   return (
     <div className="flex min-h-9 items-center gap-3 border-b border-border/60 px-3 py-2 last:border-b-0">
       <div className="min-w-0 flex-1">
-        <Label htmlFor={htmlFor} className="text-[13px]">{label}</Label>
-        {description ? <p className="text-[11px] text-muted-foreground">{description}</p> : null}
+        <Label htmlFor={htmlFor} className="text-[length:var(--text-body)]">{label}</Label>
+        {description ? <p className="text-[length:var(--text-secondary)] text-muted-foreground">{description}</p> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>

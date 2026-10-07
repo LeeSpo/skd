@@ -131,25 +131,6 @@ export default {
         'soft': '0 2px 8px -2px rgba(0, 0, 0, 0.1), 0 4px 16px -4px rgba(0, 0, 0, 0.1)',
         'soft-lg': '0 4px 12px -2px rgba(0, 0, 0, 0.1), 0 8px 24px -4px rgba(0, 0, 0, 0.1)',
       },
-      animation: {
-        'fade-in': 'fade-in 0.2s ease-out',
-        'slide-up': 'slide-up 0.3s ease-out',
-        'slide-down': 'slide-down 0.3s ease-out',
-      },
-      keyframes: {
-        'fade-in': {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        'slide-up': {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'slide-down': {
-          '0%': { opacity: '0', transform: 'translateY(-10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-      },
     }
   },
   plugins: [],

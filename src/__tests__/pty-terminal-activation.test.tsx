@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { PtyTerminal } from '../components/pty-terminal';
 import { TerminalInputProvider } from '../lib/terminal-input-context';
+import { loadAppearanceSettings } from '../lib/terminal-config';
 
 const mocks = vi.hoisted(() => {
   const terminals: Array<any> = [];
@@ -144,6 +145,7 @@ vi.mock('../lib/terminal-config', () => ({
     theme: {},
   })),
   getThemeAwareTerminalTheme: vi.fn(() => ({ background: '#1e1e1e' })),
+  terminalBackgroundSize: vi.fn(() => 'cover'),
   terminalContainerBackground: vi.fn((opts: { opaqueBackground: string }) => opts.opaqueBackground),
 }));
 
@@ -174,6 +176,7 @@ vi.mock('sonner', () => ({
 function renderTerminal(
   isActive: boolean,
   onConnectionStatusChange?: React.ComponentProps<typeof PtyTerminal>['onConnectionStatusChange'],
+  props: Partial<React.ComponentProps<typeof PtyTerminal>> = {},
 ) {
   return render(
     <TerminalInputProvider>
@@ -184,6 +187,7 @@ function renderTerminal(
         username="root"
         isActive={isActive}
         onConnectionStatusChange={onConnectionStatusChange}
+        {...props}
       />
     </TerminalInputProvider>,
   );
@@ -209,9 +213,12 @@ async function flushPromises() {
 }
 
 describe('PtyTerminal activation', () => {
+  const defaultAppearance = loadAppearanceSettings();
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    vi.mocked(loadAppearanceSettings).mockReturnValue(defaultAppearance);
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockImplementation(async (command) => (
       command === 'get_websocket_endpoint' ? { port: 9001, token: 'test-token' } : undefined
@@ -339,6 +346,69 @@ describe('PtyTerminal activation', () => {
     renderTerminal(false);
 
     expect(mocks.terminals[0].focus).not.toHaveBeenCalled();
+  });
+
+  it('keeps scrollbar state local to each terminal without recreating sessions', async () => {
+    const first = renderTerminal(true);
+    const second = renderTerminal(false, undefined, { connectionId: 'connection-2' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    const firstContainer = first.container.querySelector('.pty-terminal-container')!;
+    const secondContainer = second.container.querySelector('.pty-terminal-container')!;
+    const terminal = mocks.terminals[0];
+    const onLineFeed = terminal.onLineFeed.mock.calls[0][0] as () => void;
+
+    expect(firstContainer.getAttribute('data-scrollable')).toBe('false');
+    expect(secondContainer.getAttribute('data-scrollable')).toBe('false');
+
+    act(() => {
+      terminal.buffer.active.length = terminal.rows + 1;
+      onLineFeed();
+    });
+    expect(firstContainer.getAttribute('data-scrollable')).toBe('true');
+    expect(secondContainer.getAttribute('data-scrollable')).toBe('false');
+
+    act(() => {
+      terminal.buffer.active.length = terminal.rows;
+      onLineFeed();
+    });
+    expect(firstContainer.getAttribute('data-scrollable')).toBe('false');
+    expect(mocks.terminals).toHaveLength(2);
+    expect(mocks.webSockets).toHaveLength(2);
+    expect(terminal.dispose).not.toHaveBeenCalled();
+  });
+
+  it('keeps background-image state local and updates an image without recreating the terminal', () => {
+    const first = renderTerminal(true);
+    vi.mocked(loadAppearanceSettings).mockReturnValue({
+      ...defaultAppearance,
+      backgroundImage: 'data:image/png;base64,first',
+      backgroundImageOpacity: 30,
+      backgroundImageBlur: 0,
+      backgroundImagePosition: 'cover',
+    });
+    const second = renderTerminal(false, undefined, { connectionId: 'connection-2' });
+    const firstContainer = first.container.querySelector('.pty-terminal-container')!;
+    const secondContainer = second.container.querySelector('.pty-terminal-container')!;
+    expect(firstContainer.getAttribute('data-background-image')).toBe('false');
+    expect(secondContainer.getAttribute('data-background-image')).toBe('true');
+    expect(firstContainer.querySelector('style')).toBeNull();
+    expect(secondContainer.querySelector('style')).toBeNull();
+
+    vi.mocked(loadAppearanceSettings).mockReturnValue({
+      ...loadAppearanceSettings(),
+      backgroundImage: 'data:image/png;base64,second',
+    });
+    second.rerender(
+      <TerminalInputProvider>
+        <PtyTerminal connectionId="connection-2" connectionName="SSH Server" host="127.0.0.1" username="root" isActive={false} appearanceKey={1} />
+      </TerminalInputProvider>,
+    );
+
+    expect(secondContainer.getAttribute('data-background-image')).toBe('true');
+    expect(secondContainer.querySelector('[style*="background-image"]')?.getAttribute('style')).toContain('base64,second');
+    expect(firstContainer.getAttribute('data-background-image')).toBe('false');
+    expect(mocks.terminals).toHaveLength(2);
+    expect(mocks.terminals[1].dispose).not.toHaveBeenCalled();
   });
 
   it('fits, refreshes, and focuses the terminal when it becomes active', async () => {

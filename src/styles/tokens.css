@@ -1,0 +1,144 @@
+:root {
+  --font-size: 16px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Base colors */
+  --background: #ffffff;
+  --foreground: #242424;
+
+  /* Card & Surface */
+  --card: #ffffff;
+  --card-foreground: #242424;
+
+  /* Popover */
+  --popover: #ffffff;
+  --popover-foreground: #242424;
+
+  /* Primary - Brand color */
+  --primary: #0066cc;
+  --primary-foreground: #ffffff;
+  --primary-hover: #005bb5;
+
+  /* Secondary */
+  --secondary: #ebebed;
+  --secondary-foreground: #242424;
+
+  /* Muted */
+  --muted: #ebebed;
+  --muted-foreground: #606064;
+
+  /* Accent */
+  --accent: #e8e8ec;
+  --accent-foreground: #242424;
+
+  /* Destructive */
+  --destructive: #b92723;
+  --destructive-foreground: #ffffff;
+
+  /* Success */
+  --success: #197447;
+  --success-foreground: #ffffff;
+
+  /* Warning */
+  --warning: #855600;
+  --warning-foreground: #ffffff;
+
+  /* Border & Input */
+  --border: #d8d8dc;
+  --input: #c8c8ce;
+  --input-background: #ffffff;
+  --ring: #0066cc;
+
+  /* Switch */
+  --switch-background: #cbd5e1;
+
+  /* Shared macOS-inspired geometry; app choices, not native AppKit metrics. */
+  --radius: 0.625rem;
+  --shadow-menu: 0 12px 40px rgba(0, 0, 0, 0.12);
+  --shadow-dialog: 0 8px 28px rgba(0, 0, 0, 0.16);
+
+  /* Sequoia-style material layers; CSS approximations of NSVisualEffectView
+     used only where [data-native-material="true"] allows translucency. */
+  --material-menu: color-mix(in srgb, var(--popover) 72%, transparent);
+  --material-sheet: color-mix(in srgb, var(--popover) 86%, transparent);
+  --glass-filter: blur(24px) saturate(180%);
+
+  /* Hairlines and control geometry; macOS control proportions. */
+  --radius-control: 6px;
+  --radius-menu: 8px;
+  --radius-sheet: 12px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
+  --grouped-bg: #f2f2f7;
+
+  /* Chart colors */
+  --chart-1: #2563eb;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
+
+  /* Sidebar */
+  --sidebar: #f2f2f4;
+  --sidebar-foreground: #242424;
+  --sidebar-primary: #0066cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8ec;
+  --sidebar-accent-foreground: #242424;
+  --sidebar-border: #d8d8dc;
+  --sidebar-ring: #0066cc;
+
+  /* Terminal */
+  --terminal-bg: #ffffff;
+  --terminal-fg: #242424;
+  --terminal-cursor: #242424;
+  --terminal-selection: rgba(0, 90, 200, 0.3);
+
+  /* Status colors */
+  --status-connected: var(--success);
+  --status-connecting: var(--warning);
+  --status-disconnected: var(--destructive);
+  --status-pending: var(--primary);
+
+  /* Panel chrome */
+  --panel-header-bg: #f2f2f4;
+  --panel-toolbar-bg: #f2f2f4;
+  --panel-border: #d8d8dc;
+  --surface-raised: #ffffff;
+  --surface-selected: #dce8f8;
+  --surface-selected-foreground: var(--foreground);
+  --surface-hover: #ededf0;
+  --workspace-bg: #ffffff;
+  --statusbar-bg: #f2f2f4;
+  --drop-zone: rgba(37, 99, 235, 0.2);
+  --overlay: rgba(15, 23, 42, 0.45);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.2);
+  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
+
+  /* App typography choices, not HIG-mandated pixel sizes. */
+  --text-body: 13px;
+  --text-secondary: 11px;
+  --text-page-title: 22px;
+  --file-chrome-font-size: 0.75rem;
+  --file-chrome-line-height: 1rem;
+  --file-list-font-size: 0.8125rem;
+  --file-list-line-height: 1.125rem;
+
+  /* Font weights */
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+
+  /* Shared window material and control decoration. */
+  --sidebar-tint: color-mix(in srgb, var(--sidebar) 58%, transparent);
+  --sidebar-opaque: var(--sidebar);
+  --chrome-hairline: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --control-highlight: rgba(255, 255, 255, 0.45);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --sidebar-tint: color-mix(in srgb, var(--sidebar) 46%, transparent);
+  --grouped-bg: rgb(255 255 255 / 0.05);
+  --control-highlight: rgba(255, 255, 255, 0.06);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}

@@ -76,7 +76,7 @@ export function SplitSessionLabels({
                   aria-label={t(`statusBar.${session.tab.connectionStatus}`)}
                 />
               )}
-              <span className="min-w-0 truncate text-center text-[13px] leading-none">
+              <span className="min-w-0 truncate text-center text-[length:var(--text-body)] leading-none">
                 {getTabDisplayName(session.tab, session.tabs)}
               </span>
             </button>
@@ -518,7 +518,7 @@ export function GroupTabBar({
                               aria-label={t(`statusBar.${tab.connectionStatus}`)}
                             />
                           )}
-                          <span className="min-w-0 truncate text-center text-[13px] leading-none">{getTabDisplayName(tab, tabs)}</span>
+                          <span className="min-w-0 truncate text-center text-[length:var(--text-body)] leading-none">{getTabDisplayName(tab, tabs)}</span>
                         </button>
                       </>
                     )}

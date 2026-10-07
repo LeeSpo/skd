@@ -335,7 +335,7 @@ function SessionName({ tab, tabs }: { tab: TerminalTab; tabs: TerminalTab[] }) {
       {tab.connectionStatus !== 'connected' && (
         <StatusDot variant={tab.connectionStatus} aria-label={t(`statusBar.${tab.connectionStatus}`)} />
       )}
-      <span className="min-w-0 truncate text-center text-[13px] leading-none">
+      <span className="min-w-0 truncate text-center text-[length:var(--text-body)] leading-none">
         {getTabDisplayName(tab, tabs)}
       </span>
     </>

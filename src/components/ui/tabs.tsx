@@ -35,7 +35,7 @@ const tabsTriggerVariants = cva(
   {
     variants: {
       variant: {
-        pill: "h-6 flex-1 rounded-[6px] border border-transparent px-2.5 text-[13px] text-foreground data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/15 dark:data-[state=active]:text-foreground",
+        pill: "h-6 flex-1 rounded-[6px] border border-transparent px-2.5 text-[length:var(--text-body)] text-foreground data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/15 dark:data-[state=active]:text-foreground",
       },
     },
     defaultVariants: {

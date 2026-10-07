@@ -326,7 +326,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="h-9 w-full flex-none justify-start gap-2.5 rounded-md border-0 px-3 text-[13px] text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none motion-reduce:transition-none"
+                  className="h-9 w-full flex-none justify-start gap-2.5 rounded-md border-0 px-3 text-[length:var(--text-body)] text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground data-[state=active]:bg-surface-selected data-[state=active]:text-surface-selected-foreground data-[state=active]:shadow-none motion-reduce:transition-none"
                 >
                   <Icon className="size-4 shrink-0" />
                   <span>{t(labelKey)}</span>
@@ -336,7 +336,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
           </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <h2 className="shrink-0 px-5 pt-5 text-[22px] font-bold tracking-tight">
+            <h2 className="shrink-0 px-5 pt-5 text-[length:var(--text-page-title)] font-bold tracking-tight">
               {t(tabItems.find((item) => item.value === activeTab)?.labelKey ?? 'settings.title')}
             </h2>
           <TabsContent value="terminal" className={tabContentClassName}>
@@ -502,7 +502,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                   />
                 </div>
                 {transparencyBlocked && (
-                  <p className="text-[11px] text-muted-foreground">{t('settings.terminal.transparencyBlocked')}</p>
+                  <p className="text-[length:var(--text-secondary)] text-muted-foreground">{t('settings.terminal.transparencyBlocked')}</p>
                 )}
 
                 {terminalAppearance.allowTransparency && !transparencyBlocked && (
@@ -882,7 +882,7 @@ export function SettingsModal({ open, onOpenChange, onAppearanceChange, onCheckF
                         type="button"
                         role="radio"
                         aria-checked={settings.theme === mode}
-                        className={`h-6 rounded-[6px] px-3 text-[13px] ${settings.theme === mode ? 'bg-white text-foreground shadow-sm dark:bg-white/15' : 'text-muted-foreground'}`}
+                        className={`h-6 rounded-[6px] px-3 text-[length:var(--text-body)] ${settings.theme === mode ? 'bg-white text-foreground shadow-sm dark:bg-white/15' : 'text-muted-foreground'}`}
                         onClick={() => {
                           updateSetting('theme', mode);
                           applyTheme(mode, settings.colorPalette);

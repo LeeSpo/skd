@@ -729,7 +729,7 @@ export function SyncDialog({
 
             {/* Result table */}
             <ScrollArea className="flex-1 min-h-0 border rounded">
-              <table className="w-full text-[11px]" style={{ tableLayout: "fixed" }}>
+              <table className="w-full text-[length:var(--text-secondary)]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
                   <col style={{ width: 28 }} />
                   <col />

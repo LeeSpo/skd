@@ -1,0 +1,144 @@
+:where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+  h1,
+  h2,
+  h3,
+  h4,
+  label,
+  button {
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  p,
+  input {
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+html {
+  font-size: var(--font-size);
+  font-family: var(--font-sans);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Default border color — without this, bare `border` uses currentColor (light in dark mode) */
+*,
+::before,
+::after {
+  border-color: var(--border);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Tab transition effects */
+[data-state="active"] {
+  transition: border-color 0.2s ease-in-out;
+}
+
+[role="tabpanel"] {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Custom scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Overlay-style scrollbars, like macOS "show scroll bars when scrolling":
+   the thumb stays hidden until the scroll container is hovered. */
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.2s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Focus ring styles — skip interactive elements that manage their own ring */
+:focus-visible:not(:is(
+  button,
+  input,
+  textarea,
+  select,
+  a,
+  [role="slider"],
+  [role="tab"],
+  [role="menuitem"],
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="resizable-handle"]
+)) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Selection styles */
+::selection {
+  background-color: var(--terminal-selection, rgba(59, 130, 246, 0.3));
+}
+
+/* CodeMirror editor — fill parent container */
+.cm-editor {
+  height: 100%;
+}
+
+.cm-editor .cm-scroller {
+  overflow: auto;
+}

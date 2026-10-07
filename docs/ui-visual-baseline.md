@@ -1,6 +1,29 @@
 # skd Visual Baseline
 
-Updated 2026-10-06 against the current workspace, shared styles, and dialogs. This document records the implemented UI for future changes. Use [globals.css](../src/styles/globals.css) and the linked components as the source of exact tokens and behavior.
+Updated 2026-10-07 against the current workspace, shared styles, and dialogs. This document records the implemented UI for future changes. Use [globals.css](../src/styles/globals.css) for the stylesheet import order and the files below for exact tokens and behavior.
+
+## Stylesheet Ownership and Cascade
+
+The application imports Tailwind first, then the app-owned stylesheet entry. App-owned rules remain unlayered: changing them to Tailwind layers would change their precedence. Keep the explicit import order in `globals.css`; shared defaults precede feature overrides, and accessibility overrides run last.
+
+| Stylesheet | Responsibility |
+| --- | --- |
+| [tokens.css](../src/styles/tokens.css) | Default semantic colors, typography, geometry, shadows, and material tokens. |
+| [palettes.css](../src/styles/palettes.css) | Existing light/dark palette overrides, including the system accent fallback. |
+| [base.css](../src/styles/base.css) | Document defaults, existing animations and transitions, scrollbars, focus, selection, and CodeMirror sizing. |
+| [controls.css](../src/styles/controls.css) | Shared control decoration, panel defaults, menus, sheets, resize cursors, shortcuts, and toasts. |
+| [workspace.css](../src/styles/workspace.css) | Window chrome, sidebar, titlebar tabs, bottom panels, and active/material states. |
+| [file-browser.css](../src/styles/file-browser.css) | File typography, toolbars, columns, rows, active panes, and file/transfer/compose footers. |
+| [dialogs.css](../src/styles/dialogs.css) | Settings and connection dialog overrides. |
+| [inspector.css](../src/styles/inspector.css) | Inspector controls, cards, tables, and Radix/Recharts width containment. |
+| [accessibility.css](../src/styles/accessibility.css) | Reduced-motion and increased-contrast overrides. |
+| [terminal.css](../src/styles/terminal.css) | xterm overrides, imported by `PtyTerminal` immediately after the vendor stylesheet. |
+
+Keep ordinary geometry in Tailwind and shared primitive variants. Feature CSS should use the existing feature root classes to express contextual overrides. Runtime values such as column widths, split proportions, indentation, progress, and user backgrounds stay in inline styles. The shared 13px/11px/22px font-size classes use existing tokens without adding line-height changes.
+
+Terminal scrollbar and image states belong to each container's `data-scrollable` and `data-background-image` attributes. `:where()` preserves the specificity of the former instance-scoping class. No per-instance `<style>` elements are needed. Keep the image overrides for xterm's inline backgrounds, including its IME textarea.
+
+This cleanup preserves effective rendering. It removes unused tokens, obsolete status classes, undefined font-size references, unused animation definitions, and candidates confirmed to generate no CSS under Tailwind 3. It does not restore missing animations or menu height limits. Existing ambiguous `focus-visible:shadow-[var(--focus-ring)]` classes remain because their generated custom properties can still affect rendering; correcting them is a separate behavior change.
 
 ## Workspace Layout
 
@@ -48,4 +71,6 @@ For UI changes, inspect `bun run tauri dev` at normal and minimum window sizes:
 - Check keyboard focus, IME input, empty/disconnected/error states, and transfer progress.
 - Verify rendered contrast where colors or materials change; token calculations alone do not establish visual acceptance.
 
-This revision inspected the source browser preview's workspace, settings, and connection dialog. Native material, live SSH/SFTP, VoiceOver, and full palette/minimum-size review were not verified in this documentation pass. Prior test totals and historical review gates are omitted; implementation history remains in Git.
+The CSS cleanup compared 32 fixed-DOM before/after browser fixtures with identical computed styles and geometry. These cover five palettes in Light/Dark at 1280×800 and 960×600, terminal preferences and connection dialogs, native-material/inactive-window attributes, and forced reduced-motion/increased-contrast media blocks. Keyboard focus in the connection form also matched. Four xterm fixtures covered all combinations of scrollability and background images, including scrollbar pseudo-element styling and inline-background overrides.
+
+All 640 frontend tests passed, including new regressions for per-terminal state isolation and session preservation. The frontend build passed; lint reported zero errors and the existing 175 warnings. Browser fixture checks simulate attributes and media rules; native AppKit material, operating-system accessibility preferences, live SSH/SFTP, VoiceOver, and populated remote file/monitor states were not exercised. Implementation history remains in Git.
