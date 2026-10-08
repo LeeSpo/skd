@@ -7,13 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-08
+
+### Added
+
+- **Dedicated Appearance Settings Tab**: Consolidated workspace palettes, terminal color schemes, custom terminal background images, and editor themes into a dedicated "Appearance" preferences panel, cleanly separating visual customization from terminal behavioral and font metrics settings.
+- **Live Terminal Appearance Preview**: Added an interactive preview panel within appearance settings displaying real-time feedback for theme colors, container transparency, opacity levels, and background image/blur adjustments before saving.
+
 ### Changed
 
+- **Unified Command & Context Menus**: Standardized context menus and dropdown menus with a unified `.command-menu-surface` design, utilizing macOS Sequoia-inspired denser vibrancy tokens (`--material-command-menu`), consistent primary selection styling across mouse and keyboard navigation, and refined destructive item and shortcut styling.
+- **Floating Surface Motion & Transitions**: Added subtle opacity enter and exit transitions for floating surfaces (`surface-enter` 150ms / 100ms for dialogs and modal scrims; 100ms / 75ms for menus, submenus, popovers, selects, and tooltips), fully respecting macOS `prefers-reduced-motion` settings.
+- **Dialog Presence & Lifecycle Management**: Introduced `useDialogPresence` to keep transient dialogs (such as Connection Dialog and Port Forward Dialog) mounted through Radix exit animations and focus restoration cycles, cleanly unmounting and resetting form state upon subsequent reopenings.
+- **Modular Stylesheet Architecture**: Decomposed the monolithic `globals.css` into modular domain-specific stylesheets (`tokens.css`, `base.css`, `palettes.css`, `controls.css`, `dialogs.css`, `file-browser.css`, `inspector.css`, `terminal.css`, `workspace.css`, `motion.css`, `accessibility.css`), simplifying CSS maintenance and component styling tokens.
 - **SFTP Transfer Pipelines**: Reused the single-connection READ/WRITE pipelines from R-Shell PR #187 in the shared transfer queue. Requests respect server limits and bounded memory budgets, with short reads repaired without discarding pending requests.
 - **SSH Dependencies**: Updated russh to 0.63.3 and russh-sftp to 2.4.0, retaining the existing crypto features and host-key verification. The minimum Rust version is now 1.89.
 
 ### Fixed
 
+- **Terminal IME Composition**: Fixed an issue where WebKit emitted an unidentified keydown event (`keyCode: 0`, `key: 'Unidentified'`) during active IME composition (such as CapsLock input method switching in macOS Pinyin IME), preventing duplicate or premature text commits in terminal sessions.
 - **SSH Bulk Transfer Integrity**: Included upstream fixes for incompressible data truncation and SSH rekey handling. Transfer completion still requires successful CLOSE and advertised fsync, with bounded cancellation cleanup and partial-file preservation.
 
 ## [1.0.0] - 2026-10-04
