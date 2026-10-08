@@ -59,6 +59,8 @@ import { cn } from '@/lib/utils';
 interface ConnectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after the closing content unmounts. */
+  onClosed?: () => void;
   onConnect: (config: ConnectionConfig) => void;
   editingConnection?: ConnectionConfig | null;
   /** Backend session ID to use while editing an existing saved profile. */
@@ -92,6 +94,7 @@ export interface ConnectionConfig {
 export function ConnectionDialog({
   open,
   onOpenChange,
+  onClosed,
   onConnect,
   editingConnection,
   sessionIdOverride,
@@ -727,6 +730,7 @@ export function ConnectionDialog({
       <DialogContent
         position="tauriTall"
         className="connection-dialog h-[min(680px,85vh)] w-full overflow-hidden p-0 gap-0 min-w-0 sm:max-w-[680px]"
+        onCloseAutoFocus={onClosed}
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-12 border-b border-panel-border">
           <DialogTitle className="flex items-center gap-2 text-base">

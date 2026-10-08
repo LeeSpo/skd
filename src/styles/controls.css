@@ -21,9 +21,49 @@
   backdrop-filter: none;
 }
 
-[data-slot="dropdown-menu-item"]:not([data-variant="destructive"]):focus [data-slot="dropdown-menu-shortcut"],
-[data-slot="context-menu-item"]:not([data-variant="destructive"]):focus [data-slot="context-menu-shortcut"] {
-  color: rgb(255 255 255 / 0.75);
+/* Command menus share a denser material without changing other floating layers. */
+.command-menu-surface {
+  background: var(--popover);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-native-material="true"] .command-menu-surface {
+  background: var(--material-command-menu);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+
+/* Radix uses the same highlighted state for pointer and keyboard navigation. */
+.command-menu-item svg:not([class*="text-"]) {
+  color: var(--muted-foreground);
+}
+
+.command-menu-item:is([data-highlighted], [data-state="open"]):not([data-disabled]) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.command-menu-item[data-variant="destructive"] {
+  color: var(--destructive);
+}
+
+.command-menu-item[data-variant="destructive"]:is([data-highlighted], [data-state="open"]):not([data-disabled]) {
+  background-color: var(--command-menu-destructive-highlight);
+  color: var(--destructive);
+}
+
+.command-menu-item[data-variant="destructive"] svg,
+.command-menu-item:is([data-highlighted], [data-state="open"]):not([data-disabled]) svg {
+  color: inherit;
+}
+
+.command-menu-item:is([data-highlighted], [data-state="open"]):not([data-disabled]) :is(
+  [data-slot="dropdown-menu-shortcut"],
+  [data-slot="context-menu-shortcut"]
+) {
+  color: inherit;
+  opacity: 0.75;
 }
 
 .macos-sheet {

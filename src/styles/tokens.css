@@ -61,6 +61,8 @@
   /* Sequoia-style material layers; CSS approximations of NSVisualEffectView
      used only where [data-native-material="true"] allows translucency. */
   --material-menu: color-mix(in srgb, var(--popover) 72%, transparent);
+  --material-command-menu: color-mix(in srgb, var(--popover) 92%, transparent);
+  --command-menu-destructive-highlight: color-mix(in srgb, var(--destructive) 10%, transparent);
   --material-sheet: color-mix(in srgb, var(--popover) 86%, transparent);
   --glass-filter: blur(24px) saturate(180%);
 
@@ -137,6 +139,7 @@
 }
 
 .dark {
+  --command-menu-destructive-highlight: color-mix(in srgb, var(--destructive) 20%, transparent);
   --sidebar-tint: color-mix(in srgb, var(--sidebar) 46%, transparent);
   --grouped-bg: rgb(255 255 255 / 0.05);
   --control-highlight: rgba(255, 255, 255, 0.06);

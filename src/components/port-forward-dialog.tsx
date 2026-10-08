@@ -44,6 +44,8 @@ import {
 export interface PortForwardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after the closing content unmounts. */
+  onClosed?: () => void;
   connectionId: string | null;
   connectionProfileId: string | null;
   connectionName?: string;
@@ -54,6 +56,7 @@ export interface PortForwardDialogProps {
 export function PortForwardDialog({
   open,
   onOpenChange,
+  onClosed,
   connectionId,
   connectionProfileId,
   connectionName,
@@ -255,7 +258,7 @@ export function PortForwardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent position="tauriTall" className="sm:max-w-2xl overflow-hidden">
+      <DialogContent position="tauriTall" className="sm:max-w-2xl overflow-hidden" onCloseAutoFocus={onClosed}>
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2"><Network className="h-4 w-4" />{t('portForward.title')}</DialogTitle>
           <DialogDescription>

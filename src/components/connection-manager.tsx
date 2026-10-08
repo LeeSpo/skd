@@ -549,7 +549,7 @@ export function ConnectionManager({
               <ContextMenuSeparator />
               <ContextMenuItem
                 onClick={() => handleDelete(node.id)}
-                className="text-destructive"
+                variant="destructive"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 {t('connectionManager.delete')}
@@ -588,7 +588,7 @@ export function ConnectionManager({
                   <ContextMenuSeparator />
                   <ContextMenuItem
                     onClick={() => openDeleteFolderDialog(node.path!, node.name)}
-                    className="text-destructive"
+                    variant="destructive"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     {t('connectionManager.folder.deleteFolder')}

@@ -48,7 +48,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "glass-menu text-popover-foreground motion-reduce:animate-none animate-in z-50 w-fit max-w-[min(20rem,calc(100vw-2rem))] border border-border px-3 py-1.5 text-xs leading-relaxed break-words shadow-menu",
+          "glass-menu text-popover-foreground motion-reduce:animate-none z-50 w-fit max-w-[min(20rem,calc(100vw-2rem))] border border-border px-3 py-1.5 text-xs leading-relaxed break-words shadow-menu",
           className,
         )}
         {...props}

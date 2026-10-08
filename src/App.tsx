@@ -9,6 +9,7 @@ import { WindowToolbar } from './components/window-toolbar';
 import { WorkspaceLayout } from '@/components/workspace-layout';
 import { useWindowAppearance } from '@/lib/use-window-appearance';
 import { useBottomPanelSizing } from '@/lib/use-bottom-panel-sizing';
+import { useDialogPresence } from '@/lib/use-dialog-presence';
 import { ConnectionManager } from './components/connection-manager';
 import type { ConnectionConfig } from './components/connection-dialog';
 import { TerminalInputProvider } from './lib/terminal-input-context';
@@ -151,6 +152,8 @@ function AppContent() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settingsModalMounted, setSettingsModalMounted] = useState(false);
   const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
+  const connectionDialogPresence = useDialogPresence(connectionDialogOpen);
+  const portForwardDialogPresence = useDialogPresence(portForwardDialogOpen);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
   const [updateCheckSignal, setUpdateCheckSignal] = useState(0);
   const [keyboardShortcutSettings, setKeyboardShortcutSettings] = useState<SplitViewShortcutBindings>(
@@ -1711,13 +1714,14 @@ function AppContent() {
 
       {/* Modals */}
       <Suspense fallback={null}>
-        {connectionDialogOpen && (
+        {connectionDialogPresence.present && (
           <ConnectionDialog
             open={connectionDialogOpen}
             onOpenChange={(open) => {
               setConnectionDialogOpen(open);
               if (!open) setConnectionDialogSession(null);
             }}
+            onClosed={connectionDialogPresence.onClosed}
             onConnect={handleConnectionDialogConnect}
             editingConnection={editingConnection}
             sessionIdOverride={connectionDialogSession?.sessionId}
@@ -1736,10 +1740,11 @@ function AppContent() {
           />
         )}
 
-        {portForwardDialogOpen && (
+        {portForwardDialogPresence.present && (
           <PortForwardDialog
             open={portForwardDialogOpen}
             onOpenChange={setPortForwardDialogOpen}
+            onClosed={portForwardDialogPresence.onClosed}
             connectionId={canManagePortForward ? activeConnection?.connectionId ?? null : null}
             connectionProfileId={activeTab ? activeTab.originalConnectionId ?? activeTab.id : null}
             connectionName={activeConnection?.name}

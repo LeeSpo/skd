@@ -42,7 +42,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-popover text-popover-foreground z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto border p-1 motion-reduce:animate-none",
+          "command-menu-surface text-popover-foreground z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto border p-1 motion-reduce:animate-none",
           className,
         )}
         {...props}
@@ -74,7 +74,7 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "focus:bg-primary focus:text-white min-h-[22px] data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "command-menu-item min-h-[22px] relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -92,7 +92,7 @@ function DropdownMenuCheckboxItem({
     <DropdownMenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
-        "focus:bg-primary focus:text-white min-h-[22px] relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "command-menu-item min-h-[22px] relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       checked={checked}
@@ -128,7 +128,7 @@ function DropdownMenuRadioItem({
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"
       className={cn(
-        "focus:bg-primary focus:text-white min-h-[22px] relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "command-menu-item min-h-[22px] relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-[length:var(--text-body)] select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -211,7 +211,7 @@ function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "focus:bg-primary focus:text-white min-h-[22px] data-[state=open]:bg-primary data-[state=open]:text-white flex cursor-default items-center rounded-sm px-2 py-1.5 text-[length:var(--text-body)] select-none data-[inset]:pl-8",
+        "command-menu-item min-h-[22px] flex cursor-default items-center rounded-sm px-2 py-1.5 text-[length:var(--text-body)] select-none data-[inset]:pl-8",
         className,
       )}
       {...props}
@@ -233,7 +233,7 @@ function DropdownMenuSubContent({
         data-slot="dropdown-menu-sub-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-popover text-popover-foreground z-50 min-w-[8rem] overflow-hidden border p-1 motion-reduce:animate-none",
+          "command-menu-surface text-popover-foreground z-50 min-w-[8rem] overflow-hidden border p-1 motion-reduce:animate-none",
           className,
         )}
         {...props}

@@ -857,7 +857,7 @@ export const FilePanel = forwardRef<FilePanelRef, FilePanelProps>(
                             </ContextMenuItem>
                             <ContextMenuSeparator />
                             <ContextMenuItem
-                              className="text-destructive"
+                              variant="destructive"
                               onClick={() =>
                                 handleDelete(
                                   entry.name,
