@@ -107,7 +107,7 @@ describe('ConnectionManager tree layout', () => {
     const heading = screen.getByRole('heading', { name: 'Connections' });
     const browser = heading.closest('.select-none');
     expect(browser).not.toBeNull();
-    const row = document.querySelector('[draggable="true"]');
+    const row = document.querySelector('[data-draggable="true"]');
     expect(row).not.toBeNull();
     expect(browser?.contains(row)).toBe(true);
     expect(screen.getByText('example.test').closest('.select-none')).toBeNull();

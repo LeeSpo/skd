@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Monitor, Server, HardDrive, Plus, Pencil, Copy, Trash2, FolderPlus, FolderEdit, Zap, Clock, Terminal, Search, X } from 'lucide-react';
 import { Button } from './ui/button';
@@ -48,6 +48,8 @@ import {
 import { toast } from 'sonner';
 import { StatusDot } from './ui/status-dot';
 import { PanelHeader } from './ui/panel-chrome';
+import { type ConnectionDropPlacement } from '@/lib/connection-order';
+import { useConnectionRowDrag, type ConnectionDragRow } from '@/lib/use-connection-row-drag';
 import { treeIndent, treeRowState } from '@/lib/panel-layout-styles';
 import { cn } from './ui/utils';
 
@@ -69,6 +71,35 @@ interface ConnectionNode {
 
 // Keep the default dependency stable so local disclosure updates do not reload the tree.
 const EMPTY_ACTIVE_CONNECTIONS = new Set<string>();
+
+function findConnectionNode(nodes: ConnectionNode[], id: string): ConnectionNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    if (node.children) {
+      const found = findConnectionNode(node.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function withSavedExpansion(next: ConnectionNode[], previous: ConnectionNode[]): ConnectionNode[] {
+  const expanded = new Map<string, boolean | undefined>();
+  const collect = (nodes: ConnectionNode[]) => {
+    for (const node of nodes) {
+      if (node.type === 'folder') expanded.set(node.id, node.isExpanded);
+      if (node.children) collect(node.children);
+    }
+  };
+  collect(previous);
+
+  const apply = (nodes: ConnectionNode[]): ConnectionNode[] => nodes.map((node) => ({
+    ...node,
+    ...(node.type === 'folder' && expanded.has(node.id) ? { isExpanded: expanded.get(node.id) } : {}),
+    children: node.children ? apply(node.children) : undefined,
+  }));
+  return apply(next);
+}
 
 interface ConnectionManagerProps {
   onConnectionSelect: (connection: ConnectionNode) => void;
@@ -104,9 +135,20 @@ export function ConnectionManager({
     return tree.length > 0 ? tree : [];
   };
 
-  const [connections, setConnections] = useState<ConnectionNode[]>(loadConnections());
+  const [connections, setConnections] = useState<ConnectionNode[]>(loadConnections);
 
   const [search, setSearch] = useState('');
+  const folderPaths = React.useMemo(() => {
+    const paths = new Set<string>();
+    const collect = (nodes: ConnectionNode[]) => {
+      for (const node of nodes) {
+        if (node.type === 'folder' && node.path) paths.add(node.path);
+        if (node.children) collect(node.children);
+      }
+    };
+    collect(connections);
+    return paths;
+  }, [connections]);
   const filteredConnections = React.useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return connections;
@@ -131,18 +173,15 @@ export function ConnectionManager({
   const [folderToRename, setFolderToRename] = useState<{ path: string; name: string; parentPath?: string } | null>(null);
   const [renameFolderNewName, setRenameFolderNewName] = useState('');
 
-  // Drag and drop state
-  const [draggedItem, setDraggedItem] = useState<{ node: ConnectionNode; type: 'connection' | 'folder' } | null>(null);
-
-  // Reload connections when active connections change
-  useEffect(() => {
-    setConnections(loadConnections());
-  }, [activeConnections]);
+  const reloadConnections = () => {
+    cancelDrag();
+    setConnections((previous) => withSavedExpansion(loadConnections(), previous));
+  };
 
   // Handle connection deletion
   const handleDelete = async (connectionId: string) => {
     if (await deleteConnectionWithCredentials(connectionId)) {
-      setConnections(loadConnections());
+      reloadConnections();
       toast.success(t('connectionManager.connectionDeleted'));
       if (onDeleteConnection) {
         onDeleteConnection(connectionId);
@@ -170,7 +209,7 @@ export function ConnectionManager({
           hasStoredPrivateKey: connectionData.hasStoredPrivateKey,
         });
         if (duplicated) {
-          setConnections(loadConnections());
+          reloadConnections();
           toast.success(t('connectionManager.duplicated', { name: duplicated.name }));
           if (onDuplicateConnection) {
             onDuplicateConnection(node);
@@ -189,7 +228,7 @@ export function ConnectionManager({
 
     try {
       ConnectionStorageManager.createFolder(newFolderName.trim(), newFolderParentPath);
-      setConnections(loadConnections());
+      reloadConnections();
       toast.success(t('connectionManager.folderCreated', { name: newFolderName }));
       setNewFolderDialogOpen(false);
       setNewFolderName('');
@@ -204,7 +243,7 @@ export function ConnectionManager({
     if (!folderToDelete) return;
 
     if (ConnectionStorageManager.deleteFolder(folderToDelete.path, true)) {
-      setConnections(loadConnections());
+      reloadConnections();
       toast.success(t('connectionManager.folderDeleted', { name: folderToDelete.name }));
       setDeleteFolderDialogOpen(false);
       setFolderToDelete(null);
@@ -272,7 +311,7 @@ export function ConnectionManager({
       // Delete old folder and all subfolders
       ConnectionStorageManager.deleteFolder(oldPath, true);
 
-      setConnections(loadConnections());
+      reloadConnections();
       toast.success(t('connectionManager.folderRenamed', { name: newName }));
       setRenameFolderDialogOpen(false);
       setFolderToRename(null);
@@ -297,93 +336,76 @@ export function ConnectionManager({
     setDeleteFolderDialogOpen(true);
   };
 
-  // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, node: ConnectionNode) => {
-    setDraggedItem({ node, type: node.type });
-    e.dataTransfer.effectAllowed = 'move';
-  };
+  const applyRowDrop = (
+    drag: ConnectionNode,
+    dragParent: string,
+    hit: ConnectionDragRow,
+    placement: ConnectionDropPlacement,
+  ) => {
+    if (placement === 'before' || placement === 'after') {
+      if (drag.type === 'connection' && hit.type === 'connection') {
+        if (ConnectionStorageManager.reorderConnection(drag.id, hit.parentPath, hit.id, placement)) {
+          reloadConnections();
+        }
+        return;
+      }
+      if (drag.type === 'folder' && hit.type === 'folder') {
+        if (ConnectionStorageManager.reorderFolder(drag.id, hit.id, placement)) {
+          reloadConnections();
+        }
+      }
+      return;
+    }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e: React.DragEvent, targetNode: ConnectionNode) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!draggedItem) return;
-
-    // Can only drop into folders
-    if (targetNode.type !== 'folder') return;
-
-    // Don't drop into itself
-    if (draggedItem.node.id === targetNode.id) return;
-
-    // Don't drop folder into its own child
-    if (draggedItem.type === 'folder' && targetNode.path?.startsWith(draggedItem.node.path + '/')) {
+    if (hit.type !== 'folder' || !hit.folderPath) return;
+    if (drag.type === 'folder' && drag.path && (hit.folderPath === drag.path || hit.folderPath.startsWith(`${drag.path}/`))) {
       toast.error(t('connectionManager.cannotMoveIntoOwn'));
       return;
     }
 
-    if (draggedItem.type === 'connection') {
-      // Move connection to target folder
-      if (ConnectionStorageManager.moveConnection(draggedItem.node.id, targetNode.path!)) {
-        setConnections(loadConnections());
-        toast.success(t('connectionManager.movedConnection', { source: draggedItem.node.name, target: targetNode.name }));
+    const target = findConnectionNode(connections, hit.id);
+    const targetName = target?.name ?? hit.folderPath;
+
+    if (drag.type === 'connection') {
+      if (dragParent === hit.folderPath) return;
+      if (ConnectionStorageManager.moveConnection(drag.id, hit.folderPath)) {
+        reloadConnections();
+        toast.success(t('connectionManager.movedConnection', { source: drag.name, target: targetName }));
       } else {
         toast.error(t('connectionManager.failedToMoveConnection'));
       }
-    } else if (draggedItem.type === 'folder') {
-      // Move folder by renaming its path
+      return;
+    }
+
+    if (ConnectionStorageManager.moveFolder(drag.id, hit.folderPath)) {
+      reloadConnections();
+      toast.success(t('connectionManager.movedFolder', { source: drag.name, target: targetName }));
+    } else {
+      toast.error(t('connectionManager.failedToMoveFolder'));
+    }
+  };
+
+  const { containerRef, draggingId, dropHint, startRowDrag, cancelDrag, shouldSuppressClick } = useConnectionRowDrag({
+    disabled: Boolean(search.trim()),
+    folderPaths,
+    onDrop: (drag: ConnectionNode, parentPath, target, placement) => {
       try {
-        const connections = ConnectionStorageManager.getConnectionsByFolder(draggedItem.node.path!);
-        const newPath = `${targetNode.path}/${draggedItem.node.name}`;
-
-        // Create new folder
-        ConnectionStorageManager.createFolder(draggedItem.node.name, targetNode.path);
-
-        // Move all connections
-        connections.forEach(connection => {
-          ConnectionStorageManager.moveConnection(connection.id, newPath);
-        });
-
-        // Delete old folder
-        ConnectionStorageManager.deleteFolder(draggedItem.node.path!, false);
-
-        setConnections(loadConnections());
-        toast.success(t('connectionManager.movedFolder', { source: draggedItem.node.name, target: targetNode.name }));
-      } catch (error) {
-        toast.error(t('connectionManager.failedToMoveFolder'), {
-          description: error instanceof Error ? error.message : t('connectionManager.unableToMoveFolder'),
-        });
+        applyRowDrop(drag, parentPath, target, placement);
+      } catch {
+        toast.error(t(drag.type === 'folder' ? 'connectionManager.failedToMoveFolder' : 'connectionManager.failedToMoveConnection'));
       }
-    }
+    },
+  });
 
-    setDraggedItem(null);
-  };
+  useEffect(() => {
+    cancelDrag();
+    setConnections((previous) => withSavedExpansion(ConnectionStorageManager.buildConnectionTree(activeConnections), previous));
+  }, [activeConnections, cancelDrag]);
 
-  const handleDragEnd = () => {
-    setDraggedItem(null);
-  };
-
-  // Find the selected connection details
-  const getSelectedConnection = (nodes: ConnectionNode[]): ConnectionNode | null => {
-    for (const node of nodes) {
-      if (node.id === selectedConnectionId) {
-        return node;
-      }
-      if (node.children) {
-        const found = getSelectedConnection(node.children);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
-  const selectedConnection = getSelectedConnection(connections);
+  const selectedConnection = selectedConnectionId ? findConnectionNode(connections, selectedConnectionId) : null;
 
   const toggleExpanded = (nodeId: string) => {
+    cancelDrag();
     const updateNode = (nodes: ConnectionNode[]): ConnectionNode[] => {
       return nodes.map(node => {
         if (node.id === nodeId) {
@@ -417,10 +439,12 @@ export function ConnectionManager({
     }
   };
 
-  const renderNode = (node: ConnectionNode, level: number = 0) => {
+  const renderNode = (node: ConnectionNode, level: number = 0, parentPath?: string) => {
     const isSelected = selectedConnectionId === node.id;
     const isConnected = node.type === 'connection' && node.isConnected;
-    const isDragging = draggedItem?.node.id === node.id;
+    const isDragging = draggingId === node.id;
+    const canDrag = !search.trim() && node.path !== 'All Connections';
+    const hint = dropHint?.id === node.id ? dropHint.placement : null;
 
     const handleNodeClick = () => {
       // Always select the node first
@@ -447,15 +471,25 @@ export function ConnectionManager({
       <div
         className={cn(
           treeRowState({ selected: isSelected, variant: 'sidebar' }),
-          'min-h-7 gap-1.5 py-0.5 pr-2 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
+          'relative min-h-7 select-none gap-1.5 py-0.5 pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
+          draggingId ? 'cursor-grabbing' : canDrag ? 'cursor-grab' : 'cursor-pointer',
           isDragging && 'opacity-50',
         )}
-        style={treeIndent(level, 4, 12)}
+        style={{
+          ...treeIndent(level, 4, 12),
+          ...(hint === 'inside' ? { boxShadow: 'inset 0 0 0 1px var(--primary)' } : {}),
+        }}
         role={node.type === 'connection' ? 'button' : undefined}
         tabIndex={node.type === 'connection' ? 0 : undefined}
         aria-pressed={node.type === 'connection' ? isSelected : undefined}
         aria-label={node.type === 'connection' ? node.name : undefined}
         title={node.type === 'connection' ? [node.username, node.host].filter(Boolean).join('@') : undefined}
+        data-connection-row={node.id}
+        data-row-type={node.type}
+        data-parent-path={parentPath ?? ''}
+        data-folder-path={node.type === 'folder' ? node.path ?? '' : undefined}
+        data-draggable={canDrag ? 'true' : 'false'}
+        data-drop-placement={hint ?? undefined}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.keyCode === 229 || event.target !== event.currentTarget || node.type !== 'connection') return;
           if (event.key === 'Enter') {
@@ -466,14 +500,19 @@ export function ConnectionManager({
             handleNodeClick();
           }
         }}
-        onClick={handleNodeClick}
-        onDoubleClick={handleNodeDoubleClick}
-        draggable={node.path !== 'All Connections'}
-        onDragStart={(e) => handleDragStart(e, node)}
-        onDragOver={node.type === 'folder' ? handleDragOver : undefined}
-        onDrop={node.type === 'folder' ? (e) => handleDrop(e, node) : undefined}
-        onDragEnd={handleDragEnd}
+        onPointerDown={(event) => startRowDrag(event, node, parentPath)}
+        onClick={(event) => { if (!shouldSuppressClick(event)) handleNodeClick(); }}
+        onDoubleClick={(event) => { if (!shouldSuppressClick(event)) handleNodeDoubleClick(); }}
       >
+        {hint === 'before' || hint === 'after' ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'pointer-events-none absolute inset-x-1.5 h-0.5 bg-primary',
+              hint === 'before' ? 'top-0' : 'bottom-0',
+            )}
+          />
+        ) : null}
         {node.type === 'folder' && (
           <Button
             variant="ghost"
@@ -483,7 +522,7 @@ export function ConnectionManager({
             aria-expanded={Boolean(node.isExpanded)}
             onClick={(e) => {
               e.stopPropagation();
-              handleNodeClick();
+              if (!shouldSuppressClick(e)) handleNodeClick();
             }}
           >
             {node.isExpanded ?
@@ -603,7 +642,7 @@ export function ConnectionManager({
 
         {node.type === 'folder' && node.isExpanded && node.children && (
           <div>
-            {node.children.map(child => renderNode(child, level + 1))}
+            {node.children.map(child => renderNode(child, level + 1, node.path))}
           </div>
         )}
       </div>
@@ -729,7 +768,7 @@ export function ConnectionManager({
             </TooltipProvider>
           </div>
         </div>
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 py-1">
+        <div ref={containerRef} className="min-h-0 min-w-0 flex-1 overflow-auto px-2 py-1">
           {!hasSavedConnections && !search ? (
             <div className="flex flex-col items-center justify-center px-3 py-8 text-center">
               <Server className="mb-3 size-6 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />

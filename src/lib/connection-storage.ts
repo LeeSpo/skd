@@ -18,6 +18,11 @@ import {
   type CredentialStoreOptions,
 } from './credential-storage';
 import {
+  moveConnectionToFolder,
+  reorderConnections,
+  reorderSiblingFolders,
+} from '@/lib/connection-order';
+import {
   clearPortForwardBookmarks,
   deletePortForwardBookmarksForConnection,
 } from './port-forward-bookmarks';
@@ -342,7 +347,104 @@ export class ConnectionStorageManager {
    * Move connection to a different folder
    */
   static moveConnection(connectionId: string, newFolderPath: string): boolean {
-    return this.updateConnection(connectionId, { folder: newFolderPath }) !== null;
+    const connections = this.getConnections();
+    const current = connections.find((connection) => connection.id === connectionId);
+    if (!current) return false;
+
+    const next = moveConnectionToFolder(connections, connectionId, newFolderPath);
+    if (!next) return true;
+
+    this.persistConnections(next);
+    return true;
+  }
+
+  /**
+   * Place a connection before or after another connection.
+   * The connection moves into `targetFolder` when the target lives there.
+   * Returns false when the order is unchanged or the target is missing.
+   */
+  static reorderConnection(
+    connectionId: string,
+    targetFolder: string,
+    targetId: string,
+    placement: 'before' | 'after',
+  ): boolean {
+    const next = reorderConnections(
+      this.getConnections(),
+      connectionId,
+      targetFolder,
+      targetId,
+      placement,
+    );
+    if (!next) return false;
+
+    this.persistConnections(next);
+    return true;
+  }
+
+  /**
+   * Reorder a folder among siblings that share its parent.
+   * Returns false when the order is unchanged or the folders are not siblings.
+   */
+  static reorderFolder(folderId: string, targetId: string, placement: 'before' | 'after'): boolean {
+    const next = reorderSiblingFolders(this.getFolders(), folderId, targetId, placement);
+    if (!next) return false;
+
+    localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(next));
+    return true;
+  }
+
+  /** Move a complete subtree without recreating folders or touching credentials. */
+  static moveFolder(folderId: string, targetParentPath: string): boolean {
+    const folders = this.getFolders();
+    const source = folders.find((folder) => folder.id === folderId);
+    if (!source || source.path === 'All Connections' || source.parentPath === targetParentPath) return false;
+    if (targetParentPath === source.path || targetParentPath.startsWith(`${source.path}/`)) return false;
+    const validPaths = new Set(this.getValidFolders().map((folder) => folder.path));
+    if (!validPaths.has(source.path) || !validPaths.has(targetParentPath)) return false;
+
+    const newPath = `${targetParentPath}/${source.name}`;
+    const inSubtree = (path: string) => path === source.path || path.startsWith(`${source.path}/`);
+    if (folders.some((folder) => !inSubtree(folder.path) &&
+      (folder.path === newPath || folder.path.startsWith(`${newPath}/`)))) return false;
+    const relocate = (path: string) => `${newPath}${path.slice(source.path.length)}`;
+    const nextFolders = folders.map((folder) => {
+      if (!inSubtree(folder.path)) return folder;
+      return {
+        ...folder,
+        path: relocate(folder.path),
+        parentPath: folder.id === source.id ? targetParentPath
+          : folder.parentPath && inSubtree(folder.parentPath) ? relocate(folder.parentPath) : folder.parentPath,
+      };
+    });
+    const moving = nextFolders[folders.indexOf(source)];
+    const orderedFolders = nextFolders.filter((folder) => folder.id !== folderId);
+    const lastSibling = orderedFolders.reduce((last, folder, index) => folder.parentPath === targetParentPath ? index : last, -1);
+    orderedFolders.splice(lastSibling === -1 ? orderedFolders.length : lastSibling + 1, 0, moving);
+    const nextConnections = this.getConnections().map((connection) => connection.folder && inSubtree(connection.folder)
+      ? { ...connection, folder: relocate(connection.folder) }
+      : connection);
+
+    // Both keys are prepared before writing; restore the exact snapshots on failure.
+    const snapshots = [CONNECTIONS_STORAGE_KEY, FOLDERS_STORAGE_KEY]
+      .map((key) => ({ key, value: localStorage.getItem(key) }));
+    try {
+      localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(orderedFolders));
+      this.persistConnections(nextConnections);
+    } catch (error) {
+      const errors: unknown[] = [error];
+      for (const { key, value } of snapshots) {
+        try {
+          if (value === null) localStorage.removeItem(key);
+          else localStorage.setItem(key, value);
+        } catch (restoreError) {
+          errors.push(restoreError);
+        }
+      }
+      if (errors.length > 1) throw errors[1];
+      throw error;
+    }
+    return true;
   }
 
   /**
