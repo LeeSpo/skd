@@ -47,37 +47,38 @@ export function SystemMonitor({ connectionId, active = true }: SystemMonitorProp
   }
 
   return (
-    <ScrollArea className="h-full w-full min-w-0">
-      <div className="space-y-2.5">
-        <MonitorPanelPicker enabled={enabledPanels} onChange={handlePanelsChange} />
+    <div className="system-monitor flex h-full min-h-0 min-w-0 flex-col gap-2">
+      <MonitorPanelPicker enabled={enabledPanels} onChange={handlePanelsChange} />
+      <ScrollArea className="min-h-0 w-full min-w-0 flex-1">
+        <div className="space-y-3">
+          {enabledPanels.size === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-6 px-2">
+              {t('systemMonitor.panelPicker.noneEnabled')}
+            </p>
+          )}
 
-        {enabledPanels.size === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-6 px-2">
-            {t('systemMonitor.panelPicker.noneEnabled')}
-          </p>
-        )}
-
-        <Suspense fallback={<MonitorFallback />}>
-          {enabledPanels.has('overview') && (
-            <SystemOverviewPanel connectionId={connectionId} active={active} />
-          )}
-          {enabledPanels.has('processes') && (
-            <ProcessesPanel connectionId={connectionId} active={active} />
-          )}
-          {enabledPanels.has('gpu') && (
-            <GpuMonitorPanel connectionId={connectionId} active={active} />
-          )}
-          {enabledPanels.has('disk') && (
-            <DiskUsagePanel connectionId={connectionId} active={active} />
-          )}
-          {enabledPanels.has('network') && (
-            <NetworkUsagePanel connectionId={connectionId} active={active} />
-          )}
-          {enabledPanels.has('latency') && (
-            <NetworkLatencyPanel connectionId={connectionId} active={active} />
-          )}
-        </Suspense>
-      </div>
-    </ScrollArea>
+          <Suspense fallback={<MonitorFallback />}>
+            {enabledPanels.has('overview') && (
+              <SystemOverviewPanel connectionId={connectionId} active={active} />
+            )}
+            {enabledPanels.has('processes') && (
+              <ProcessesPanel connectionId={connectionId} active={active} />
+            )}
+            {enabledPanels.has('gpu') && (
+              <GpuMonitorPanel connectionId={connectionId} active={active} />
+            )}
+            {enabledPanels.has('disk') && (
+              <DiskUsagePanel connectionId={connectionId} active={active} />
+            )}
+            {enabledPanels.has('network') && (
+              <NetworkUsagePanel connectionId={connectionId} active={active} />
+            )}
+            {enabledPanels.has('latency') && (
+              <NetworkLatencyPanel connectionId={connectionId} active={active} />
+            )}
+          </Suspense>
+        </div>
+      </ScrollArea>
+    </div>
   );
 }

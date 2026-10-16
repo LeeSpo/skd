@@ -7,8 +7,16 @@ import {
   HardDrive,
   LayoutGrid,
   Terminal,
+  ChevronDown,
 } from 'lucide-react';
 import { MONITOR_PANELS, type MonitorPanelId } from '@/lib/monitor-panel-types';
+import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 type PanelLabelKey =
   | 'systemMonitor.panelPicker.overview'
@@ -26,9 +34,6 @@ const PANEL_LABEL_KEYS: Record<MonitorPanelId, PanelLabelKey> = {
   network: 'systemMonitor.panelPicker.network',
   latency: 'systemMonitor.panelPicker.latency',
 };
-import { cn } from '@/lib/utils';
-import { Toggle } from '../ui/toggle';
-
 const PANEL_ICONS: Record<MonitorPanelId, typeof Activity> = {
   overview: Activity,
   processes: Terminal,
@@ -57,33 +62,39 @@ export function MonitorPanelPicker({ enabled, onChange }: MonitorPanelPickerProp
   };
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <LayoutGrid className="w-3 h-3 shrink-0" />
-        <h3 className="text-xs font-medium truncate">{t('systemMonitor.panelPicker.title')}</h3>
-      </div>
-      <div className="flex flex-wrap gap-1">
-        {MONITOR_PANELS.map((panel) => {
-          const Icon = PANEL_ICONS[panel.id];
-          const isEnabled = enabled.has(panel.id);
+    <div className="flex shrink-0 justify-end">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-6 h-auto gap-1.5 px-1.5 text-ui-label text-muted-foreground"
+            data-tauri-drag-region="false"
+          >
+            <LayoutGrid className="size-3" />
+            {t('systemMonitor.panelPicker.title')}
+            <ChevronDown className="size-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          {MONITOR_PANELS.map((panel) => {
+            const Icon = PANEL_ICONS[panel.id];
+            const isEnabled = enabled.has(panel.id);
 
-          return (
-            <Toggle
-              key={panel.id}
-              size="sm"
-              pressed={isEnabled}
-              onPressedChange={() => togglePanel(panel.id)}
-              className={cn(
-                'h-6 gap-1 px-1.5 text-[9px]',
-              )}
-              aria-label={t(PANEL_LABEL_KEYS[panel.id])}
-            >
-              <Icon className="w-2.5 h-2.5 shrink-0" />
-              <span>{t(PANEL_LABEL_KEYS[panel.id])}</span>
-            </Toggle>
-          );
-        })}
-      </div>
+            return (
+              <DropdownMenuCheckboxItem
+                key={panel.id}
+                checked={isEnabled}
+                onCheckedChange={() => togglePanel(panel.id)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                <Icon className="size-3.5 text-muted-foreground" />
+                <span>{t(PANEL_LABEL_KEYS[panel.id])}</span>
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

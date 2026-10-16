@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { HardDrive } from 'lucide-react';
 import { withRetry, CancelledError } from '@/lib/async-retry';
 import { Card, CardContent } from '../ui/card';
 import type { DiskUsage, MonitorPanelProps } from './monitor-types';
@@ -56,18 +55,15 @@ export function DiskUsagePanel({ connectionId, active = true }: MonitorPanelProp
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <HardDrive className="w-3 h-3 shrink-0" />
-        <h3 className="text-xs font-medium truncate">{t('systemMonitor.diskUsage')}</h3>
-      </div>
+      <h3 className="text-ui-body font-medium truncate">{t('systemMonitor.diskUsage')}</h3>
       <Card>
         <CardContent className="p-0">
           {disks.length === 0 ? (
-            <div className="p-2 text-[10px] text-muted-foreground">
+            <div className="p-2 text-ui-label text-muted-foreground">
               {t('systemMonitor.noDiskInfo')}
             </div>
           ) : (
-            <div className="h-40 min-w-0 overflow-auto rounded-md border">
+            <div className="max-h-40 min-w-0 overflow-auto">
               <table className="w-full caption-bottom text-sm">
                 <thead className="[&_tr]:border-b">
                   <tr className="border-b transition-colors">
@@ -79,13 +75,13 @@ export function DiskUsagePanel({ connectionId, active = true }: MonitorPanelProp
                 <tbody className="[&_tr:last-child]:border-0">
                   {disks.map((disk, index) => (
                     <tr key={index} className="hover:bg-muted/50 border-b transition-colors">
-                      <td className="p-1 align-middle font-medium text-[10px] truncate max-w-0" title={`${disk.path} (${disk.filesystem})`}>
+                      <td className="p-1 align-middle font-medium text-ui-label truncate max-w-0" title={`${disk.path} (${disk.filesystem})`}>
                         {disk.path}
                       </td>
-                      <td className="p-1 align-middle text-right font-mono text-[10px] whitespace-nowrap">{disk.total}</td>
+                      <td className="p-1 align-middle text-right font-mono text-ui-label whitespace-nowrap">{disk.total}</td>
                       <td className="p-1 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <span className={`font-mono text-[10px] font-semibold ${getUsageColor(disk.usage)}`}>
+                          <span className={`font-mono text-ui-label font-semibold ${getUsageColor(disk.usage)}`}>
                             {disk.usage}%
                           </span>
                         </div>

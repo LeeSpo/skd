@@ -1,6 +1,6 @@
 # skd Visual Baseline
 
-Updated 2026-10-08 against the current workspace, shared styles, and dialogs. This document records the implemented UI for future changes. Use [globals.css](../src/styles/globals.css) for the stylesheet import order and the files below for exact tokens and behavior.
+Updated 2026-10-08 against the workspace, shared styles, and dialogs; the monitor baseline and its verification were updated 2026-10-17. This document records the implemented UI for future changes. Use [globals.css](../src/styles/globals.css) for the stylesheet import order and the files below for exact tokens and behavior.
 
 ## Stylesheet Ownership and Cascade
 
@@ -15,7 +15,7 @@ The application imports Tailwind first, then the app-owned stylesheet entry. App
 | [workspace.css](../src/styles/workspace.css) | Window chrome, sidebar, titlebar tabs, bottom panels, and active/material states. |
 | [file-browser.css](../src/styles/file-browser.css) | File typography, toolbars, columns, rows, active panes, and file/transfer/compose footers. |
 | [dialogs.css](../src/styles/dialogs.css) | Settings and connection dialog overrides. |
-| [inspector.css](../src/styles/inspector.css) | Inspector controls, cards, tables, and Radix/Recharts width containment. |
+| [inspector.css](../src/styles/inspector.css) | Inspector controls, cards, tables, SVG trends, and Radix width containment. |
 | [motion.css](../src/styles/motion.css) | Shared opacity-only entry/exit animations for dialogs and floating controls. |
 | [accessibility.css](../src/styles/accessibility.css) | Reduced-motion and increased-contrast overrides. |
 | [terminal.css](../src/styles/terminal.css) | xterm overrides, imported by `PtyTerminal` immediately after the vendor stylesheet. |
@@ -50,6 +50,16 @@ System is the default palette and receives the macOS accent through the appearan
 
 Terminal presets, ANSI colors, and fonts remain separately configurable. Default/recommended terminal backgrounds can harmonize with the workspace palette; preserve explicitly selected presets.
 
+## Monitor Trends
+
+Network, latency, and GPU history use the shared `MonitorTrend` SVG module without a chart-library dependency or resize observer. Trends occupy 40px, with 1.5px non-scaling strokes, increasing to 2px for increased contrast. There are no coordinate ticks, grids, area fills, or drawing animations. These dimensions are skd choices, not Apple-mandated metrics. Actual timestamps determine horizontal placement; explicit missing values break a line, a single sample has a marker, and empty histories show a waiting message.
+
+Monitor headings and current values use the 13px body token; supporting labels and capacity details use the 11px secondary token. Values use tabular numbers. Monitor text uses a relative 1.4 line height, and GPU detail grids and badges can grow and wrap with enlarged text. The inspector remains an opaque surface with existing hairline separators. Series use theme tokens: the primary trend color mixes `--chart-1` and `--foreground` equally so bright system accents remain legible; secondary series use `--chart-5` or `--foreground`. Labels and distinct stroke patterns identify multiple series, and elevated GPU readings also include a warning symbol.
+
+Network upload and download share a nonnegative scale. Percentages use 0–100%; speed and latency use a zero-based automatic scale with headroom. Temperature starts at 0–100°C and extends to the next 10°C when necessary. The existing collection intervals and 60-sample history limits are unchanged.
+
+Pointer inspection selects the nearest timestamp, with no invented values for another series at that time. Focused plots support Left/Right and Home/End; Escape dismisses the details while preserving focus. Details reuse the shared Tooltip primitive, including its 400ms hover delay, decoration, material fallback, and reduced-motion behavior, with collision handling bounded to the inspector. Empty plots are not keyboard stops. New trend labels and navigation hints use the existing translation system.
+
 ## Materials and Surface Hierarchy
 
 - The main window has AppKit sidebar material behind its transparent webview. Sidebar and titlebar share the effective `--sidebar-tint`; the right inspector uses opaque sidebar color.
@@ -82,3 +92,9 @@ The CSS cleanup compared 32 fixed-DOM before/after browser fixtures with identic
 All 640 frontend tests passed, including new regressions for per-terminal state isolation and session preservation. The frontend build passed; lint reported zero errors and the existing 175 warnings. Browser fixture checks simulate attributes and media rules; native AppKit material, operating-system accessibility preferences, live SSH/SFTP, VoiceOver, and populated remote file/monitor states were not exercised. Implementation history remains in Git.
 
 The command-menu unification on 2026-10-08 checked 40 paired WebKit fixtures: five palettes × Light/Dark × native material/browser fallback/Reduce Transparency/Increase Contrast attributes. All four command menu surfaces matched their shared material and decoration; normal highlights, destructive highlights, icons, shortcuts, and disabled states matched their semantic colors. Geometry remained identical, and the select, popover, tooltip, and toast surface fixtures retained their previous computed styles. Each case included light, dark, blue, and gradient-image backdrops. Live Radix fixtures also exercised keyboard navigation past disabled items, checkbox/radio highlights, both kinds of submenu, command selection, Escape, and focus restoration. All 653 frontend tests and the build passed; lint reported zero errors and 173 warnings. Native appearance/accessibility flags were simulated; the actual AppKit material and operating-system preference changes were not exercised.
+
+The monitor update on 2026-10-17 checked the five palettes in Light/Dark, plus green, yellow, and pink System accent variants. Computed, alpha-composited contrast against the opaque inspector was at least 3.52:1 for tested curves and 5.39:1 for trend labels/values. Browser fixtures checked 280–420px inspectors at 960×600 and 1280×800 viewports, single/six/no GPU cases, absent temperature data, doubled text tokens, scrolling, hide/reopen, keyboard sample inspection, Escape, and tooltip containment. Simulated increased contrast produced 2px strokes and an opaque tooltip; the inspector stayed opaque with native-material and inactive-window attributes. SVG drawing has no animation, and shared reduced-motion rules remain in force.
+
+A temporary Tauri/WKWebView app separately rendered the real trend module with fixed sample data in light and dark appearances, including the shared tooltip and focus decoration. It did not run live SSH/GPU commands. Native keyboard automation, VoiceOver, native minimum-window resizing, and operating-system accessibility-setting changes were not accepted as verified; the keyboard and minimum-window checks above were browser/DOM checks. These results are not a complete HIG or accessibility audit.
+
+All 702 frontend tests and the frontend build passed; lint reported zero errors and 169 existing warnings. Using the same `gzipSync` settings for all emitted JS files, total JS decreased from 2,919,635 to 2,516,337 bytes, and summed gzip size from 921,412 to 809,529 bytes. Recharts and its unused transitive dependencies were removed; these totals describe the whole build rather than an isolated library-size estimate.

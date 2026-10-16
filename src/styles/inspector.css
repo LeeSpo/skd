@@ -7,11 +7,6 @@
   border-color: var(--chrome-hairline);
 }
 
-.inspector-panel [data-slot="toggle"][data-state="on"] {
-  background: var(--sidebar-selection);
-  color: var(--sidebar-foreground);
-}
-
 .inspector-panel [data-slot="button"]:not(.bg-primary):hover:not(:disabled),
 .inspector-panel [data-slot="button"]:not(.bg-primary)[data-state="open"] {
   background-color: var(--sidebar-row-hover);
@@ -22,15 +17,11 @@
   background: transparent;
 }
 
-/* Radix sizes this wrapper as a table, so charts measure their own content and widen the inspector. */
+/* Keep scrollable inspector content inside the resizable column. */
 .inspector-panel [data-radix-scroll-area-viewport] > div {
   display: block !important;
   width: 100%;
   min-width: 0 !important;
-  max-width: 100%;
-}
-
-.inspector-panel .recharts-responsive-container {
   max-width: 100%;
 }
 
@@ -57,4 +48,90 @@
 
 .inspector-panel [data-slot="card-content"] {
   padding: 0 0 12px;
+}
+
+.system-monitor table th {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.system-monitor table td {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-monitor tbody tr {
+  border-bottom: 0;
+}
+
+.system-monitor [data-slot="progress"] {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.system-monitor [data-slot="select-trigger"] {
+  border-color: transparent;
+  background: transparent;
+  min-height: max(24px, 1.8em);
+  height: auto;
+}
+
+.system-monitor [data-slot="select-trigger"] > span:last-child {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.system-monitor,
+.monitor-trend {
+  /* Keep bright system accents legible on an opaque inspector in either appearance. */
+  --monitor-trend-primary: color-mix(in srgb, var(--chart-1) 50%, var(--foreground));
+}
+
+/* Keep enlarged labels and values from overlapping at the fixed text-style line heights. */
+:is(.system-monitor, .monitor-trend) :is(.text-ui-body, .text-ui-label) {
+  line-height: 1.4;
+}
+
+.monitor-gpu-summary {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
+}
+
+.monitor-gpu-details {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5em), 1fr));
+}
+
+.monitor-trend-line {
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.monitor-trend-plot:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.monitor-trend-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.monitor-trend-tooltip {
+  max-width: min(20rem, var(--radix-tooltip-content-available-width));
+  max-height: var(--radix-tooltip-content-available-height);
+  overflow: auto;
+}
+
+:root[data-increase-contrast="true"] .monitor-trend-line {
+  stroke-width: 2px;
+}
+
+@media (prefers-contrast: more) {
+  .monitor-trend-line {
+    stroke-width: 2px;
+  }
 }

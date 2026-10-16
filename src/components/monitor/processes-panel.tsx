@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Terminal, X, ArrowDown } from 'lucide-react';
+import { X, ArrowDown } from 'lucide-react';
 import { withRetry, CancelledError } from '@/lib/async-retry';
 import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
@@ -101,13 +101,10 @@ export function ProcessesPanel({ connectionId, active = true }: MonitorPanelProp
   return (
     <>
       <div className="space-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <Terminal className="w-3 h-3 shrink-0" />
-          <h3 className="text-xs font-medium truncate">{t('systemMonitor.runningProcesses')}</h3>
-        </div>
+        <h3 className="text-ui-body font-medium truncate">{t('systemMonitor.runningProcesses')}</h3>
         <Card>
           <CardContent className="p-0">
-            <div className="h-40 min-w-0 overflow-auto rounded-md border">
+            <div className="max-h-40 min-w-0 overflow-auto">
               <table className="w-full caption-bottom text-sm">
                 <thead className="[&_tr]:border-b">
                   <tr className="border-b transition-colors">
@@ -137,14 +134,14 @@ export function ProcessesPanel({ connectionId, active = true }: MonitorPanelProp
                 <tbody className="[&_tr:last-child]:border-0">
                   {processes.slice(0, 8).map((process) => (
                     <tr key={process.pid} className="hover:bg-muted/50 border-b transition-colors">
-                      <td className="p-1 align-middle whitespace-nowrap text-[10px]">{process.pid}</td>
-                      <td className={`p-1 align-middle whitespace-nowrap text-[10px] font-semibold ${getUsageColor(process.cpu)}`}>
+                      <td className="p-1 align-middle whitespace-nowrap text-ui-label">{process.pid}</td>
+                      <td className={`p-1 align-middle whitespace-nowrap text-ui-label font-semibold ${getUsageColor(process.cpu)}`}>
                         {process.cpu.toFixed(0)}%
                       </td>
-                      <td className={`p-1 align-middle whitespace-nowrap text-[10px] font-semibold ${getUsageColor(process.mem)}`}>
+                      <td className={`p-1 align-middle whitespace-nowrap text-ui-label font-semibold ${getUsageColor(process.mem)}`}>
                         {process.mem.toFixed(0)}%
                       </td>
-                      <td className="p-1 align-middle whitespace-nowrap text-[10px] font-mono truncate max-w-0" title={process.command}>
+                      <td className="p-1 align-middle whitespace-nowrap text-ui-label font-mono truncate max-w-0" title={process.command}>
                         {process.command}
                       </td>
                       <td className="p-1 align-middle whitespace-nowrap text-xs">
@@ -153,6 +150,7 @@ export function ProcessesPanel({ connectionId, active = true }: MonitorPanelProp
                           size="icon"
                           className="h-4 w-4"
                           onClick={() => setProcessToKill(process)}
+                          aria-label={t('systemMonitor.killProcess')}
                           title={t('systemMonitor.killProcess')}
                         >
                           <X className="h-2.5 w-2.5" />

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ArrowDownUp } from 'lucide-react';
 import { withRetry, CancelledError } from '@/lib/async-retry';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { MonitorPanelProps, NetworkHistoryData, NetworkUsage } from './monitor-types';
 import { CHART_COLORS } from '@/lib/chart-colors';
 import { scheduleIdleTask } from './monitor-utils';
+import { MonitorTrend } from './monitor-trend';
+
+function formatSpeed(kbps: number): string {
+  return kbps >= 1024 ? `${(kbps / 1024).toFixed(1)} MB/s` : `${kbps.toFixed(0)} KB/s`;
+}
 
 export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
@@ -77,12 +80,7 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
         const downloadKBps = totalDownload / 1024;
         const uploadKBps = totalUpload / 1024;
 
-        const formatSpeed = (kbps: number): string => {
-          if (kbps >= 1024) {
-            return `${(kbps / 1024).toFixed(1)} MB/s`;
-          }
-          return `${kbps.toFixed(0)} KB/s`;
-        };
+
 
         setNetworkUsage({
           upload: uploadKBps,
@@ -119,9 +117,8 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <ArrowDownUp className="w-3 h-3 shrink-0" />
-          <h3 className="text-xs font-medium truncate">{t('systemMonitor.networkUsage')}</h3>
+        <div className="min-w-0">
+          <h3 className="text-ui-body font-medium truncate">{t('systemMonitor.networkUsage')}</h3>
         </div>
         {networkInterfaces.length > 0 && (
           <Select
@@ -131,15 +128,15 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
               setNetworkHistory([]);
             }}
           >
-            <SelectTrigger className="h-5 w-auto min-w-[70px] max-w-[100px] text-[9px] px-1.5 py-0">
+            <SelectTrigger aria-label={t('systemMonitor.selectInterface')} size="sm" className="w-auto min-w-[70px] max-w-[100px] text-ui-label px-1.5 py-0">
               <SelectValue placeholder={t('systemMonitor.selectInterface')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-[10px]">
+              <SelectItem value="all" className="text-ui-label">
                 {t('systemMonitor.allInterfaces')}
               </SelectItem>
               {networkInterfaces.map(iface => (
-                <SelectItem key={iface} value={iface} className="text-[10px]">
+                <SelectItem key={iface} value={iface} className="text-ui-label">
                   {iface}
                 </SelectItem>
               ))}
@@ -152,111 +149,34 @@ export function NetworkUsagePanel({ connectionId, active = true }: MonitorPanelP
           <div className="grid grid-cols-2 gap-1.5">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-chart-1 shrink-0" />
-                <div className="text-[9px] text-muted-foreground">{t('systemMonitor.down')}</div>
+                <div className="w-3 h-px bg-[var(--monitor-trend-primary)] shrink-0" />
+                <div className="text-ui-label text-muted-foreground">{t('systemMonitor.down')}</div>
               </div>
-              <div className="font-medium text-[10px] truncate" title={networkUsage.downloadFormatted}>
+              <div className="font-medium text-ui-body tabular-nums truncate" title={networkUsage.downloadFormatted}>
                 {networkUsage.downloadFormatted}
               </div>
             </div>
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-chart-4 shrink-0" />
-                <div className="text-[9px] text-muted-foreground">{t('systemMonitor.up')}</div>
+                <div className="w-3 border-t border-dashed border-chart-5 shrink-0" />
+                <div className="text-ui-label text-muted-foreground">{t('systemMonitor.up')}</div>
               </div>
-              <div className="font-medium text-[10px] truncate" title={networkUsage.uploadFormatted}>
+              <div className="font-medium text-ui-body tabular-nums truncate" title={networkUsage.uploadFormatted}>
                 {networkUsage.uploadFormatted}
               </div>
             </div>
           </div>
 
-          <div>
-            <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.history')}</div>
-            <div className="h-24 min-w-0 w-full text-foreground">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={networkHistory.map(item => ({
-                    ...item,
-                    uploadPositive: item.upload,
-                    downloadNegative: -item.download,
-                  }))}
-                  margin={{ top: 5, right: 2, left: 0, bottom: 5 }}
-                >
-                  <defs>
-                    <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={CHART_COLORS.chart4} stopOpacity={0.3} />
-                      <stop offset="100%" stopColor={CHART_COLORS.chart4} stopOpacity={0.05} />
-                    </linearGradient>
-                    <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.05} />
-                      <stop offset="100%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
-                  <XAxis
-                    dataKey="time"
-                    axisLine
-                    tick={{ fontSize: 8, fill: 'currentColor' }}
-                    stroke="var(--muted-foreground)"
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={50}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 9, fill: 'currentColor' }}
-                    stroke="var(--muted-foreground)"
-                    domain={[-1500, 1500]}
-                    ticks={[-1228.8, -614.4, 0, 614.4, 1228.8]}
-                    tickFormatter={(value: number) => {
-                      const absValue = Math.abs(value);
-                      if (absValue === 0) return '0';
-                      if (absValue >= 1024) {
-                        return `${(absValue / 1024).toFixed(1)} MB/s`;
-                      }
-                      return `${absValue.toFixed(0)} KB/s`;
-                    }}
-                    width={50}
-                    tickLine={false}
-                  />
-                  <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeWidth={1.5} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--popover)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: number | string, name: string) => {
-                      const kbps = Math.abs(Number(value));
-                      const formatted = kbps >= 1024 ? `${(kbps / 1024).toFixed(1)} MB/s` : `${kbps.toFixed(0)} KB/s`;
-                      return [formatted, name === 'uploadPositive' ? t('systemMonitor.upload') : t('systemMonitor.download')];
-                    }}
-                    labelFormatter={(label) => `${label}`}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="uploadPositive"
-                    stroke={CHART_COLORS.chart4}
-                    strokeWidth={2}
-                    fill="url(#uploadGradient)"
-                    dot={false}
-                    activeDot={{ r: 3, fill: CHART_COLORS.chart4, stroke: CHART_COLORS.chart4 }}
-                    isAnimationActive={false}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="downloadNegative"
-                    stroke={CHART_COLORS.chart1}
-                    strokeWidth={2}
-                    fill="url(#downloadGradient)"
-                    dot={false}
-                    activeDot={{ r: 3, fill: CHART_COLORS.chart1, stroke: CHART_COLORS.chart1 }}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <MonitorTrend
+            label={t('systemMonitor.networkUsage')}
+            showLegend={false}
+            series={[
+              { id: 'download', label: t('systemMonitor.download'), color: CHART_COLORS.monitorPrimary, formatValue: formatSpeed,
+                points: networkHistory.map(point => ({ timestamp: point.timestamp, value: point.download })) },
+              { id: 'upload', label: t('systemMonitor.upload'), color: CHART_COLORS.chart5, dash: '4 3', formatValue: formatSpeed,
+                points: networkHistory.map(point => ({ timestamp: point.timestamp, value: point.upload })) },
+            ]}
+          />
         </CardContent>
       </Card>
     </div>

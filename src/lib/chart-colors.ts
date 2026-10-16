@@ -5,6 +5,7 @@ export const CHART_COLORS = {
   chart3: "var(--chart-3)",
   chart4: "var(--chart-4)",
   chart5: "var(--chart-5)",
+  monitorPrimary: "var(--monitor-trend-primary)",
   primary: "var(--primary)",
   destructive: "var(--destructive)",
   success: "var(--success)",

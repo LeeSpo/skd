@@ -1,21 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Cpu } from 'lucide-react';
 import { withRetry, CancelledError } from '@/lib/async-retry';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Progress } from '../ui/progress';
 import { Badge } from '../ui/badge';
 import { CHART_COLORS } from '@/lib/chart-colors';
+import { MonitorTrend } from './monitor-trend';
 import type {
   GpuDetectionResult,
   GpuHistoryData,
   GpuStats,
   MonitorPanelProps,
 } from './monitor-types';
-import { GPU_COLORS, getGpuTempColor, getProgressColor, getUsageColor, scheduleIdleTask } from './monitor-utils';
+import { getGpuTrendStyle, getGpuTempColor, getProgressColor, getUsageColor, scheduleIdleTask } from './monitor-utils';
+
+function GpuValue({ value, temperature = false, children }: { value: number; temperature?: boolean; children: ReactNode }) {
+  const { t } = useTranslation();
+  const warning = value >= (temperature ? 60 : 50);
+  const critical = value >= (temperature ? 85 : 90);
+  return (
+    <span className={`inline-flex items-center gap-1 text-ui-body font-medium tabular-nums ${temperature ? getGpuTempColor(value) : getUsageColor(value)}`}>
+      {warning && <TriangleAlert role="img" aria-label={t(critical ? 'systemMonitor.criticalUsage' : 'systemMonitor.elevatedUsage')} className="size-[1em] shrink-0" />}
+      {children}
+    </span>
+  );
+}
+
+const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
@@ -31,11 +45,8 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpuDetectionDone(false);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpuDetection(null);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpuStats([]);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpuHistory(new Map());
 
     void withRetry(
@@ -119,24 +130,23 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <Cpu className="w-3 h-3 shrink-0" />
-          <h3 className="text-xs font-medium truncate">{t('systemMonitor.gpuMonitor')}</h3>
+        <div className="min-w-0">
+          <h3 className="text-ui-body font-medium truncate">{t('systemMonitor.gpuMonitor')}</h3>
         </div>
         {gpuDetection?.available && gpuDetection.gpus.length > 1 && (
           <Select
             value={selectedGpuIndex.toString()}
             onValueChange={(value) => setSelectedGpuIndex(value === 'all' ? 'all' : parseInt(value))}
           >
-            <SelectTrigger className="h-5 w-auto min-w-[70px] max-w-[120px] text-[9px] px-1.5 py-0">
+            <SelectTrigger aria-label={t('systemMonitor.selectGpu')} size="sm" className="w-auto min-w-[70px] max-w-[120px] text-ui-label px-1.5 py-0">
               <SelectValue placeholder={t('systemMonitor.selectGpu')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-[10px]">
+              <SelectItem value="all" className="text-ui-label">
                 {t('systemMonitor.allGpus')}
               </SelectItem>
               {gpuDetection.gpus.map(gpu => (
-                <SelectItem key={gpu.index} value={gpu.index.toString()} className="text-[10px]">
+                <SelectItem key={gpu.index} value={gpu.index.toString()} className="text-ui-label">
                   GPU {gpu.index}
                 </SelectItem>
               ))}
@@ -147,53 +157,53 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
       <Card>
         <CardContent className="p-2">
           {!gpuDetection?.available ? (
-            <div className="text-[10px] text-muted-foreground space-y-1">
+            <div className="text-ui-label text-muted-foreground space-y-1">
               <p>{t('systemMonitor.noGpuDetected')}</p>
-              <p className="text-[9px]">{t('systemMonitor.supportedGpus')}</p>
+              <p className="text-ui-label">{t('systemMonitor.supportedGpus')}</p>
             </div>
           ) : selectedGpuIndex === 'all' ? (
             <div className="space-y-2">
-              {gpuStats.map((gpu, idx) => (
+              {gpuStats.map(gpu => (
                 <div key={gpu.index} className="border rounded p-1.5 space-y-1">
                   <div className="flex items-center gap-1.5">
                     <div
                       className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: GPU_COLORS[idx % GPU_COLORS.length] }}
+                      style={{ backgroundColor: getGpuTrendStyle(gpu.index).color }}
                     />
-                    <span className="text-[10px] font-medium truncate">
+                    <span className="text-ui-label font-medium truncate">
                       GPU {gpu.index}: {gpu.name}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="monitor-gpu-summary grid gap-2 text-ui-label">
                     <div className="space-y-0.5">
-                      <div className="flex justify-between text-[9px]">
+                      <div className="flex justify-between text-ui-label">
                         <span className="text-muted-foreground">{t('systemMonitor.gpuLabel')}</span>
-                        <span className={`font-semibold ${getUsageColor(gpu.utilization ?? 0)}`}>
+                        <GpuValue value={gpu.utilization ?? 0}>
                           {(gpu.utilization ?? 0).toFixed(0)}%
-                        </span>
+                        </GpuValue>
                       </div>
                       <Progress value={gpu.utilization ?? 0} className={`h-1 ${getProgressColor(gpu.utilization ?? 0)}`} />
                     </div>
                     <div className="space-y-0.5">
-                      <div className="flex justify-between text-[9px]">
+                      <div className="flex justify-between text-ui-label">
                         <span className="text-muted-foreground">{t('systemMonitor.vram')}</span>
-                        <span className={`font-semibold ${getUsageColor(gpu.memory_percent ?? 0)}`}>
+                        <GpuValue value={gpu.memory_percent ?? 0}>
                           {(gpu.memory_percent ?? 0).toFixed(0)}%
-                        </span>
+                        </GpuValue>
                       </div>
                       <Progress value={gpu.memory_percent ?? 0} className={`h-1 ${getProgressColor(gpu.memory_percent ?? 0)}`} />
-                      <div className="text-[8px] text-muted-foreground text-right">
+                      <div className="text-ui-label text-muted-foreground text-right">
                         {(gpu.memory_used ?? 0).toLocaleString()} MiB / {(gpu.memory_total ?? 0).toLocaleString()} MiB
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 text-[9px] text-muted-foreground">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-ui-label text-muted-foreground">
                     {gpu.temperature != null && (
-                      <span className={getGpuTempColor(gpu.temperature)}>
+                      <GpuValue value={gpu.temperature} temperature>
                         {gpu.temperature.toFixed(0)}°C
-                      </span>
+                      </GpuValue>
                     )}
                     {gpu.power_draw != null && (
                       <span>
@@ -202,78 +212,21 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                       </span>
                     )}
                     {gpu.fan_speed != null && (
-                      <span>Fan {gpu.fan_speed.toFixed(0)}%</span>
+                      <span>{t('systemMonitor.fan')} {gpu.fan_speed.toFixed(0)}%</span>
                     )}
                   </div>
                 </div>
               ))}
 
-              {gpuStats.length > 0 && gpuHistory.size > 0 && (
-                <div>
-                  <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.combinedUsageHistory')}</div>
-                  <div className="h-24 min-w-0 w-full text-foreground">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 5, right: 2, left: 0, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
-                        <XAxis
-                          dataKey="time"
-                          type="category"
-                          allowDuplicatedCategory={false}
-                          tick={{ fontSize: 8, fill: 'currentColor' }}
-                          stroke="var(--muted-foreground)"
-                          strokeWidth={0.5}
-                          interval="preserveStartEnd"
-                          minTickGap={30}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 8, fill: 'currentColor' }}
-                          stroke="var(--muted-foreground)"
-                          strokeWidth={0.5}
-                          domain={[0, 100]}
-                          ticks={[0, 50, 100]}
-                          width={25}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'var(--popover)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                          }}
-                          formatter={(value: number | string, name: string) => [`${Number(value).toFixed(1)}%`, name === 'utilization' ? t('systemMonitor.gpuLabel') : name]}
-                        />
-                        {gpuStats.map((gpu, idx) => {
-                          const history = gpuHistory.get(gpu.index) || [];
-                          return (
-                            <Line
-                              key={gpu.index}
-                              data={history}
-                              dataKey="utilization"
-                              name={`GPU ${gpu.index}`}
-                              type="monotone"
-                              stroke={GPU_COLORS[idx % GPU_COLORS.length]}
-                              strokeWidth={2}
-                              dot={false}
-                              isAnimationActive={false}
-                            />
-                          );
-                        })}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex gap-3 justify-center mt-1 flex-wrap">
-                    {gpuStats.map((gpu, idx) => (
-                      <div key={gpu.index} className="flex items-center gap-1">
-                        <div
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: GPU_COLORS[idx % GPU_COLORS.length] }}
-                        />
-                        <span className="text-[8px] text-muted-foreground">{t('systemMonitor.gpuIndex', { index: gpu.index })}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <MonitorTrend
+                label={t('systemMonitor.combinedUsageHistory')}
+                domain={[0, 100]}
+                series={gpuStats.map(gpu => ({
+                  id: `gpu-${gpu.index}`, label: t('systemMonitor.gpuIndex', { index: gpu.index }),
+                  ...getGpuTrendStyle(gpu.index), formatValue: formatPercent,
+                  points: (gpuHistory.get(gpu.index) ?? []).map(point => ({ timestamp: point.timestamp, value: point.utilization })),
+                }))}
+              />
             </div>
           ) : (
             <div className="space-y-2">
@@ -282,25 +235,27 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                 const gpuInfo = gpuDetection.gpus.find(g => g.index === selectedGpuIndex) || gpuDetection.gpus[0];
 
                 if (!currentGpu) {
-                  return <div className="text-[10px] text-muted-foreground">{t('systemMonitor.loadingGpuStats')}</div>;
+                  return <div className="text-ui-label text-muted-foreground">{t('systemMonitor.loadingGpuStats')}</div>;
                 }
+
+                const history = gpuHistory.get(currentGpu.index) ?? [];
 
                 return (
                   <>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-medium truncate" title={currentGpu.name}>
+                      <span className="text-ui-label font-medium truncate" title={currentGpu.name}>
                         {currentGpu.name}
                       </span>
-                      <Badge variant="outline" className="text-[8px] px-1 py-0 h-4">
+                      <Badge variant="outline" className="text-ui-label px-1 py-0 min-h-4">
                         {currentGpu.vendor === 'nvidia' ? 'NVIDIA' : currentGpu.vendor === 'amd' ? 'AMD' : 'Unknown'}
                       </Badge>
                       {gpuInfo?.driver_version && (
-                        <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4">
+                        <Badge variant="secondary" className="text-ui-label px-1 py-0 min-h-4">
                           {gpuInfo.driver_version}
                         </Badge>
                       )}
                       {gpuInfo?.cuda_version && (
-                        <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4">
+                        <Badge variant="secondary" className="text-ui-label px-1 py-0 min-h-4">
                           CUDA {gpuInfo.cuda_version}
                         </Badge>
                       )}
@@ -308,43 +263,43 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
 
                     <div className="space-y-1">
                       <div className="flex justify-between items-center gap-1">
-                        <span className="text-xs font-medium">{t('systemMonitor.gpuUtilization')}</span>
-                        <span className={`text-xs font-semibold ${getUsageColor(currentGpu.utilization ?? 0)}`}>
+                        <span className="text-ui-body font-medium">{t('systemMonitor.gpuUtilization')}</span>
+                        <GpuValue value={currentGpu.utilization ?? 0}>
                           {(currentGpu.utilization ?? 0).toFixed(1)}%
-                        </span>
+                        </GpuValue>
                       </div>
                       <Progress value={currentGpu.utilization ?? 0} className={`h-1.5 ${getProgressColor(currentGpu.utilization ?? 0)}`} />
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex justify-between items-center gap-1">
-                        <span className="text-xs font-medium">{t('systemMonitor.vram')}</span>
-                        <span className={`text-xs font-semibold ${getUsageColor(currentGpu.memory_percent ?? 0)}`}>
+                        <span className="text-ui-body font-medium">{t('systemMonitor.vram')}</span>
+                        <GpuValue value={currentGpu.memory_percent ?? 0}>
                           {(currentGpu.memory_percent ?? 0).toFixed(1)}%
-                        </span>
+                        </GpuValue>
                       </div>
                       <Progress value={currentGpu.memory_percent ?? 0} className={`h-1.5 ${getProgressColor(currentGpu.memory_percent ?? 0)}`} />
-                      <div className="text-[9px] text-muted-foreground text-right leading-tight">
+                      <div className="text-ui-label text-muted-foreground text-right leading-tight">
                         {currentGpu.memory_used ?? 0} MiB / {currentGpu.memory_total ?? 0} MiB
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                    <div className="monitor-gpu-details grid gap-1.5 text-ui-label">
                       {currentGpu.temperature != null && (
                         <div className="flex flex-col gap-0.5">
                           <span className="text-muted-foreground">{t('systemMonitor.temp')}</span>
-                          <span className={`font-semibold ${getGpuTempColor(currentGpu.temperature)}`}>
+                          <GpuValue value={currentGpu.temperature} temperature>
                             {currentGpu.temperature.toFixed(0)}°C
-                          </span>
+                          </GpuValue>
                         </div>
                       )}
                       {currentGpu.power_draw != null && (
                         <div className="flex flex-col gap-0.5">
                           <span className="text-muted-foreground">{t('systemMonitor.power')}</span>
-                          <span className="font-semibold">
+                          <span className="text-ui-body font-medium tabular-nums">
                             {currentGpu.power_draw.toFixed(0)}W
                             {currentGpu.power_limit != null && (
-                              <span className="text-muted-foreground font-normal">/{currentGpu.power_limit.toFixed(0)}W</span>
+                              <span className="text-muted-foreground font-normal"> / {currentGpu.power_limit.toFixed(0)}W</span>
                             )}
                           </span>
                         </div>
@@ -352,161 +307,52 @@ export function GpuMonitorPanel({ connectionId, active = true }: MonitorPanelPro
                       {currentGpu.fan_speed != null && (
                         <div className="flex flex-col gap-0.5">
                           <span className="text-muted-foreground">{t('systemMonitor.fan')}</span>
-                          <span className="font-semibold">{currentGpu.fan_speed.toFixed(0)}%</span>
+                          <span className="text-ui-body font-medium tabular-nums">{currentGpu.fan_speed.toFixed(0)}%</span>
                         </div>
                       )}
                     </div>
 
                     {(currentGpu.encoder_util != null || currentGpu.decoder_util != null) && (
-                      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                      <div className="grid grid-cols-2 gap-1.5 text-ui-label">
                         {currentGpu.encoder_util != null && (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground">{t('systemMonitor.encoder')}</span>
-                            <span className={`font-semibold ${getUsageColor(currentGpu.encoder_util)}`}>
+                            <GpuValue value={currentGpu.encoder_util}>
                               {currentGpu.encoder_util.toFixed(0)}%
-                            </span>
+                            </GpuValue>
                           </div>
                         )}
                         {currentGpu.decoder_util != null && (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground">{t('systemMonitor.decoder')}</span>
-                            <span className={`font-semibold ${getUsageColor(currentGpu.decoder_util)}`}>
+                            <GpuValue value={currentGpu.decoder_util}>
                               {currentGpu.decoder_util.toFixed(0)}%
-                            </span>
+                            </GpuValue>
                           </div>
                         )}
                       </div>
                     )}
 
-                    {gpuHistory.get(currentGpu.index)?.length ? (
-                      <div>
-                        <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.usageHistory')}</div>
-                        <div className="h-20 min-w-0 w-full text-foreground">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart
-                              data={gpuHistory.get(currentGpu.index) || []}
-                              margin={{ top: 5, right: 2, left: 0, bottom: 5 }}
-                            >
-                              <defs>
-                                <linearGradient id="gpuUtilGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={CHART_COLORS.chart5} stopOpacity={0.3} />
-                                  <stop offset="100%" stopColor={CHART_COLORS.chart5} stopOpacity={0.05} />
-                                </linearGradient>
-                                <linearGradient id="gpuMemGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
-                                  <stop offset="100%" stopColor={CHART_COLORS.chart1} stopOpacity={0.05} />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
-                              <XAxis
-                                dataKey="time"
-                                tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="var(--muted-foreground)"
-                                strokeWidth={0.5}
-                                interval="preserveStartEnd"
-                                minTickGap={30}
-                              />
-                              <YAxis
-                                tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="var(--muted-foreground)"
-                                strokeWidth={0.5}
-                                domain={[0, 100]}
-                                ticks={[0, 50, 100]}
-                                width={25}
-                              />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'var(--popover)',
-                                  border: '1px solid var(--border)',
-                                  borderRadius: '6px',
-                                  fontSize: '11px',
-                                }}
-                                formatter={(value: number | string, name: string) => [
-                                  `${Number(value).toFixed(1)}%`,
-                                  name === 'utilization' ? t('systemMonitor.gpuLabel') : t('systemMonitor.vram'),
-                                ]}
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey="utilization"
-                                stroke={CHART_COLORS.chart5}
-                                strokeWidth={2}
-                                fill="url(#gpuUtilGradient)"
-                                dot={false}
-                                isAnimationActive={false}
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey="memory"
-                                stroke={CHART_COLORS.chart1}
-                                strokeWidth={2}
-                                fill="url(#gpuMemGradient)"
-                                dot={false}
-                                isAnimationActive={false}
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <div className="flex gap-3 justify-center mt-1">
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-chart-5" />
-                            <span className="text-[8px] text-muted-foreground">{t('systemMonitor.gpuLabel')}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-chart-1" />
-                            <span className="text-[8px] text-muted-foreground">{t('systemMonitor.vram')}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {gpuHistory.get(currentGpu.index)?.some(h => h.temperature !== undefined) && (
-                      <div>
-                        <div className="text-[9px] text-muted-foreground mb-1">{t('systemMonitor.temperatureHistory')}</div>
-                        <div className="h-16 min-w-0 w-full text-foreground">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart
-                              data={gpuHistory.get(currentGpu.index) || []}
-                              margin={{ top: 5, right: 2, left: 0, bottom: 5 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
-                              <XAxis
-                                dataKey="time"
-                                tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="var(--muted-foreground)"
-                                strokeWidth={0.5}
-                                interval="preserveStartEnd"
-                                minTickGap={30}
-                              />
-                              <YAxis
-                                tick={{ fontSize: 8, fill: 'currentColor' }}
-                                stroke="var(--muted-foreground)"
-                                strokeWidth={0.5}
-                                domain={[30, 100]}
-                                ticks={[40, 60, 80]}
-                                width={25}
-                              />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'var(--popover)',
-                                  border: '1px solid var(--border)',
-                                  borderRadius: '6px',
-                                  fontSize: '11px',
-                                }}
-                                formatter={(value: number | string) => [`${Number(value).toFixed(0)}°C`, t('systemMonitor.temp')]}
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="temperature"
-                                stroke="#f97316"
-                                strokeWidth={2}
-                                dot={false}
-                                isAnimationActive={false}
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
+                    <MonitorTrend
+                      label={t('systemMonitor.usageHistory')}
+                      domain={[0, 100]}
+                      series={[
+                        { id: 'utilization', label: t('systemMonitor.gpuLabel'), color: CHART_COLORS.monitorPrimary, formatValue: formatPercent,
+                          points: history.map(point => ({ timestamp: point.timestamp, value: point.utilization })) },
+                        { id: 'memory', label: t('systemMonitor.vram'), color: CHART_COLORS.chart5, dash: '4 3', formatValue: formatPercent,
+                          points: history.map(point => ({ timestamp: point.timestamp, value: point.memory })) },
+                      ]}
+                    />
+                    {history.some(point => point.temperature !== undefined && Number.isFinite(point.temperature)) && (
+                      <MonitorTrend
+                        label={t('systemMonitor.temperatureHistory')}
+                        domain={[0, Math.ceil(Math.max(100, ...history.map(point => Number.isFinite(point.temperature) ? point.temperature! : 0)) / 10) * 10]}
+                        series={[{
+                          id: 'temperature', label: t('systemMonitor.temp'), color: 'var(--foreground)',
+                          formatValue: value => `${value.toFixed(0)}°C`,
+                          points: history.map(point => ({ timestamp: point.timestamp, value: point.temperature ?? null })),
+                        }]}
+                      />
                     )}
                   </>
                 );

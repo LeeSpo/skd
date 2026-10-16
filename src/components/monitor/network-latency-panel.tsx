@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Gauge } from 'lucide-react';
 import { withRetry, CancelledError } from '@/lib/async-retry';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent } from '../ui/card';
 import type { LatencyData, MonitorPanelProps } from './monitor-types';
 import { CHART_COLORS } from '@/lib/chart-colors';
 import { scheduleIdleTask } from './monitor-utils';
+import { MonitorTrend } from './monitor-trend';
 
 export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPanelProps) {
   const { t } = useTranslation();
@@ -56,63 +55,23 @@ export function NetworkLatencyPanel({ connectionId, active = true }: MonitorPane
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <Gauge className="w-3 h-3 shrink-0" />
-        <h3 className="text-xs font-medium truncate">{t('systemMonitor.networkLatency')}</h3>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-ui-body font-medium truncate">{t('systemMonitor.networkLatency')}</h3>
+        <span className="text-ui-body font-medium tabular-nums">
+          {latencyData.length > 0 ? `${latencyData[latencyData.length - 1].latency} ms` : '—'}
+        </span>
       </div>
       <Card>
         <CardContent className="p-2">
-          <div className="h-24 min-w-0 w-full text-foreground">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={latencyData} margin={{ top: 5, right: 2, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" opacity={0.2} />
-                <defs>
-                  <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={CHART_COLORS.chart1} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 8, fill: 'currentColor' }}
-                  stroke="var(--muted-foreground)"
-                  strokeWidth={0.5}
-                />
-                <YAxis
-                  tick={{ fontSize: 8, fill: 'currentColor' }}
-                  stroke="var(--muted-foreground)"
-                  strokeWidth={0.5}
-                  width={30}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--popover)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                  }}
-                  formatter={(value: number | string) => [`${value}ms`, t('systemMonitor.latency')]}
-                  labelFormatter={(label) => `${t('systemMonitor.time')}: ${label}`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="latency"
-                  stroke={CHART_COLORS.chart1}
-                  strokeWidth={3}
-                  fill="url(#latencyGradient)"
-                  dot={false}
-                  activeDot={{
-                    r: 5,
-                    fill: CHART_COLORS.chart1,
-                    stroke: '#fff',
-                    strokeWidth: 2,
-                    filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.4))',
-                  }}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <MonitorTrend
+            label={t('systemMonitor.networkLatency')}
+            showLegend={false}
+            series={[{
+              id: 'latency', label: t('systemMonitor.latency'), color: CHART_COLORS.monitorPrimary,
+              formatValue: value => `${value.toFixed(1)} ms`,
+              points: latencyData.map(point => ({ timestamp: point.timestamp, value: point.latency })),
+            }]}
+          />
         </CardContent>
       </Card>
     </div>
