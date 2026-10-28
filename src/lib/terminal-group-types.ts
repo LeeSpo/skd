@@ -60,6 +60,7 @@ export type TerminalGroupAction =
   | { type: 'REMOVE_GROUP'; groupId: string }
   | { type: 'ACTIVATE_GROUP'; groupId: string }
   | { type: 'ACTIVATE_PAGE'; pageId: string }
+  | { type: 'REORDER_PAGE'; pageId: string; targetPageId: string; placement: 'before' | 'after' }
   | { type: 'ADD_TAB'; groupId: string; tab: TerminalTab }
   | { type: 'REMOVE_TAB'; groupId: string; tabId: string }
   | { type: 'ACTIVATE_TAB'; groupId: string; tabId: string }

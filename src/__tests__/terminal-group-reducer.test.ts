@@ -342,6 +342,86 @@ describe('ADD_TAB', () => {
   });
 });
 
+// ── Reducer: REORDER_PAGE ──
+
+describe('REORDER_PAGE', () => {
+  function threePages() {
+    let state = createDefaultState();
+    for (const id of ['a', 'b', 'c']) {
+      state = terminalGroupReducer(state, { type: 'ADD_TAB', groupId: state.activeGroupId, tab: makeTab(id) });
+    }
+    return state;
+  }
+
+  it.each([
+    ['1', '3', 'after', ['2', '3', '1']],
+    ['1', '3', 'before', ['2', '1', '3']],
+    ['3', '1', 'before', ['3', '1', '2']],
+    ['3', '1', 'after', ['1', '3', '2']],
+  ] as const)('moves page %s %s (%s) without changing the active session', (pageId, targetPageId, placement, expected) => {
+    const state = threePages();
+    const next = terminalGroupReducer(state, { type: 'REORDER_PAGE', pageId, targetPageId, placement });
+    expect(next.pages.map((page) => page.id)).toEqual(expected);
+    expect(state.pages.map((page) => page.id)).toEqual(['1', '2', '3']);
+    expect(next.activePageId).toBe(state.activePageId);
+    expect(next.activeGroupId).toBe(state.activeGroupId);
+    expect(next.gridLayout).toBe(state.gridLayout);
+    expect(next.groups).toBe(state.groups);
+    expect(next.tabToGroupMap).toBe(state.tabToGroupMap);
+    expect(next.nextPageId).toBe(state.nextPageId);
+    expect(next.nextGroupId).toBe(state.nextGroupId);
+    for (const page of next.pages) {
+      expect(page).toBe(state.pages.find((entry) => entry.id === page.id));
+    }
+  });
+
+  it.each([
+    ['missing', '1', 'before'],
+    ['1', 'missing', 'after'],
+    ['2', '2', 'before'],
+    ['1', '2', 'before'],
+    ['2', '1', 'after'],
+  ] as const)('ignores missing, self and already adjacent drops: %s, %s, %s', (pageId, targetPageId, placement) => {
+    const state = threePages();
+    expect(terminalGroupReducer(state, { type: 'REORDER_PAGE', pageId, targetPageId, placement })).toBe(state);
+  });
+
+  it.each([true, false])('moves a nested split as a unit (active: %s)', (active) => {
+    let state = threePages();
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '3', direction: 'right', newTab: makeTab('d') });
+    state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '4', direction: 'down', newTab: makeTab('e') });
+    state = terminalGroupReducer(state, { type: 'UPDATE_GRID_SIZES', path: [], sizes: [35, 65] });
+    state = terminalGroupReducer(state, { type: 'UPDATE_GRID_SIZES', path: [1], sizes: [60, 40] });
+    const splitPage = state.pages.find((page) => page.id === '3')!;
+    if (!active) state = terminalGroupReducer(state, { type: 'ACTIVATE_PAGE', pageId: '1' });
+
+    const next = terminalGroupReducer(state, { type: 'REORDER_PAGE', pageId: '3', targetPageId: '1', placement: 'before' });
+    expect(next.pages.map((page) => page.id)).toEqual(['3', '1', '2']);
+    expect(next.pages[0]).toBe(splitPage);
+    expect(next.activePageId).toBe(state.activePageId);
+    expect(next.activeGroupId).toBe(state.activeGroupId);
+    expect(next.gridLayout).toBe(state.gridLayout);
+    expect(next.groups).toBe(state.groups);
+    expect(next.tabToGroupMap).toBe(state.tabToGroupMap);
+
+    const restored = terminalGroupReducer(next, { type: 'ACTIVATE_PAGE', pageId: '3' });
+    expect(restored.gridLayout).toBe(splitPage.gridLayout);
+    expect(restored.activeGroupId).toBe(splitPage.activeGroupId);
+    expect(collectLeafIds(restored.gridLayout)).toEqual(['3', '4', '5']);
+    expect(Object.values(restored.groups).flatMap((group) => group.tabs)).toEqual(Object.values(state.groups).flatMap((group) => group.tabs));
+  });
+
+  it('remembers the live split layout if the saved active page is stale', () => {
+    const state = threePages();
+    const gridLayout = insertSplit(state.gridLayout, '3', '4', 'right');
+    const next = terminalGroupReducer({ ...state, gridLayout }, {
+      type: 'REORDER_PAGE', pageId: '3', targetPageId: '1', placement: 'before',
+    });
+    expect(next.gridLayout).toBe(gridLayout);
+    expect(next.pages[0].gridLayout).toBe(gridLayout);
+  });
+});
+
 // ── Reducer: REMOVE_TAB ──
 
 describe('REMOVE_TAB', () => {

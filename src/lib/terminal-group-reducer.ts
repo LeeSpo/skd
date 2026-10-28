@@ -421,6 +421,22 @@ function applyTerminalGroupAction(
       };
     }
 
+    case 'REORDER_PAGE': {
+      const fromIndex = state.pages.findIndex((page) => page.id === action.pageId);
+      const targetIndex = state.pages.findIndex((page) => page.id === action.targetPageId);
+      if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return state;
+      const insertionIndex = targetIndex + (action.placement === 'after' ? 1 : 0);
+      const toIndex = insertionIndex - (fromIndex < insertionIndex ? 1 : 0);
+      if (fromIndex === toIndex) return state;
+
+      // Only the page order changes. Keep the grid, groups and session objects
+      // intact so a split page moves as a unit without reconnecting its PTYs.
+      const pages = [...state.pages];
+      const [page] = pages.splice(fromIndex, 1);
+      pages.splice(toIndex, 0, page);
+      return { ...state, pages };
+    }
+
     case 'ADD_TAB': {
       const focused = state.groups[state.activeGroupId];
       if (!focused) return state;

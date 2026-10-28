@@ -66,14 +66,8 @@ interface PtyTerminalProps {
  * Communication is done via WebSocket for low-latency bidirectional streaming.
  */
 
-/** Per-session output cap. When cumulative bytes written to xterm exceed this
- *  value the scrollback is cleared automatically so V8 heap stays bounded.
- *  32 MB of decoded text ≈ ~400k typical 80-char terminal lines — enough for
- *  normal builds, logs, and long interactive sessions without frequent wipes,
- *  while still bounding runaway high-throughput output (e.g. `yes`).
- *  xterm's own scrollback option already limits retained history; this cap is
- *  a cumulative session safety net against heap / WebGL cache growth. */
-const SESSION_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024;
+const RESIZE_DEBOUNCE_BUFFER_LINES = 200;
+const COLUMN_RESIZE_DELAY_MS = 100;
 
 const terminalDebug = (...args: unknown[]) => {
   if (import.meta.env.DEV) {
@@ -102,7 +96,7 @@ export function PtyTerminal({
   const { reportStage, failAttempt } = useConnectionAttempts();
   const terminalRef = React.useRef<HTMLDivElement | null>(null);
   const xtermRef = React.useRef<XTerm | null>(null);
-  const fitRef = React.useRef<FitAddon | null>(null);
+  const fitTerminalRef = React.useRef<((immediate?: boolean) => void) | null>(null);
   const searchRef = React.useRef<SearchAddon | null>(null);
   const wsRef = React.useRef<WebSocket | null>(null);
   const rendererRef = React.useRef<string>('canvas');
@@ -142,8 +136,6 @@ export function PtyTerminal({
   const autoReconnectAfterDropRef = React.useRef(0);
   const MAX_AUTO_RECONNECT_AFTER_DROP = 5;
 
-  // Cumulative bytes written to xterm this session — reset on clear.
-  const sessionOutputRef = React.useRef(0);
   const inputEncoderRef = React.useRef(new TextEncoder());
 
   const sendInputToPty = React.useCallback((data: string): boolean => {
@@ -334,7 +326,6 @@ export function PtyTerminal({
 
     // Store refs
     xtermRef.current = term;
-    fitRef.current = fitAddon;
     searchRef.current = searchAddon;
 
     // Scrollbar visibility: show only when content overflows the viewport.
@@ -640,15 +631,8 @@ export function PtyTerminal({
 
         ptyWritePending = true;
 
-        sessionOutputRef.current += data.length;
-        if (sessionOutputRef.current >= SESSION_OUTPUT_LIMIT_BYTES) {
-          term.reset();
-          term.clear();
-          sessionOutputRef.current = 0;
-          ptyOutputStarted = false;
-          term.writeln('\x1b[33m[Output limit reached \u2014 scrollback cleared to free memory]\x1b[0m');
-        }
-
+        // xterm bounds retained history via scrollback. Cumulative output is
+        // not retained memory; resetting here discards history and TUI state.
         term.write(data, () => {
           ptyWritePending = false;
           pumpPtyOutput();
@@ -659,7 +643,6 @@ export function PtyTerminal({
         if (!ptyOutputStarted) {
           ptyOutputStarted = true;
           term.clear();
-          sessionOutputRef.current = 0;
           ptyOutputQueue = [];
           ptyWritePending = false;
         }
@@ -849,44 +832,78 @@ export function PtyTerminal({
       }
     });
 
-    // Debounced fit: coalesce rapid resize events into a single fit + PTY resize message.
-    // After fitting, schedule a follow-up fit to catch CSS transitions that may still
-    // be settling. This ensures the terminal gets the final correct dimensions.
-    // Note: duplicate resize messages are already filtered in the onResize handler above,
-    // so even if fitAddon.fit() fires multiple times, only actual size changes reach the PTY.
-    let fitTimer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedFit = () => {
-      if (fitTimer) clearTimeout(fitTimer);
-      fitTimer = setTimeout(() => {
-        fitTimer = null;
-        const container = containerRef.current;
-        if (container && container.offsetWidth > 0 && container.offsetHeight > 0) {
-          fitAddon.fit();
-          // Schedule a follow-up fit after layout fully settles (CSS transitions)
-          fitTimer = setTimeout(() => {
-            fitTimer = null;
-            if (containerRef.current && containerRef.current.offsetWidth > 0) {
-              fitAddon.fit();
-            }
-          }, 300);
-        }
-      }, 150);
+    // Coalesce window events, but apply observed size changes before the current paint.
+    // The onResize handler above only sends actual row/column changes to the PTY.
+    let fitFrame: number | null = null;
+    let settlingFitTimer: ReturnType<typeof setTimeout> | null = null;
+    let columnResizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelColumnResize = () => {
+      if (columnResizeTimer !== null) clearTimeout(columnResizeTimer);
+      columnResizeTimer = null;
+    };
+    const fitTerminal = (immediate = false) => {
+      const container = containerRef.current;
+      cancelColumnResize();
+      if (!isRunning || !container || container.offsetWidth <= 0 || container.offsetHeight <= 0) return;
+
+      // Match VS Code: small normal buffers resize immediately. For larger buffers,
+      // keep rows responsive and debounce the expensive horizontal scrollback reflow.
+      if (immediate || term.buffer.normal.length < RESIZE_DEBOUNCE_BUFFER_LINES) {
+        fitAddon.fit();
+        return;
+      }
+
+      const dimensions = fitAddon.proposeDimensions();
+      if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
+      if (dimensions.rows !== term.rows) term.resize(term.cols, dimensions.rows);
+      if (dimensions.cols === term.cols) return;
+
+      columnResizeTimer = setTimeout(() => {
+        columnResizeTimer = null;
+        const currentContainer = containerRef.current;
+        if (!isRunning || !currentContainer || currentContainer.offsetWidth <= 0 || currentContainer.offsetHeight <= 0) return;
+        // Rows may have changed again while the horizontal resize was pending.
+        term.resize(dimensions.cols, term.rows);
+      }, COLUMN_RESIZE_DELAY_MS);
+    };
+    fitTerminalRef.current = fitTerminal;
+    const scheduleFit = () => {
+      if (!isRunning || fitFrame !== null) return;
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = null;
+        fitTerminal();
+      });
     };
 
-    // Handle window resize
-    const handleWindowResize = () => {
-      debouncedFit();
+    const scheduleSettlingFit = () => {
+      if (!isRunning) return;
+      // Catch settling CSS transitions independently of the live frame updates.
+      if (settlingFitTimer !== null) clearTimeout(settlingFitTimer);
+      settlingFitTimer = setTimeout(() => {
+        settlingFitTimer = null;
+        scheduleFit();
+      }, 300);
     };
-    window.addEventListener('resize', handleWindowResize);
+    const handleResize = () => {
+      scheduleFit();
+      scheduleSettlingFit();
+    };
+    window.addEventListener('resize', handleResize);
 
     // Handle tab visibility changes using ResizeObserver
     // When tab becomes visible again or panel is resized, fit the terminal
     const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        // Only refit if the container has a reasonable size
-        if (entry.contentRect.width > 100 && entry.contentRect.height > 100) {
-          debouncedFit();
+      if (!isRunning) return;
+      // Only refit if an observed container has a reasonable size.
+      if (entries.some((entry) => entry.contentRect.width > 100 && entry.contentRect.height > 100)) {
+        // Observer delivery is already before paint; don't add another frame of
+        // latency to the immediate row updates and small-buffer column updates.
+        if (fitFrame !== null) {
+          window.cancelAnimationFrame(fitFrame);
+          fitFrame = null;
         }
+        fitTerminal();
+        scheduleSettlingFit();
       }
     });
     
@@ -946,9 +963,12 @@ export function PtyTerminal({
       osc633Disposable.dispose();
       clearTerminalCwd(connectionId);
       clearTerminalCommandState(connectionId);
-      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
-      if (fitTimer) clearTimeout(fitTimer);
+      if (fitFrame !== null) window.cancelAnimationFrame(fitFrame);
+      if (settlingFitTimer !== null) clearTimeout(settlingFitTimer);
+      cancelColumnResize();
+      fitTerminalRef.current = null;
       
       // Dispose WebGL addon FIRST so GPU textures are released before the
       // terminal canvas is removed from the DOM.
@@ -983,7 +1003,7 @@ export function PtyTerminal({
     term.options.cursorBlink = opts.cursorBlink;
     term.options.scrollback = opts.scrollback;
     // Refit so any font-size change propagates as a PTY resize.
-    fitRef.current?.fit();
+    fitTerminalRef.current?.(true);
   }, [themeKey, appearanceKey, settingsRevision]);
 
   React.useEffect(() => {
@@ -1000,12 +1020,12 @@ export function PtyTerminal({
 
     const frameId = window.requestAnimationFrame(() => {
       const term = xtermRef.current;
-      const fitAddon = fitRef.current;
+      const fitTerminal = fitTerminalRef.current;
       const container = containerRef.current;
-      if (!term || !fitAddon || !container) return;
+      if (!term || !fitTerminal || !container) return;
       if (container.offsetWidth <= 0 || container.offsetHeight <= 0) return;
 
-      fitAddon.fit();
+      fitTerminal(true);
       if (term.rows > 0) {
         term.refresh(0, term.rows - 1);
       }

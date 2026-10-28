@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import type { GridNode } from '../../lib/terminal-group-types';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalThemeKey } from '../../lib/use-terminal-theme-key';
@@ -235,7 +236,8 @@ export function StableTerminalGrid() {
     const container = containerRef.current;
     if (!container) return;
 
-    const observer = new ResizeObserver(measurePanes);
+    // Commit overlay bounds before this paint, rather than trailing the CSS-sized slots.
+    const observer = new ResizeObserver(() => flushSync(measurePanes));
     observer.observe(container);
     for (const slot of container.querySelectorAll<HTMLElement>('[data-terminal-group-slot]')) {
       observer.observe(slot);
@@ -249,7 +251,7 @@ export function StableTerminalGrid() {
     const container = containerRef.current;
     if (!container) return;
 
-    const observer = new ResizeObserver(measureContentAreas);
+    const observer = new ResizeObserver(() => flushSync(measureContentAreas));
     for (const contentArea of container.querySelectorAll<HTMLElement>('[data-group-content]')) {
       observer.observe(contentArea);
     }

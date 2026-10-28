@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, fireEvent, waitFor } from '@testing-library/react';
 import { GridRenderer, StableTerminalGrid } from '../components/terminal/grid-renderer';
 import { createDefaultState, terminalGroupReducer } from '../lib/terminal-group-reducer';
 import type { GridNode, TerminalGroupState, TerminalTab } from '../lib/terminal-group-types';
@@ -292,5 +292,90 @@ describe('GridRenderer', () => {
 
     expect(ptyLifecycle.mounts).toBe(2);
     expect(ptyLifecycle.unmounts).toBe(1);
+  });
+
+  describe('resize geometry', () => {
+    let width: number;
+    let height: number;
+    let headerHeight: number;
+    let restoreRects: () => void;
+    const observers: Array<{
+      callback: ResizeObserverCallback;
+      targets: Element[];
+      disconnected: boolean;
+    }> = [];
+
+    beforeEach(() => {
+      width = 800;
+      height = 600;
+      headerHeight = 40;
+      observers.length = 0;
+      mockState = {
+        groups: { '1': { id: '1', tabs: [makeTab('t1')], activeTabId: 't1' } },
+        activeGroupId: '1',
+        gridLayout: { type: 'leaf', groupId: '1' },
+        nextGroupId: 2,
+        tabToGroupMap: { t1: '1' },
+      };
+      vi.stubGlobal('ResizeObserver', class {
+        readonly record;
+        constructor(callback: ResizeObserverCallback) {
+          this.record = { callback, targets: [] as Element[], disconnected: false };
+          observers.push(this.record);
+        }
+        observe(element: Element) { this.record.targets.push(element); }
+        disconnect() { this.record.disconnected = true; }
+      });
+      const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.hasAttribute('data-group-content')) {
+          const host = this.closest('[data-group-id]')!.parentElement!;
+          return new DOMRect(0, headerHeight, parseFloat(host.style.width) || 0, Math.max(0, (parseFloat(host.style.height) || 0) - headerHeight));
+        }
+        return new DOMRect(0, 0, width, height);
+      });
+      restoreRects = () => rectSpy.mockRestore();
+    });
+
+    afterEach(() => restoreRects());
+
+    it('updates the pane and terminal bounds before a resize observation returns', async () => {
+      const view = render(<StableTerminalGrid />);
+      await waitFor(() => expect(view.container.querySelector('[data-mock-pty="t1"]')).not.toBeNull());
+      const paneHost = view.container.querySelector<HTMLElement>('[data-group-id="1"]')!.parentElement!;
+      const terminalHost = view.container.querySelector<HTMLElement>('[data-terminal-tab-surface="t1"]')!.parentElement!;
+      const observer = observers.find((record) => !record.disconnected
+        && record.targets.some((target) => target.hasAttribute('data-terminal-group-slot')))!;
+      expect(terminalHost.style.width).toBe('800px');
+
+      for (const size of [[1000, 700], [640, 480], [1200, 800]]) {
+        act(() => {
+          [width, height] = size;
+          observer.callback([], {} as ResizeObserver);
+          // Assert inside the delivery: flushing at the end of act would hide a stale paint.
+          expect(paneHost.style.width).toBe(`${width}px`);
+          expect(paneHost.style.height).toBe(`${height}px`);
+          expect(terminalHost.style.width).toBe(`${width}px`);
+          expect(terminalHost.style.height).toBe(`${height - headerHeight}px`);
+        });
+      }
+      expect(ptyLifecycle.mounts).toBe(1);
+      expect(ptyLifecycle.unmounts).toBe(0);
+    });
+
+    it('updates terminal bounds before a content-only resize observation returns', async () => {
+      const view = render(<StableTerminalGrid />);
+      await waitFor(() => expect(view.container.querySelector('[data-mock-pty="t1"]')).not.toBeNull());
+      const terminalHost = view.container.querySelector<HTMLElement>('[data-terminal-tab-surface="t1"]')!.parentElement!;
+      const observer = observers.find((record) => !record.disconnected
+        && record.targets.some((target) => target.hasAttribute('data-group-content')))!;
+      expect(terminalHost.style.height).toBe('560px');
+
+      act(() => {
+        headerHeight = 80;
+        observer.callback([], {} as ResizeObserver);
+        expect(terminalHost.style.height).toBe('520px');
+        expect(terminalHost.style.transform).toBe('translate(0px, 80px)');
+      });
+    });
   });
 });

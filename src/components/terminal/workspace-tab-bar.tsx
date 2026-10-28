@@ -1,4 +1,3 @@
-import { useCallback, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowDown,
@@ -20,15 +19,6 @@ import { getTabDisplayName } from '../../lib/terminal-group-utils';
 import { tabTooltip } from '../../lib/session-chrome';
 import { useTerminalGroups } from '../../lib/terminal-group-context';
 import { useTerminalCallbacks } from '../../lib/terminal-callbacks-context';
-import {
-  clearTabDrag,
-  findContentDropTargetAt,
-  getActiveDrag,
-  getContentDropHover,
-  setActiveDrag,
-  setContentDropHover,
-} from '../../lib/tab-drag-state';
-import { getZoneFromPosition, isSplitDirection } from './drop-zone-overlay';
 import { Button } from '../ui/button';
 import { StatusDot } from '../ui/status-dot';
 import {
@@ -43,65 +33,7 @@ import {
 } from '../ui/context-menu';
 import { NewTabMenu } from './new-tab-menu';
 import { SplitSessionLabels } from './group-tab-bar';
-
-function useSplitDrag(
-  session: { groupId: string; tabId: string; name: string } | null,
-  onSplit: (direction: SplitDirection, targetGroupId: string) => void,
-) {
-  return useCallback((event: ReactPointerEvent) => {
-    if (!session || event.button !== 0) return;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dragging = false;
-
-    const onMove = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      if (!dragging) {
-        if (Math.abs(dx) + Math.abs(dy) < 5) return;
-        dragging = true;
-        ev.preventDefault();
-        setActiveDrag({ tabId: session.tabId, sourceGroupId: session.groupId, tabName: session.name });
-        document.body.style.userSelect = 'none';
-      }
-      const contentTarget = findContentDropTargetAt(ev.clientX, ev.clientY);
-      if (!contentTarget) {
-        setContentDropHover(null);
-        return;
-      }
-      const rect = contentTarget.element.getBoundingClientRect();
-      setContentDropHover({
-        groupId: contentTarget.groupId,
-        zone: getZoneFromPosition(ev.clientX, ev.clientY, rect),
-      });
-    };
-
-    const onUp = (ev: PointerEvent | FocusEvent) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-      window.removeEventListener('blur', onUp);
-      document.body.style.userSelect = '';
-      if (dragging && getActiveDrag()) {
-        const clientX = 'clientX' in ev ? ev.clientX : 0;
-        const clientY = 'clientY' in ev ? ev.clientY : 0;
-        const hover = getContentDropHover() ?? (() => {
-          const contentTarget = clientX || clientY ? findContentDropTargetAt(clientX, clientY) : null;
-          if (!contentTarget) return null;
-          const rect = contentTarget.element.getBoundingClientRect();
-          return { groupId: contentTarget.groupId, zone: getZoneFromPosition(clientX, clientY, rect) };
-        })();
-        if (hover && isSplitDirection(hover.zone)) onSplit(hover.zone, hover.groupId);
-      }
-      clearTabDrag();
-    };
-
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
-    window.addEventListener('blur', onUp);
-  }, [onSplit, session]);
-}
+import { useWorkspaceTabDrag } from './use-workspace-tab-drag';
 
 function tabIcon(tab: TerminalTab) {
   if (tab.tabType === 'file-browser') {
@@ -121,6 +53,7 @@ export function WorkspaceTabBar() {
   const { state, dispatch } = useTerminalGroups();
   const { onDuplicateTab, onNewTab, onNewLocalTab, onOpenSavedConnection, onReconnectTab, onRequestCloseTabs } = useTerminalCallbacks();
   const pages = livePages(state);
+  const { tabBarRef, insertionLeft, onPointerDownCapture, onClickCapture } = useWorkspaceTabDrag();
   const activePageId = state.activePageId && pages.some((page) => page.id === state.activePageId)
     ? state.activePageId
     : pages[0]?.id;
@@ -145,6 +78,9 @@ export function WorkspaceTabBar() {
       className="terminal-tab-strip flex h-full w-full min-w-0 items-center px-1"
     >
       <div
+        ref={tabBarRef}
+        onPointerDownCapture={onPointerDownCapture}
+        onClickCapture={onClickCapture}
         data-workspace-tab-bar
         data-tauri-drag-region="true"
         className="relative flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto"
@@ -166,6 +102,14 @@ export function WorkspaceTabBar() {
             }}
           />
         ))}
+        {insertionLeft !== null && (
+          <div
+            data-workspace-tab-insertion
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-1 z-10 w-0.5 bg-primary"
+            style={{ left: insertionLeft, transform: 'translateX(-50%)' }}
+          />
+        )}
       </div>
       <div data-tauri-drag-region="false" className="shrink-0">
         <NewTabMenu
@@ -205,13 +149,6 @@ function PageSegment({
   const owner = sessions.find((session) => session.groupId === page.activeGroupId) ?? null;
   const summary = !owner && sessions.length > 0;
   const split = sessions.length > 1;
-  const onPointerDown = useSplitDrag(
-    owner ? { groupId: owner.groupId, tabId: owner.tab.id, name: owner.tab.name } : null,
-    (direction, targetGroupId) => {
-      if (!owner) return;
-      onMoveToNewGroup(owner.groupId, owner.tab.id, direction, targetGroupId);
-    },
-  );
   if (sessions.length === 0) return null;
 
   const tone = active
@@ -223,6 +160,7 @@ function PageSegment({
       <div
         data-page-id={page.id}
         data-split-summary
+        data-tauri-drag-region="false"
         className={`terminal-tab relative box-border flex h-7 min-w-0 flex-1 basis-0 items-stretch overflow-hidden rounded-[var(--radius-control)] border border-transparent font-medium text-foreground ${active ? 'titlebar-tab-active' : ''}`}
         onClick={onActivate}
       >
@@ -240,7 +178,6 @@ function PageSegment({
       title={sessions.map((session) => getTabDisplayName(session.tab, session.tabs)).join(' · ')}
       className={`terminal-tab group relative box-border flex h-7 min-w-0 cursor-pointer select-none items-stretch overflow-hidden rounded-[var(--radius-control)] border border-transparent ${tone}`}
       style={{ flexGrow: sessions.length, flexBasis: 0, minWidth: `${sessions.length * 4.5}rem` }}
-      onPointerDown={onPointerDown}
       onClick={onActivate}
     >
       <SplitSessionLabels
@@ -259,7 +196,6 @@ function PageSegment({
       data-tauri-drag-region="false"
       title={tabTooltip(primary.tab, getTabDisplayName(primary.tab, primary.tabs), t(`statusBar.${primary.tab.connectionStatus}`))}
       className={`terminal-tab group relative box-border flex h-7 min-w-[4.5rem] flex-1 basis-0 cursor-pointer select-none items-center justify-center gap-1.5 overflow-hidden rounded-[var(--radius-control)] border border-transparent px-2.5 ${tone}`}
-      onPointerDown={onPointerDown}
       onClick={onActivate}
     >
       <OwnerChrome tab={primary.tab} tabs={primary.tabs} onClose={() => onClose(primary.groupId, primary.tab.id)} />
@@ -353,6 +289,7 @@ function OwnerChrome({ tab, tabs, onClose }: { tab: TerminalTab; tabs: TerminalT
         data-tauri-drag-region="false"
         className="absolute inset-0 size-3.5 shrink-0 rounded-sm p-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
         aria-label={t('menuBar.closeTabNamed', { name: getTabDisplayName(tab, tabs) })}
+        data-workspace-drag-exclude
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
