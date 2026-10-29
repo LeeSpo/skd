@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-29
+
+### Added
+
+- **Workspace Tab Drag-and-Drop Reordering**: Added pointer-based drag-and-drop reordering for workspace tabs, allowing users to intuitively organize active terminal sessions across the tab bar.
+- **FTP and SFTP Connection Progress & Cancellation**: Implemented granular connection lifecycle tracking with real-time stage updates (`Connecting`, `Authenticating`, `Listing`, `Ready`), along with backend `CancellationToken` support that enables users to immediately cancel in-flight or unresponsive remote connections.
+- **Connection Manager Drag-and-Drop Organization**: Added smooth drag-and-drop reordering for saved connection rows and folders in the connection manager sidebar, complete with drop placement indicators, container edge auto-scrolling, and `Escape` key cancellation.
+
+### Changed
+
+- **Lightweight System Monitor & Bundle Optimization**: Replaced the heavy `recharts` library with custom SVG trend charts (`MonitorTrend`), significantly reducing application bundle size and resource overhead while delivering smoother real-time metric rendering across all system monitor panels.
+- **Synchronous Terminal Resize Measurement**: Re-architected `PtyTerminal` and `GridRenderer` layout measurements to synchronously compute dimensions across tab switches and window resizing, eliminating layout flickers and buffer reflow latency.
+- **Decoupled File Connection Management**: Extracted file transfer connection lifecycle and diagnostic state management from `App.tsx` into a dedicated `useFileConnections` hook, improving codebase modularity and testability.
+
+
 ## [1.1.0] - 2026-10-08
 
 ### Added
