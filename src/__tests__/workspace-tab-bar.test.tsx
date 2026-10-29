@@ -134,8 +134,8 @@ afterEach(() => {
 
 describe('WorkspaceTabBar drag ordering', () => {
   it.each([
-    ['1', 50, 290, ['2', '3', '1'], '300px'],
-    ['3', 250, 10, ['3', '1', '2'], '0px'],
+    ['1', 50, 290, ['2', '3', '1'], '299px'],
+    ['3', 250, 10, ['3', '1', '2'], '1px'],
     ['1', 50, 210, ['2', '1', '3'], '200px'],
   ] as const)('reorders page %s with an insertion marker', (id, start, end, expected, markerLeft) => {
     const { bar } = renderWorkspace();
@@ -305,7 +305,7 @@ describe('WorkspaceTabBar drag ordering', () => {
     move(right ? 215 : 5);
     for (let index = 0; index < 10; index++) tick();
     expect(bar.scrollLeft).toBe(right ? 80 : 0);
-    expect(bar.querySelector<HTMLElement>('[data-workspace-tab-insertion]')?.style.left).toBe(right ? '300px' : '0px');
+    expect(bar.querySelector<HTMLElement>('[data-workspace-tab-insertion]')?.style.left).toBe(right ? '299px' : '1px');
     release(right ? 215 : 5);
     expect(pageIds(bar)).toEqual(right ? ['2', '3', '1'] : ['3', '1', '2']);
     expect(frames.size).toBe(0);

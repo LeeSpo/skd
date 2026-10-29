@@ -21,10 +21,14 @@ function pageInsertionAt(container: HTMLElement, clientX: number) {
     const rect = element.getBoundingClientRect();
     const before = clientX < rect.left + rect.width / 2;
     if (before || index === elements.length - 1) {
+      // The centered 2px marker must stay inside the first and last page edges.
+      let markerEdge = before ? rect.left : rect.right;
+      if (before && index === 0) markerEdge += 1;
+      else if (!before && index === elements.length - 1) markerEdge -= 1;
       return {
         targetPageId: element.dataset.pageId!,
         placement: before ? 'before' as const : 'after' as const,
-        left: (before ? rect.left : rect.right) - container.getBoundingClientRect().left + container.scrollLeft,
+        left: markerEdge - container.getBoundingClientRect().left + container.scrollLeft,
       };
     }
   }

@@ -162,6 +162,17 @@ html[data-window-kind="main"] body {
   border-bottom-color: var(--chrome-hairline);
 }
 
+/* Keep tab strips scrollable without exposing browser scrollbar chrome. */
+.terminal-tab-strip > :is([data-workspace-tab-bar], [data-tab-bar-group]) {
+  scrollbar-width: none;
+}
+
+.terminal-tab-strip > :is([data-workspace-tab-bar], [data-tab-bar-group])::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .terminal-tab:has([aria-pressed="true"]) {
   box-shadow: var(--control-shadow), inset 0 1px 0 var(--control-highlight);
 }
