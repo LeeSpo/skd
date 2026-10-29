@@ -9,6 +9,10 @@ export type ConnectStage =
   | 'verifyingHostKey'
   | 'authenticating'
   | 'requestingPty'
+  | 'openingSftp'
+  | 'ftpGreeting'
+  | 'tlsHandshake'
+  | 'settingTransferMode'
   | 'connected';
 
 export type ConnectErrorKind =
@@ -46,6 +50,20 @@ export const SSH_CONNECT_STAGES: ConnectStage[] = [
 /** Backward-compatible name used by the connection dialog. */
 export const DIALOG_CONNECT_STAGES = SSH_CONNECT_STAGES;
 
+export function getConnectStages(protocol = 'SSH', ftpsEnabled = false): ConnectStage[] {
+  if (protocol === 'SFTP') {
+    return [...SSH_CONNECT_STAGES.slice(0, 5), 'openingSftp', 'connected'];
+  }
+  if (protocol === 'FTP') {
+    return [
+      'resolvingDns', 'establishingTcp', 'ftpGreeting',
+      ...(ftpsEnabled ? ['tlsHandshake' as const] : []),
+      'authenticating', 'settingTransferMode', 'connected',
+    ];
+  }
+  return SSH_CONNECT_STAGES;
+}
+
 export interface ConnectProgressEvent {
   connectionId: string;
   stage: ConnectStage;
@@ -73,7 +91,7 @@ export function errorKindI18nKey(kind: string): string {
 
 /** Map a stage list + current/failed stage into UI statuses. */
 export function computeStageStatuses(
-  stages: ConnectStage[],
+  stages: readonly ConnectStage[],
   currentStage: ConnectStage | null,
   failedStage: string | null | undefined,
 ): StageUiStatus[] {
@@ -168,6 +186,10 @@ export function isConnectStage(value: unknown): value is ConnectStage {
       'verifyingHostKey',
       'authenticating',
       'requestingPty',
+      'openingSftp',
+      'ftpGreeting',
+      'tlsHandshake',
+      'settingTransferMode',
       'connected',
     ].includes(value)
   );

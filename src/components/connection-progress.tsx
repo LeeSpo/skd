@@ -5,6 +5,7 @@ import {
   computeStageStatuses,
   errorKindI18nKey,
   SSH_CONNECT_STAGES,
+  type ConnectStage,
   stageI18nKey,
 } from '@/lib/connection-diagnostics';
 import { cn } from '@/lib/utils';
@@ -13,15 +14,18 @@ import { Button } from './ui/button';
 interface ConnectionProgressSegmentsProps {
   attempt: ConnectionAttemptState | null | undefined;
   className?: string;
+  stages?: readonly ConnectStage[];
 }
 
 export function ConnectionProgressSegments({
   attempt,
   className,
+  stages = SSH_CONNECT_STAGES,
 }: ConnectionProgressSegmentsProps) {
   const { t } = useTranslation();
+  const displayedStages = attempt?.stages ?? stages;
   const statuses = computeStageStatuses(
-    SSH_CONNECT_STAGES,
+    displayedStages,
     attempt?.currentStage ?? null,
     attempt?.failedStage,
   );
@@ -34,10 +38,10 @@ export function ConnectionProgressSegments({
         role="progressbar"
         aria-label={t('connectionDiagnostics.progressTitle')}
         aria-valuemin={0}
-        aria-valuemax={SSH_CONNECT_STAGES.length}
+        aria-valuemax={displayedStages.length}
         aria-valuenow={statuses.filter((status) => status === 'done').length}
       >
-        {SSH_CONNECT_STAGES.map((stage, index) => {
+        {displayedStages.map((stage, index) => {
           const status = statuses[index];
           return (
             <div
@@ -57,14 +61,16 @@ export function ConnectionProgressSegments({
         })}
       </div>
       <div className="flex min-h-5 items-center gap-2 text-xs text-muted-foreground">
-        {attempt?.status === 'connecting' && displayStage && (
+        {(!attempt || attempt.status === 'connecting') && (
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
         )}
         {attempt?.status === 'failed' && (
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
         )}
         <span className={cn(attempt?.status === 'failed' && 'text-destructive')}>
-          {displayStage
+          {attempt?.status === 'awaitingHostKey'
+            ? t('connectionDiagnostics.awaitingHostKey')
+            : displayStage
             ? t(stageI18nKey(displayStage) as 'connectionDiagnostics.stage.resolvingDns')
             : t('connectionDiagnostics.preparing')}
         </span>
@@ -88,9 +94,10 @@ interface ConnectionFailureViewProps {
   attempt: ConnectionAttemptState;
   onRetry: () => void;
   onEdit: () => void;
+  allowEdit?: boolean;
 }
 
-export function ConnectionFailureView({ attempt, onRetry, onEdit }: ConnectionFailureViewProps) {
+export function ConnectionFailureView({ attempt, onRetry, onEdit, allowEdit = false }: ConnectionFailureViewProps) {
   const { t } = useTranslation();
   const errorKind = attempt.errorKind ?? 'unknown';
   const titleKey = errorKindI18nKey(errorKind);
@@ -99,7 +106,7 @@ export function ConnectionFailureView({ attempt, onRetry, onEdit }: ConnectionFa
     ? t('connectionDiagnostics.error.unknown')
     : translatedTitle;
   const canRetry = errorKind !== 'hostKeyMismatch';
-  const canEdit = EDITABLE_ERROR_KINDS.has(errorKind) || errorKind === 'hostKeyMismatch';
+  const canEdit = allowEdit || EDITABLE_ERROR_KINDS.has(errorKind) || errorKind === 'hostKeyMismatch';
 
   return (
     <div className="flex h-full w-full items-center justify-center bg-muted/20 p-6">

@@ -597,23 +597,35 @@ impl ConnectionManager {
             _ = cancel_token.cancelled() => Err(ConnectDiagnosticError::cancelled().into()),
         };
 
-        self.clear_pending_connection(&connection_id).await;
-
-        let client = connect_result?;
-        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
-
+        let mut client = match connect_result {
+            Ok(client) => client,
+            Err(error) => {
+                self.clear_pending_connection(&connection_id).await;
+                return Err(error);
+            }
+        };
         let mut sftp_connections = self.sftp_connections.write().await;
+        if cancel_token.is_cancelled() {
+            drop(sftp_connections);
+            self.clear_pending_connection(&connection_id).await;
+            let _ = client.disconnect().await;
+            return Err(ConnectDiagnosticError::cancelled().into());
+        }
         let session = client
             .session_handle()
             .ok_or_else(|| anyhow!("SFTP session missing"))?;
         let old = sftp_connections.insert(connection_id.clone(), client);
         self.transfers.bind(connection_id.clone(), session);
+        self.connection_types
+            .write()
+            .await
+            .insert(connection_id.clone(), "SFTP".to_string());
         drop(sftp_connections);
         if let Some(mut old) = old {
             let _ = old.disconnect().await;
         }
-        let mut types = self.connection_types.write().await;
-        types.insert(connection_id, "SFTP".to_string());
+        self.clear_pending_connection(&connection_id).await;
+        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
         Ok(())
     }
 
@@ -622,6 +634,7 @@ impl ConnectionManager {
     }
 
     pub async fn close_sftp_connection(&self, connection_id: &str) -> Result<()> {
+        self.cancel_pending_connection(connection_id).await;
         let mut sftp_connections = self.sftp_connections.write().await;
         let client = sftp_connections.remove(connection_id);
         self.transfers.unbind(connection_id);
@@ -640,12 +653,42 @@ impl ConnectionManager {
         &self,
         connection_id: String,
         config: crate::ftp_client::FtpConfig,
+        app: Option<AppHandle>,
     ) -> Result<()> {
-        let client = FtpClient::connect(&config).await?;
+        let cancel_token = self.register_pending_connection(&connection_id).await;
+        let progress_id = connection_id.clone();
+        let app_for_progress = app.clone();
+        let connect_result = tokio::select! {
+            res = FtpClient::connect_with_progress(&config, move |stage| {
+                emit_connect_progress(&app_for_progress, &progress_id, stage);
+            }) => res,
+            _ = cancel_token.cancelled() => Err(ConnectDiagnosticError::cancelled().into()),
+        };
+        let mut client = match connect_result {
+            Ok(client) => client,
+            Err(error) => {
+                self.clear_pending_connection(&connection_id).await;
+                return Err(error);
+            }
+        };
         let mut ftp_connections = self.ftp_connections.write().await;
-        ftp_connections.insert(connection_id.clone(), client);
-        let mut types = self.connection_types.write().await;
-        types.insert(connection_id, "FTP".to_string());
+        if cancel_token.is_cancelled() {
+            drop(ftp_connections);
+            self.clear_pending_connection(&connection_id).await;
+            let _ = client.disconnect().await;
+            return Err(ConnectDiagnosticError::cancelled().into());
+        }
+        let old = ftp_connections.insert(connection_id.clone(), client);
+        self.connection_types
+            .write()
+            .await
+            .insert(connection_id.clone(), "FTP".to_string());
+        drop(ftp_connections);
+        if let Some(mut old) = old {
+            let _ = old.disconnect().await;
+        }
+        self.clear_pending_connection(&connection_id).await;
+        emit_connect_progress(&app, &connection_id, ConnectStage::Connected);
         Ok(())
     }
 
@@ -654,8 +697,11 @@ impl ConnectionManager {
     }
 
     pub async fn close_ftp_connection(&self, connection_id: &str) -> Result<()> {
+        self.cancel_pending_connection(connection_id).await;
         let mut ftp_connections = self.ftp_connections.write().await;
-        if let Some(mut client) = ftp_connections.remove(connection_id) {
+        let client = ftp_connections.remove(connection_id);
+        drop(ftp_connections);
+        if let Some(mut client) = client {
             client.disconnect().await?;
         }
         let mut types = self.connection_types.write().await;
@@ -721,6 +767,61 @@ mod tests {
         let mgr = ConnectionManager::new();
         let cancelled = mgr.cancel_pending_connection("ghost").await;
         assert!(!cancelled);
+    }
+
+    #[tokio::test]
+    async fn closing_pending_ftp_cancels_greeting_and_leaves_no_session() {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (accepted_tx, accepted_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            accepted_tx.send(()).unwrap();
+            let mut byte = [0u8; 1];
+            assert_eq!(socket.read(&mut byte).await.unwrap(), 0);
+        });
+        let manager = Arc::new(ConnectionManager::new());
+        let connecting = manager.clone();
+        let operation = tokio::spawn(async move {
+            connecting
+                .create_ftp_connection(
+                    "pending-ftp".into(),
+                    crate::ftp_client::FtpConfig {
+                        host: "127.0.0.1".into(),
+                        port,
+                        username: "test".into(),
+                        password: "test".into(),
+                        anonymous: false,
+                        ftps_enabled: false,
+                    },
+                    None,
+                )
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), accepted_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        manager.close_ftp_connection("pending-ftp").await.unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(5), operation)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(
+            crate::connection_diagnostics::diagnostic_from_anyhow(&error)
+                .unwrap()
+                .kind,
+            crate::connection_diagnostics::ConnectErrorKind::Cancelled
+        );
+        assert!(manager.pending_connections.read().await.is_empty());
+        assert!(manager.ftp_connections.read().await.is_empty());
+        assert!(manager.get_connection_type("pending-ftp").await.is_none());
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]

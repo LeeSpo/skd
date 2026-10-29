@@ -10,7 +10,12 @@ import type {
   ConnectDiagnosticResponse,
   ConnectStage,
 } from './connection-diagnostics';
-import { isConnectStage } from './connection-diagnostics';
+import { getConnectStages, isConnectStage } from './connection-diagnostics';
+
+export interface ConnectionAttemptOptions {
+  protocol?: string;
+  ftpsEnabled?: boolean;
+}
 
 export type ConnectionAttemptStatus =
   | 'connecting'
@@ -19,6 +24,7 @@ export type ConnectionAttemptStatus =
   | 'connected';
 
 export interface ConnectionAttemptState {
+  stages?: readonly ConnectStage[];
   status: ConnectionAttemptStatus;
   currentStage: ConnectStage | null;
   failedStage: ConnectStage | null;
@@ -29,7 +35,7 @@ export interface ConnectionAttemptState {
 type AttemptMap = Record<string, ConnectionAttemptState>;
 
 type AttemptAction =
-  | { type: 'BEGIN'; connectionId: string }
+  | { type: 'BEGIN'; connectionId: string; options?: ConnectionAttemptOptions }
   | { type: 'PROGRESS'; connectionId: string; stage: ConnectStage }
   | { type: 'AWAIT_HOST_KEY'; connectionId: string }
   | { type: 'FAIL'; connectionId: string; response: ConnectDiagnosticResponse }
@@ -46,7 +52,13 @@ const initialAttempt: ConnectionAttemptState = {
 export function connectionAttemptReducer(state: AttemptMap, action: AttemptAction): AttemptMap {
   switch (action.type) {
     case 'BEGIN':
-      return { ...state, [action.connectionId]: initialAttempt };
+      return {
+        ...state,
+        [action.connectionId]: {
+          ...initialAttempt,
+          stages: getConnectStages(action.options?.protocol, action.options?.ftpsEnabled),
+        },
+      };
     case 'PROGRESS':
       return {
         ...state,
@@ -95,7 +107,7 @@ export function connectionAttemptReducer(state: AttemptMap, action: AttemptActio
 
 interface ConnectionAttemptContextValue {
   attempts: AttemptMap;
-  beginAttempt: (connectionId: string) => void;
+  beginAttempt: (connectionId: string, options?: ConnectionAttemptOptions) => void;
   reportStage: (connectionId: string, stage: ConnectStage) => void;
   awaitHostKey: (connectionId: string) => void;
   failAttempt: (connectionId: string, response: ConnectDiagnosticResponse) => void;
@@ -116,8 +128,8 @@ const ConnectionAttemptContext = createContext<ConnectionAttemptContextValue>(de
 
 export function ConnectionAttemptProvider({ children }: { children: ReactNode }) {
   const [attempts, dispatch] = useReducer(connectionAttemptReducer, {});
-  const beginAttempt = useCallback((connectionId: string) => {
-    dispatch({ type: 'BEGIN', connectionId });
+  const beginAttempt = useCallback((connectionId: string, options?: ConnectionAttemptOptions) => {
+    dispatch({ type: 'BEGIN', connectionId, options });
   }, []);
   const reportStage = useCallback((connectionId: string, stage: ConnectStage) => {
     dispatch({ type: 'PROGRESS', connectionId, stage });

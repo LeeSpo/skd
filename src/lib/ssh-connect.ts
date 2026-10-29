@@ -34,6 +34,7 @@ export interface ConnectResponse {
 }
 
 export type HostKeyTrustRequest = {
+  connectionId?: string;
   payload: NonNullable<ReturnType<typeof parseUnknownHostKeyError>>;
   retry: () => Promise<ConnectResponse>;
 };
@@ -109,30 +110,77 @@ export async function sshConnectWithHostKeyTrust(
 export async function sftpConnectWithHostKeyTrust(
   params: SftpConnectParams,
   onTrustRequired: (request: HostKeyTrustRequest) => void,
+  onStage?: ConnectProgressHandler,
+  onAttemptResult?: (response: ConnectResponse) => void,
+  signal?: AbortSignal,
 ): Promise<ConnectResponse> {
-  const attempt = async (): Promise<ConnectResponse> => invoke<ConnectResponse>('sftp_connect', {
-    request: {
+  const attempt = async (): Promise<ConnectResponse> => {
+    const response = await invokeFileConnectWithProgress('sftp_connect', {
       ...params,
       host_key_verification: isHostKeyVerificationEnabled(),
       tcp_timeout_secs: loadConnectionTimeoutSecs(),
       keepalive_interval_secs: loadKeepAliveIntervalSecs(),
-    },
-  });
+    }, onStage, signal);
+    onAttemptResult?.(response);
+    const payload = response.error ? parseUnknownHostKeyError(response.error) : null;
+    if (!response.success && payload && !signal?.aborted) {
+      onTrustRequired({ connectionId: params.connection_id, payload, retry: attempt });
+      return {
+        ...response,
+        pendingHostKeyTrust: true,
+        errorKind: response.errorKind ?? 'hostKeyUnknown',
+      };
+    }
+    return response;
+  };
+  return attempt();
+}
 
-  const result = await attempt();
-  if (result.success) {
-    return result;
-  }
+export const cancelledConnectResponse = (): ConnectResponse => ({
+  success: false,
+  errorKind: 'cancelled',
+});
 
-  const payload = result.error ? parseUnknownHostKeyError(result.error) : null;
-  if (payload) {
-    onTrustRequired({ payload, retry: attempt });
-    return {
-      ...result,
-      pendingHostKeyTrust: true,
-      errorKind: result.errorKind ?? 'hostKeyUnknown',
+/** File connection commands share the transport progress channel with SSH. */
+export async function invokeFileConnectWithProgress(
+  command: 'sftp_connect' | 'ftp_connect',
+  request: { connection_id: string } & Record<string, unknown>,
+  onStage?: ConnectProgressHandler,
+  signal?: AbortSignal,
+): Promise<ConnectResponse> {
+  let unlisten: UnlistenFn | undefined;
+  const stopListening = () => { unlisten?.(); unlisten = undefined; };
+  const cancel = () => {
+    stopListening();
+    void invoke('ssh_cancel_connect', { connectionId: request.connection_id }).catch(() => {});
+  };
+  try {
+    if (signal?.aborted) return cancelledConnectResponse();
+    if (onStage) {
+      unlisten = await listenConnectProgress(request.connection_id, (stage) => {
+        if (!signal?.aborted) onStage(stage);
+      });
+    }
+    if (signal?.aborted) return cancelledConnectResponse();
+    signal?.addEventListener('abort', cancel, { once: true });
+    const response = await invoke<ConnectResponse>(command, { request });
+    if (signal?.aborted) {
+      if (response.success) {
+        await invoke(command === 'sftp_connect' ? 'sftp_standalone_disconnect' : 'ftp_disconnect', {
+          connectionId: request.connection_id,
+        }).catch(() => {});
+      }
+      return cancelledConnectResponse();
+    }
+    return response;
+  } catch (error) {
+    return signal?.aborted ? cancelledConnectResponse() : {
+      success: false,
+      errorKind: 'unknown',
+      error: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+    stopListening();
   }
-
-  return result;
 }

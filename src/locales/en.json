@@ -141,8 +141,10 @@
     },
     "ftp": {
       "enableFtps": "Enable FTPS (FTP over TLS)",
-      "enableFtpsDesc": "Encrypt the FTP connection using TLS for improved security"
+      "enableFtpsDesc": "Encrypt the FTP connection using TLS for improved security",
+      "portHint": "Use your server's FTP port (usually 21). For file transfers over SSH, select SFTP and use the SSH port."
     },
+    "sshPortHint": "SSH and SFTP use your server's SSH port (usually 22).",
     "advanced": {
       "enableCompression": "Enable Compression",
       "enableCompressionDesc": "Compress data to improve performance over slow connections",
@@ -173,6 +175,8 @@
       "missingFields": "Missing Required Fields",
       "missingFieldsDesc": "Please fill in all required fields: Connection Name, Host, and Username.",
       "missingFieldsNoUsernameDesc": "Please fill in all required fields: Connection Name and Host.",
+      "hostContainsPort": "Enter the port separately",
+      "hostContainsPortDesc": "Host must contain only a hostname or IP address. Move the port number to the Port field.",
       "passwordRequired": "Password Required",
       "passwordRequiredDesc": "Please enter a password for password authentication.",
       "privateKeyRequired": "Private Key Required",
@@ -202,6 +206,10 @@
       "verifyingHostKey": "Verifying host key",
       "authenticating": "Authenticating user",
       "requestingPty": "Requesting PTY",
+      "openingSftp": "Initializing SFTP",
+      "ftpGreeting": "Waiting for FTP server greeting",
+      "tlsHandshake": "Performing TLS handshake",
+      "settingTransferMode": "Setting transfer mode",
       "connected": "Connected"
     },
     "error": {
@@ -227,8 +235,9 @@
     },
     "progressTitle": "Connection progress",
     "preparing": "Preparing connection",
+    "awaitingHostKey": "Waiting for host key confirmation",
     "connectingTo": "Connecting to {{name}}",
-    "failureDescription": "The connection stopped before the terminal became ready.",
+    "failureDescription": "The connection stopped before the session became ready.",
     "technicalDetails": "Technical details",
     "retry": "Retry",
     "editConnection": "Edit connection"

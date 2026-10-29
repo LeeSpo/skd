@@ -21,6 +21,7 @@ import { useConnectionAttempts } from '../../lib/connection-attempt-context';
 import { useTitlebarSlot } from '../../lib/titlebar-slot-context';
 
 import { ConnectionFailureView, ConnectionProgressSegments } from '../connection-progress';
+import { getConnectStages } from '@/lib/connection-diagnostics';
 
 interface TerminalGroupViewProps {
   groupId: string;
@@ -74,22 +75,24 @@ export function TerminalTabSurface({ tab, isActive, themeKey }: TerminalTabSurfa
     [dispatch],
   );
 
-  const attempt = tab.protocol === 'SSH' ? attempts[tab.id] : undefined;
-  const showProgress = attempt
-    && attempt.status !== 'connected'
-    && attempt.status !== 'failed';
+  const isFileBrowser = tab.tabType === 'file-browser';
+  const attempt = tab.protocol === 'SSH' || isFileBrowser ? attempts[tab.id] : undefined;
+  const showProgress = (attempt && (attempt.status === 'connecting' || attempt.status === 'awaitingHostKey'))
+    || (isFileBrowser && tab.connectionStatus === 'connecting')
+    || tab.connectionStatus === 'pending';
 
   return (
     <div data-terminal-tab-surface={tab.id} className="relative h-full w-full overflow-hidden">
       {attempt?.status === 'failed' ? (
         <ConnectionFailureView
           attempt={attempt}
+          allowEdit={isFileBrowser}
           onRetry={handleReconnect}
           onEdit={() => onEditConnection?.(tab.id)}
         />
       ) : (
         <>
-          {tab.connectionStatus !== 'pending' && (
+          {tab.connectionStatus !== 'pending' && !(isFileBrowser && showProgress) && (
             <Suspense fallback={<PanelSurfaceFallback />}>
               {tab.tabType === 'file-browser' ? (
                 <FileBrowserView
@@ -127,14 +130,14 @@ export function TerminalTabSurface({ tab, isActive, themeKey }: TerminalTabSurfa
               )}
             </Suspense>
           )}
-          {(showProgress || tab.connectionStatus === 'pending') && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted/80 p-6 backdrop-blur-sm">
+          {showProgress && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background p-6">
               <div className="w-full max-w-xl space-y-3 rounded-lg border bg-background p-5 shadow-sm">
                 <div className="text-sm font-medium">
                   {t('connectionDiagnostics.connectingTo', { name: tab.name })}
                 </div>
-                {attempt ? (
-                  <ConnectionProgressSegments attempt={attempt} />
+                {attempt || isFileBrowser ? (
+                  <ConnectionProgressSegments attempt={attempt} stages={getConnectStages(tab.protocol)} />
                 ) : (
                   <div className="animate-pulse text-sm text-muted-foreground">
                     {t('terminalGroup.waitingForConnection')}

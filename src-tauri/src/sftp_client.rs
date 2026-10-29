@@ -8,7 +8,8 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::connection_diagnostics::{
-    ConnectStage, DEFAULT_KEEPALIVE_INTERVAL_SECS, DEFAULT_TCP_TIMEOUT_SECS,
+    ConnectDiagnosticError, ConnectErrorKind, ConnectStage, DEFAULT_KEEPALIVE_INTERVAL_SECS,
+    DEFAULT_TCP_TIMEOUT_SECS,
 };
 use crate::ssh::{establish_authenticated_session, AuthMethod, SshConfig, SshHandler};
 
@@ -105,10 +106,11 @@ impl StandaloneSftpClient {
             keepalive_interval_secs: config.keepalive_interval_secs,
         };
 
+        let on_stage = Arc::new(on_stage);
         let ssh_session = establish_authenticated_session(
             &ssh_config,
             Duration::from_secs(config.tcp_timeout_secs),
-            Arc::new(on_stage),
+            on_stage.clone(),
             None,
         )
         .await?;
@@ -116,9 +118,27 @@ impl StandaloneSftpClient {
         let session = Arc::new(ssh_session);
 
         // Open an SFTP subsystem channel (no PTY)
-        let channel = session.channel_open_session().await?;
-        channel.request_subsystem(true, "sftp").await?;
-        let sftp = SftpSession::new(channel.into_stream()).await?;
+        on_stage(ConnectStage::OpeningSftp);
+        let sftp_result = async {
+            let channel = session.channel_open_session().await?;
+            channel.request_subsystem(true, "sftp").await?;
+            Ok::<_, anyhow::Error>(SftpSession::new(channel.into_stream()).await?)
+        }
+        .await;
+        let sftp = match sftp_result {
+            Ok(sftp) => sftp,
+            Err(error) => {
+                let _ = session
+                    .disconnect(Disconnect::ByApplication, "", "English")
+                    .await;
+                return Err(ConnectDiagnosticError::new(
+                    ConnectErrorKind::Unknown,
+                    ConnectStage::OpeningSftp,
+                    format!("Failed to initialize SFTP: {error}"),
+                )
+                .into());
+            }
+        };
 
         Ok(Self {
             session: Some(session),
@@ -429,6 +449,77 @@ fn format_permissions(mode: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn rejected_sftp_channel_reports_initialization_stage() {
+        #[derive(Clone)]
+        struct RejectChannel;
+        impl russh::server::Handler for RejectChannel {
+            type Error = anyhow::Error;
+            async fn auth_password(&mut self, _: &str, _: &str) -> Result<russh::server::Auth> {
+                Ok(russh::server::Auth::Accept)
+            }
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server_config = russh::server::Config::default();
+        server_config.keys.push(
+            russh::keys::PrivateKey::random(
+                &mut russh::keys::key::safe_rng(),
+                russh::keys::Algorithm::Ed25519,
+            )
+            .unwrap(),
+        );
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let running = russh::server::run_stream(Arc::new(server_config), socket, RejectChannel)
+                .await
+                .unwrap();
+            let _ = running.await;
+        });
+        let stages = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed = stages.clone();
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            StandaloneSftpClient::connect_with_progress(
+                &SftpConfig {
+                    host: address.ip().to_string(),
+                    port: address.port(),
+                    username: "test".into(),
+                    auth_method: SftpAuthMethod::Password {
+                        password: "test".into(),
+                    },
+                    host_key_verification: false,
+                    tcp_timeout_secs: 5,
+                    keepalive_interval_secs: 60,
+                },
+                move |stage| {
+                    observed.lock().unwrap().push(stage);
+                },
+            ),
+        )
+        .await
+        .unwrap();
+        let error = result.err().unwrap();
+        assert_eq!(
+            crate::connection_diagnostics::diagnostic_from_anyhow(&error)
+                .unwrap()
+                .stage,
+            ConnectStage::OpeningSftp
+        );
+        assert_eq!(
+            stages.lock().unwrap().last(),
+            Some(&ConnectStage::OpeningSftp)
+        );
+        assert!(!stages
+            .lock()
+            .unwrap()
+            .contains(&ConnectStage::RequestingPty));
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 
     // ---- Helper function tests ----
 

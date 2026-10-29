@@ -367,6 +367,15 @@ export function ConnectionDialog({
       return;
     }
 
+    // Keep host:port input out of both saved profiles and connection requests.
+    // Unbracketed IPv6 addresses contain multiple colons and remain valid here.
+    if (/^(?:[^:]+|\[[^\]]+\]):\d+$/.test(config.host.trim())) {
+      toast.error(t('connectionDialog.toast.hostContainsPort'), {
+        description: t('connectionDialog.toast.hostContainsPortDesc'),
+      });
+      return;
+    }
+
     setIsConnecting(true);
     setIsCancelling(false);
     cancelRequestedRef.current = false;
@@ -848,6 +857,12 @@ export function ConnectionDialog({
                     />
                   </div>
                 </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {config.protocol === 'FTP'
+                    ? t('connectionDialog.ftp.portHint')
+                    : t('connectionDialog.sshPortHint')}
+                </p>
 
                 {config.protocol === 'FTP' && (
                   <div className="flex items-center justify-between">

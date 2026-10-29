@@ -44,12 +44,12 @@ import type { ConnectionData } from './lib/connection-storage';
 import { getPrivateKeyContentForConnection } from './lib/resolve-private-key';
 import {
   sshConnectWithHostKeyTrust,
-  sftpConnectWithHostKeyTrust,
   type ConnectResponse,
   type HostKeyTrustRequest,
   type SshConnectParams,
 } from './lib/ssh-connect';
 import { formatConnectError } from './lib/connection-diagnostics';
+import { useFileConnections } from '@/lib/use-file-connections';
 import { useConnectionAttempts } from './lib/connection-attempt-context';
 import type { UnknownHostKeyPayload } from './lib/host-key-verification';
 import { startLocalForward } from './lib/port-forward';
@@ -169,6 +169,7 @@ function AppContent() {
   const defaultLocalShellOpenedRef = useRef(false);
   const hostKeyRetryRef = useRef<(() => Promise<ConnectResponse>) | null>(null);
   const hostKeyCancelRef = useRef<(() => void) | null>(null);
+  const [hostKeyConnectionId, setHostKeyConnectionId] = useState<string>();
   const [hostKeyTrustOpen, setHostKeyTrustOpen] = useState(false);
   const [hostKeyTrustPayload, setHostKeyTrustPayload] = useState<UnknownHostKeyPayload | null>(null);
   const [pendingClose, setPendingClose] = useState<{
@@ -177,11 +178,14 @@ function AppContent() {
   } | null>(null);
 
   const onHostKeyTrustRequired = useCallback((request: HostKeyTrustRequest, onCancelled?: () => void) => {
+    setHostKeyConnectionId(request.connectionId);
     setHostKeyTrustPayload(request.payload);
     hostKeyRetryRef.current = request.retry;
     hostKeyCancelRef.current = onCancelled ?? null;
     setHostKeyTrustOpen(true);
   }, []);
+
+  const { connectFileWithDiagnostics, cancelFileConnection, getFileConnectionConfig } = useFileConnections(onHostKeyTrustRequired);
 
   const connectSshWithDiagnostics = useCallback(async (
     params: SshConnectParams,
@@ -301,7 +305,13 @@ function AppContent() {
   }, [allTabs, t]);
 
   const handleTabClose = useCallback(async (tabId: string) => {
-    clearAttempt(tabId);
+    cancelFileConnection(tabId);
+    if (hostKeyConnectionId === tabId) {
+      setHostKeyTrustOpen(false);
+      hostKeyRetryRef.current = null;
+      hostKeyCancelRef.current = null;
+      setHostKeyConnectionId(undefined);
+    }
     const tab = allTabs.find((item) => item.id === tabId);
     if (!tab) return;
     try {
@@ -313,13 +323,13 @@ function AppContent() {
         if (tab.protocol === 'SFTP') {
           await invoke('sftp_standalone_disconnect', { connectionId: tabId });
         } else if (tab.protocol === 'FTP') {
-          await invoke('ftp_disconnect', { connection_id: tabId });
+          await invoke('ftp_disconnect', { connectionId: tabId });
         }
       }
     } catch {
       // PTY / file-browser cleanup may have already run
     }
-  }, [allTabs, clearAttempt]);
+  }, [allTabs, cancelFileConnection, hostKeyConnectionId]);
 
   const performClose = useCallback(async (intent: CloseIntent) => {
     if (intent.type === 'quit') {
@@ -505,6 +515,7 @@ function AppContent() {
         port: connectionMeta.port,
         username: connectionMeta.username,
         authMethod: connectionMeta.authMethod || 'password',
+        ftpsEnabled: connectionMeta.ftpsEnabled,
       });
       setConnectionDialogOpen(true);
       return;
@@ -533,43 +544,9 @@ function AppContent() {
       };
       dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
 
-      try {
-        if (isSftp) {
-          const auth = await buildAuthRequest(connectionData);
-          const sftpResult = await sftpConnectWithHostKeyTrust(
-            {
-              connection_id: sessionId,
-              host: connectionData.host,
-              port: connectionData.port || 22,
-              username: connectionData.username,
-              ...auth,
-            },
-            onHostKeyTrustRequired,
-          );
-          if (!sftpResult.success) {
-            throw new Error(sftpResult.error || 'SFTP connection failed');
-          }
-        } else {
-          await invoke('ftp_connect', {
-            request: {
-              connection_id: sessionId,
-              host: connectionData.host,
-              port: connectionData.port || 21,
-              username: connectionData.username || '',
-              password: connectionData.password || '',
-              ftps_enabled: connectionData.ftpsEnabled ?? false,
-              anonymous: connectionData.authMethod === 'anonymous',
-            }
-          });
-        }
+      await connectFileWithDiagnostics(sessionId, connectionData, () => {
         ConnectionStorageManager.updateLastConnected(connectionId);
-        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'connected' });
-      } catch (error) {
-        dispatch({ type: 'UPDATE_TAB_STATUS', tabId: sessionId, status: 'disconnected' });
-        toast.error(t('app.connectionFailed'), {
-          description: error instanceof Error ? error.message : String(error),
-        });
-      }
+      });
     } else {
       const newTab: TerminalTab = {
         id: sessionId,
@@ -615,7 +592,7 @@ function AppContent() {
         });
       }
     }
-  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, t]);
+  }, [allTabs, buildAuthRequest, connectFileWithDiagnostics, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, t]);
 
   const handleConnectionConnect = async (connection: ConnectionNode) => {
     if (connection.type !== 'connection') return;
@@ -629,29 +606,6 @@ function AppContent() {
       if (group.tabs.some(t => t.id === tabId)) {
         dispatch({ type: 'ACTIVATE_GROUP', groupId: group.id });
         dispatch({ type: 'ACTIVATE_TAB', groupId: group.id, tabId });
-        break;
-      }
-    }
-  }, [state.groups, dispatch]);
-
-  const _handleTabClose = useCallback(async (tabId: string) => {
-    // Find which group contains this tab and remove it
-    for (const group of Object.values(state.groups)) {
-      const tab = group.tabs.find(t => t.id === tabId);
-      if (tab) {
-        // Disconnect SFTP/FTP sessions when closing file-browser tabs
-        if (tab.tabType === 'file-browser') {
-          try {
-            if (tab.protocol === 'SFTP') {
-              await invoke('sftp_standalone_disconnect', { connectionId: tabId });
-            } else if (tab.protocol === 'FTP') {
-              await invoke('ftp_disconnect', { connection_id: tabId });
-            }
-          } catch {
-            // Ignore disconnect errors on tab close
-          }
-        }
-        dispatch({ type: 'REMOVE_TAB', groupId: group.id, tabId });
         break;
       }
     }
@@ -733,45 +687,11 @@ function AppContent() {
         };
         dispatch({ type: 'ADD_TAB', groupId: state.activeGroupId, tab: duplicatedTab });
 
-        try {
-          if (isSftp) {
-            const auth = await buildAuthRequest(connectionData);
-            const sftpResult = await sftpConnectWithHostKeyTrust(
-              {
-                connection_id: duplicateId,
-                host: connectionData.host,
-                port: connectionData.port || 22,
-                username: connectionData.username,
-                ...auth,
-              },
-              onHostKeyTrustRequired,
-            );
-            if (!sftpResult.success) {
-              throw new Error(sftpResult.error || 'SFTP connection failed');
-            }
-          } else {
-            await invoke('ftp_connect', {
-              request: {
-                connection_id: duplicateId,
-                host: connectionData.host,
-                port: connectionData.port || 21,
-                username: connectionData.username || '',
-                password: connectionData.password || '',
-                ftps_enabled: connectionData.ftpsEnabled ?? false,
-                anonymous: connectionData.authMethod === 'anonymous',
-              }
-            });
-          }
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: duplicateId, status: 'connected' });
+        await connectFileWithDiagnostics(duplicateId, connectionData, () => {
           toast.success(t('app.tabDuplicated'), {
             description: t('app.tabDuplicatedDesc', { name: tabToDuplicate.name }),
           });
-        } catch (error) {
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId: duplicateId, status: 'disconnected' });
-          toast.error(t('app.duplicationFailed'), {
-            description: error instanceof Error ? error.message : String(error),
-          });
-        }
+        });
       } else {
         // SSH duplicate flow
         const duplicatedTab: TerminalTab = {
@@ -814,11 +734,23 @@ function AppContent() {
         description: error instanceof Error ? error.message : t('app.duplicationErrorDesc'),
       });
     }
-  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, state.activeGroupId, t]);
+  }, [allTabs, buildAuthRequest, connectFileWithDiagnostics, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, state.activeGroupId, t]);
 
   const handleReconnect = useCallback(async (tabId: string) => {
     const tabToReconnect = allTabs.find(tab => tab.id === tabId);
     if (!tabToReconnect) return;
+
+    const fileConfig = getFileConnectionConfig(tabId);
+    if (tabToReconnect.tabType === 'file-browser' && fileConfig) {
+      await connectFileWithDiagnostics(tabId, fileConfig, () => {
+        const profileId = tabToReconnect.originalConnectionId || tabId;
+        ConnectionStorageManager.updateLastConnected(profileId);
+        toast.success(t('app.reconnected'), {
+          description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
+        });
+      });
+      return;
+    }
 
     if (tabToReconnect.protocol === 'Local') {
       try {
@@ -850,6 +782,8 @@ function AppContent() {
       toast.error(t('app.cannotReconnect'), {
         description: t('app.noCredentialsDesc'),
       });
+      const targetGroupId = Object.values(state.groups).find(group => group.tabs.some(tab => tab.id === tabId))?.id || state.activeGroupId;
+      setConnectionDialogSession({ sessionId: tabId, profileId: originalConnectionId, targetGroupId });
       setEditingConnection({
         id: originalConnectionId,
         name: connectionMeta.name,
@@ -858,6 +792,7 @@ function AppContent() {
         port: connectionMeta.port,
         username: connectionMeta.username,
         authMethod: connectionMeta.authMethod || 'password',
+        ftpsEnabled: connectionMeta.ftpsEnabled,
       });
       setConnectionDialogOpen(true);
       return;
@@ -876,52 +811,13 @@ function AppContent() {
 
     try {
       if (isFileBrowser) {
-        // SFTP/FTP reconnect
-        try {
-          if (isSftp) {
-            await invoke('sftp_standalone_disconnect', { connectionId: tabId });
-          } else {
-            await invoke('ftp_disconnect', { connection_id: tabId });
+        await connectFileWithDiagnostics(tabId, connectionData, () => {
+          if (!tabToReconnect.originalConnectionId) {
+            ConnectionStorageManager.updateLastConnected(originalConnectionId);
           }
-        } catch {
-          // Ignore errors when disconnecting
-        }
-
-        if (isSftp) {
-          const auth = await buildAuthRequest(connectionData);
-          const sftpResult = await sftpConnectWithHostKeyTrust(
-            {
-              connection_id: tabId,
-              host: connectionData.host,
-              port: connectionData.port || 22,
-              username: connectionData.username,
-              ...auth,
-            },
-            onHostKeyTrustRequired,
-          );
-          if (!sftpResult.success) {
-            throw new Error(sftpResult.error || 'SFTP connection failed');
-          }
-        } else {
-          await invoke('ftp_connect', {
-            request: {
-              connection_id: tabId,
-              host: connectionData.host,
-              port: connectionData.port || 21,
-              username: connectionData.username || '',
-              password: connectionData.password || '',
-              ftps_enabled: connectionData.ftpsEnabled ?? false,
-              anonymous: connectionData.authMethod === 'anonymous',
-            }
+          toast.success(t('app.reconnected'), {
+            description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
           });
-        }
-
-        if (!tabToReconnect.originalConnectionId) {
-          ConnectionStorageManager.updateLastConnected(originalConnectionId);
-        }
-        dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'connected' });
-        toast.success(t('app.reconnected'), {
-          description: t('app.reconnectedDesc', { name: tabToReconnect.name }),
         });
       } else {
         // SSH reconnect (existing behavior)
@@ -963,7 +859,7 @@ function AppContent() {
         description: error instanceof Error ? error.message : t('app.reconnectionErrorDesc'),
       });
     }
-  }, [allTabs, buildAuthRequest, connectSshWithDiagnostics, dispatch, onHostKeyTrustRequired, t]);
+  }, [allTabs, buildAuthRequest, connectFileWithDiagnostics, connectSshWithDiagnostics, dispatch, getFileConnectionConfig, onHostKeyTrustRequired, state.groups, state.activeGroupId, t]);
 
   // Handler: open a remote file in the Log Monitor panel
   const handleOpenInLogMonitor = useCallback((filePath: string) => {
@@ -1081,50 +977,14 @@ function AppContent() {
         }
       }
 
-      // For SFTP/FTP reconnect flow
       if (isFileBrowser) {
-        try {
-          if (isSftp) {
-            const sftpResult = await sftpConnectWithHostKeyTrust(
-              {
-                connection_id: tabId,
-                host: config.host,
-                port: config.port || 22,
-                username: config.username,
-                auth_method: config.authMethod || 'password',
-                password: config.password || '',
-                key_content: config.privateKeyContent || null,
-                passphrase: config.passphrase || null,
-              },
-              onHostKeyTrustRequired,
-            );
-            if (!sftpResult.success) {
-              throw new Error(sftpResult.error || 'SFTP connection failed');
-            }
-          } else {
-            await invoke('ftp_connect', {
-              request: {
-                connection_id: tabId,
-                host: config.host,
-                port: config.port || 21,
-                username: config.username || '',
-                password: config.password || '',
-                ftps_enabled: config.ftpsEnabled ?? false,
-                anonymous: config.authMethod === 'anonymous',
-              }
-            });
-          }
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'connected' });
-        } catch (error) {
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'disconnected' });
-          toast.error(t('app.connectionFailed'), {
-            description: error instanceof Error ? error.message : String(error),
-          });
-        }
+        return connectFileWithDiagnostics(tabId, config, () => {
+          ConnectionStorageManager.updateLastConnected(originalConnectionId || config.id || tabId);
+        });
       }
     } else {
       if (isFileBrowser) {
-        // For SFTP/FTP: connect first, then add file-browser tab
+        // Create the file-browser tab before starting the connection.
         const newTab: TerminalTab = {
           id: tabId,
           name: config.name,
@@ -1140,45 +1000,9 @@ function AppContent() {
         }
         dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
 
-        try {
-          if (isSftp) {
-            const sftpResult = await sftpConnectWithHostKeyTrust(
-              {
-                connection_id: tabId,
-                host: config.host,
-                port: config.port || 22,
-                username: config.username,
-                auth_method: config.authMethod || 'password',
-                password: config.password || '',
-                key_content: config.privateKeyContent || null,
-                passphrase: config.passphrase || null,
-              },
-              onHostKeyTrustRequired,
-            );
-            if (!sftpResult.success) {
-              throw new Error(sftpResult.error || 'SFTP connection failed');
-            }
-          } else {
-            await invoke('ftp_connect', {
-              request: {
-                connection_id: tabId,
-                host: config.host,
-                port: config.port || 21,
-                username: config.username || '',
-                password: config.password || '',
-                ftps_enabled: config.ftpsEnabled ?? false,
-                anonymous: config.authMethod === 'anonymous',
-              }
-            });
-          }
+        return connectFileWithDiagnostics(tabId, config, () => {
           ConnectionStorageManager.updateLastConnected(originalConnectionId || config.id || tabId);
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'connected' });
-        } catch (error) {
-          dispatch({ type: 'UPDATE_TAB_STATUS', tabId, status: 'disconnected' });
-          toast.error(t('app.connectionFailed'), {
-            description: error instanceof Error ? error.message : String(error),
-          });
-        }
+        });
       } else {
         // SSH: create terminal tab (existing behavior)
         const newTab: TerminalTab = {
@@ -1197,7 +1021,7 @@ function AppContent() {
         dispatch({ type: 'ADD_TAB', groupId: targetGroupId, tab: newTab });
       }
     }
-  }, [allTabs, connectionDialogSession, state.groups, state.activeGroupId, dispatch, onHostKeyTrustRequired, t]);
+  }, [allTabs, connectionDialogSession, connectFileWithDiagnostics, state.groups, state.activeGroupId, dispatch]);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsModalMounted(true);
@@ -1207,13 +1031,17 @@ function AppContent() {
   const handleEditConnectionForTab = useCallback((tabId: string) => {
     const tab = allTabs.find((item) => item.id === tabId);
     const profileId = tab?.originalConnectionId ?? tabId;
-    const connection = ConnectionStorageManager.getConnection(profileId);
+    const runtimeConfig = getFileConnectionConfig(tabId);
+    const connection = ConnectionStorageManager.getConnection(profileId)
+      ?? (runtimeConfig && tab ? { ...runtimeConfig, id: undefined, name: tab.name } : undefined);
     if (!connection) {
       toast.error(t('app.cannotReconnect'), {
         description: t('app.cannotReconnectDesc'),
       });
       return;
     }
+    const targetGroupId = Object.values(state.groups).find(group => group.tabs.some(item => item.id === tabId))?.id || state.activeGroupId;
+    setConnectionDialogSession({ sessionId: tabId, profileId, targetGroupId });
     setEditingConnection({
       id: connection.id,
       name: connection.name,
@@ -1222,9 +1050,12 @@ function AppContent() {
       port: connection.port,
       username: connection.username,
       authMethod: connection.authMethod || 'password',
+      privateKeySource: connection.privateKeySource,
+      privateKeyPath: connection.privateKeyPath,
+      ftpsEnabled: connection.ftpsEnabled,
     });
     setConnectionDialogOpen(true);
-  }, [allTabs, t]);
+  }, [allTabs, getFileConnectionConfig, state.groups, state.activeGroupId, t]);
 
   const canManagePortForward =
     activeConnection?.protocol === 'SSH' && activeConnection.status === 'connected';
@@ -1359,6 +1190,7 @@ function AppContent() {
         port: connectionMeta.port,
         username: connectionMeta.username,
         authMethod: connectionMeta.authMethod || 'password',
+        ftpsEnabled: connectionMeta.ftpsEnabled,
       });
       setConnectionDialogOpen(true);
       return;
@@ -1389,10 +1221,12 @@ function AppContent() {
         passphrase: connectionData.passphrase,
         ftpsEnabled: connectionData.ftpsEnabled,
       };
-      await handleConnectionDialogConnect(config);
-      toast.success(t('app.quickConnected'), {
-        description: t('app.quickConnectedDesc', { name: connectionData.name }),
-      });
+      const result = await handleConnectionDialogConnect(config);
+      if (result?.success) {
+        toast.success(t('app.quickConnected'), {
+          description: t('app.quickConnectedDesc', { name: connectionData.name }),
+        });
+      }
     } else {
       // SSH quick connect: show a pending tab immediately, then mount PTY after
       // the backend SSH connection has been established.

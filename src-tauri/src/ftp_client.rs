@@ -1,8 +1,12 @@
 use anyhow::Result;
 use async_std::io::ReadExt;
+use async_std::net::{TcpStream, ToSocketAddrs};
 use serde::Deserialize;
 use std::time::Duration;
 
+use crate::connection_diagnostics::{
+    classify_tcp_io_error, ConnectDiagnosticError, ConnectErrorKind, ConnectStage,
+};
 use crate::sftp_client::{FileEntry, FileEntryType};
 
 /// Configuration for an FTP/FTPS connection.
@@ -43,7 +47,15 @@ pub struct FtpClient {
 
 impl FtpClient {
     /// Connect to an FTP server, authenticate, and switch to binary transfer mode.
+    #[cfg(test)]
     pub async fn connect(config: &FtpConfig) -> Result<Self> {
+        Self::connect_with_progress(config, |_| {}).await
+    }
+
+    pub async fn connect_with_progress(
+        config: &FtpConfig,
+        on_stage: impl Fn(ConnectStage) + Send + Sync + 'static,
+    ) -> Result<Self> {
         let addr = format!("{}:{}", config.host, config.port);
 
         tracing::info!(
@@ -56,23 +68,68 @@ impl FtpClient {
         // Use async_std timeout since suppaftp uses async_std internally
         let timeout_duration = Duration::from_secs(15);
 
-        let mut stream_kind = if config.ftps_enabled {
-            let ftp_stream = async_std::future::timeout(
-                timeout_duration,
-                suppaftp::AsyncNativeTlsFtpStream::connect(&addr),
-            )
+        let mut current_stage = ConnectStage::ResolvingDns;
+        let transport = async {
+            on_stage(current_stage);
+            let host = config
+                .host
+                .strip_prefix('[')
+                .and_then(|s| s.strip_suffix(']'))
+                .filter(|s| s.parse::<std::net::Ipv6Addr>().is_ok())
+                .unwrap_or(&config.host);
+            let addresses: Vec<_> = (host, config.port)
+                .to_socket_addrs()
+                .await
+                .map_err(|e| {
+                    ConnectDiagnosticError::new(
+                        ConnectErrorKind::DnsFailure,
+                        current_stage,
+                        format!("Failed to resolve FTP host {}: {e}", config.host),
+                    )
+                })?
+                .collect();
+            if addresses.is_empty() {
+                return Err(ConnectDiagnosticError::new(
+                    ConnectErrorKind::DnsFailure,
+                    current_stage,
+                    format!("No addresses found for FTP host {}", config.host),
+                )
+                .into());
+            }
+            current_stage = ConnectStage::EstablishingTcp;
+            on_stage(current_stage);
+            let tcp = TcpStream::connect(addresses.as_slice())
+                .await
+                .map_err(|e| classify_tcp_io_error(&e, &config.host, config.port))?;
+            current_stage = ConnectStage::FtpGreeting;
+            on_stage(current_stage);
+            let stream = if config.ftps_enabled {
+                FtpStreamKind::Secure(
+                    suppaftp::AsyncNativeTlsFtpStream::connect_with_stream(tcp)
+                        .await
+                        .map_err(|e| ftp_stage_error(current_stage, "FTP greeting failed", e))?,
+                )
+            } else {
+                FtpStreamKind::Plain(
+                    suppaftp::AsyncFtpStream::connect_with_stream(tcp)
+                        .await
+                        .map_err(|e| ftp_stage_error(current_stage, "FTP greeting failed", e))?,
+                )
+            };
+            Ok::<_, anyhow::Error>(stream)
+        };
+        let mut stream_kind = async_std::future::timeout(timeout_duration, transport)
             .await
             .map_err(|_| {
-                anyhow::anyhow!(
-                    "FTPS connection timed out after 15s. Check host {} and port {}.",
-                    config.host,
-                    config.port
+                ConnectDiagnosticError::new(
+                    ConnectErrorKind::TcpTimeout,
+                    current_stage,
+                    format!("FTP connection to {addr} timed out after 15s"),
                 )
-            })?
-            .map_err(|e| anyhow::anyhow!("FTPS TCP connect to {} failed: {}", addr, e))?;
+            })??;
 
-            tracing::info!("FTPS TCP connected, starting TLS handshake...");
-
+        if let FtpStreamKind::Secure(ftp_stream) = stream_kind {
+            on_stage(ConnectStage::TlsHandshake);
             let tls_connector =
                 suppaftp::async_native_tls::TlsConnector::new().danger_accept_invalid_certs(true);
             let secure_stream = ftp_stream
@@ -81,30 +138,14 @@ impl FtpClient {
                     &config.host,
                 )
                 .await
-                .map_err(|e| anyhow::anyhow!("FTPS TLS handshake failed: {}", e))?;
-
-            tracing::info!("FTPS TLS handshake complete");
-            FtpStreamKind::Secure(secure_stream)
-        } else {
-            let ftp_stream = async_std::future::timeout(
-                timeout_duration,
-                suppaftp::AsyncFtpStream::connect(&addr),
-            )
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "FTP connection timed out after 15s. Check host {} and port {}.",
-                    config.host,
-                    config.port
-                )
-            })?
-            .map_err(|e| anyhow::anyhow!("FTP TCP connect to {} failed: {}", addr, e))?;
-
-            tracing::info!("FTP TCP connected to {}", addr);
-            FtpStreamKind::Plain(ftp_stream)
-        };
+                .map_err(|e| {
+                    ftp_stage_error(ConnectStage::TlsHandshake, "FTPS TLS handshake failed", e)
+                })?;
+            stream_kind = FtpStreamKind::Secure(secure_stream);
+        }
 
         // Authenticate
+        on_stage(ConnectStage::Authenticating);
         {
             let (user, pass) = if config.anonymous {
                 ("anonymous", "anonymous@")
@@ -116,12 +157,19 @@ impl FtpClient {
                 FtpStreamKind::Plain(s) => s.login(user, pass).await,
                 FtpStreamKind::Secure(s) => s.login(user, pass).await,
             }
-            .map_err(|e| anyhow::anyhow!("FTP authentication failed for user '{}': {}", user, e))?;
+            .map_err(|e| {
+                ConnectDiagnosticError::new(
+                    ConnectErrorKind::AuthenticationFailed,
+                    ConnectStage::Authenticating,
+                    format!("FTP authentication failed for user '{user}': {e}"),
+                )
+            })?;
         }
 
         tracing::info!("FTP authenticated successfully");
 
         // Set binary transfer type
+        on_stage(ConnectStage::SettingTransferMode);
         {
             match &mut stream_kind {
                 FtpStreamKind::Plain(s) => s.transfer_type(suppaftp::types::FileType::Binary).await,
@@ -129,7 +177,13 @@ impl FtpClient {
                     s.transfer_type(suppaftp::types::FileType::Binary).await
                 }
             }
-            .map_err(|e| anyhow::anyhow!("Failed to set binary transfer type: {}", e))?;
+            .map_err(|e| {
+                ftp_stage_error(
+                    ConnectStage::SettingTransferMode,
+                    "Failed to set binary transfer type",
+                    e,
+                )
+            })?;
         }
 
         tracing::info!("FTP connection fully established to {}", addr);
@@ -264,6 +318,18 @@ impl FtpClient {
     }
 }
 
+fn ftp_stage_error(
+    stage: ConnectStage,
+    context: &str,
+    error: impl std::fmt::Display,
+) -> ConnectDiagnosticError {
+    ConnectDiagnosticError::new(
+        ConnectErrorKind::Unknown,
+        stage,
+        format!("{context}: {error}"),
+    )
+}
+
 /// Parse a single line from the FTP LIST command (Unix format).
 /// Example: `drwxr-xr-x   2 user group  4096 Jan 01 12:00 dirname`
 fn parse_ftp_list_line(line: &str) -> Option<FileEntry> {
@@ -342,6 +408,101 @@ fn parse_ftp_list_line(line: &str) -> Option<FileEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn local_ftp_server(
+        failure: Option<ConnectStage>,
+    ) -> (FtpConfig, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            if failure == Some(ConnectStage::FtpGreeting) {
+                socket.write_all(b"SSH-2.0-test\r\n").await.unwrap();
+                return;
+            }
+            socket.write_all(b"220 Test FTP ready\r\n").await.unwrap();
+            let (reader, mut writer) = socket.into_split();
+            let mut lines = BufReader::new(reader).lines();
+            while let Some(line) = lines.next_line().await.unwrap() {
+                let command = line.split_whitespace().next().unwrap_or("");
+                let reply = match command {
+                    "USER" => "331 Password required\r\n",
+                    "PASS" if failure == Some(ConnectStage::Authenticating) => {
+                        "530 Login rejected\r\n"
+                    }
+                    "PASS" => "230 Logged in\r\n",
+                    "TYPE" if failure == Some(ConnectStage::SettingTransferMode) => {
+                        "500 TYPE rejected\r\n"
+                    }
+                    "TYPE" => "200 Binary mode\r\n",
+                    "AUTH" => "534 TLS unavailable\r\n",
+                    "QUIT" => "221 Goodbye\r\n",
+                    _ => "500 Unsupported\r\n",
+                };
+                if writer.write_all(reply.as_bytes()).await.is_err() || command == "QUIT" {
+                    break;
+                }
+            }
+        });
+        (
+            FtpConfig {
+                host: "127.0.0.1".into(),
+                port,
+                username: "test".into(),
+                password: "test".into(),
+                ftps_enabled: failure == Some(ConnectStage::TlsHandshake),
+                anonymous: false,
+            },
+            task,
+        )
+    }
+
+    #[tokio::test]
+    async fn local_ftp_reports_progress_and_binary_mode() {
+        let (config, server) = local_ftp_server(None).await;
+        let stages = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed = stages.clone();
+        let mut client = FtpClient::connect_with_progress(&config, move |stage| {
+            observed.lock().unwrap().push(stage);
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            *stages.lock().unwrap(),
+            vec![
+                ConnectStage::ResolvingDns,
+                ConnectStage::EstablishingTcp,
+                ConnectStage::FtpGreeting,
+                ConnectStage::Authenticating,
+                ConnectStage::SettingTransferMode,
+            ]
+        );
+        client.disconnect().await.unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn local_ftp_preserves_failed_stage_including_tls() {
+        for stage in [
+            ConnectStage::FtpGreeting,
+            ConnectStage::TlsHandshake,
+            ConnectStage::Authenticating,
+            ConnectStage::SettingTransferMode,
+        ] {
+            let (config, server) = local_ftp_server(Some(stage)).await;
+            let error = FtpClient::connect_with_progress(&config, |_| {})
+                .await
+                .err()
+                .unwrap();
+            let diagnostic = crate::connection_diagnostics::diagnostic_from_anyhow(&error).unwrap();
+            assert_eq!(diagnostic.stage, stage);
+            if stage == ConnectStage::Authenticating {
+                assert_eq!(diagnostic.kind, ConnectErrorKind::AuthenticationFailed);
+            }
+            server.await.unwrap();
+        }
+    }
 
     /// Helper – read env vars or skip the test.
     fn test_config() -> Option<FtpConfig> {

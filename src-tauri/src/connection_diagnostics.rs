@@ -1,4 +1,4 @@
-//! SSH connection stage progress and classified errors.
+//! Connection stage progress and classified errors for SSH, SFTP and FTP.
 //!
 //! Stages cover DNS → TCP → handshake → host key → auth → PTY → connected.
 //! Error kinds map failures into user-facing categories for the frontend.
@@ -21,6 +21,10 @@ pub enum ConnectStage {
     VerifyingHostKey,
     Authenticating,
     RequestingPty,
+    OpeningSftp,
+    FtpGreeting,
+    TlsHandshake,
+    SettingTransferMode,
     Connected,
 }
 
@@ -33,6 +37,10 @@ impl ConnectStage {
             Self::VerifyingHostKey => "verifyingHostKey",
             Self::Authenticating => "authenticating",
             Self::RequestingPty => "requestingPty",
+            Self::OpeningSftp => "openingSftp",
+            Self::FtpGreeting => "ftpGreeting",
+            Self::TlsHandshake => "tlsHandshake",
+            Self::SettingTransferMode => "settingTransferMode",
             Self::Connected => "connected",
         }
     }
@@ -331,7 +339,7 @@ pub fn classify_tcp_io_error(err: &io::Error, host: &str, port: u16) -> ConnectD
         io::ErrorKind::ConnectionRefused => ConnectDiagnosticError::new(
             ConnectErrorKind::ConnectionRefused,
             ConnectStage::EstablishingTcp,
-            format!("Connection refused by {host}:{port}. The SSH service may be down or the port is wrong."),
+            format!("Connection refused by {host}:{port}. The service may be down or the port is wrong."),
         ),
         io::ErrorKind::NetworkUnreachable | io::ErrorKind::HostUnreachable => ConnectDiagnosticError::new(
             ConnectErrorKind::NetworkUnreachable,

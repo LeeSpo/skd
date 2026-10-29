@@ -2596,7 +2596,8 @@ pub struct FtpConnectRequest {
 pub async fn ftp_connect(
     request: FtpConnectRequest,
     state: State<'_, Arc<ConnectionManager>>,
-) -> Result<CommandResponse, String> {
+    app: AppHandle,
+) -> Result<ConnectCommandResponse, String> {
     tracing::info!(
         "ftp_connect: id={}, host={}:{}, user={}, ftps={}, anon={}",
         request.connection_id,
@@ -2625,15 +2626,17 @@ pub async fn ftp_connect(
     };
 
     match state
-        .create_ftp_connection(request.connection_id.clone(), config)
+        .create_ftp_connection(request.connection_id.clone(), config, Some(app))
         .await
     {
-        Ok(_) => Ok(CommandResponse {
-            success: true,
-            output: Some(format!("FTP connected: {}", request.connection_id)),
-            error: None,
-        }),
-        Err(e) => Err(format!("FTP connection failed: {}", e)),
+        Ok(_) => Ok(ConnectCommandResponse::ok(format!(
+            "FTP connected: {}",
+            request.connection_id
+        ))),
+        Err(e) => Ok(ConnectCommandResponse::from_error(
+            e,
+            ConnectStage::EstablishingTcp,
+        )),
     }
 }
 
