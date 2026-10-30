@@ -90,6 +90,13 @@ describe('connection-diagnostics', () => {
         errorKind: 'hostKeyUnknown',
       }),
     ).toBeNull();
+    expect(
+      formatConnectError(t, {
+        success: false,
+        pendingHostKeyTrust: true,
+        errorKind: 'hostKeyMismatch',
+      }),
+    ).toBeNull();
   });
 
   it('recognizes actionable connection error kinds', () => {

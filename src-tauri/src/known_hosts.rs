@@ -12,6 +12,7 @@ static KNOWN_HOSTS_LOCK: Mutex<()> = Mutex::new(());
 static TEST_KNOWN_HOSTS_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 pub const UNKNOWN_HOST_KEY_PREFIX: &str = "UNKNOWN_HOST_KEY:";
+pub const HOST_KEY_MISMATCH_PREFIX: &str = "HOST_KEY_MISMATCH:";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -145,13 +146,34 @@ pub fn format_unknown_host_error(host: &str, port: u16, public_key: &PublicKey) 
     )
 }
 
-pub fn format_mismatch_host_error(host: &str, port: u16, result: &VerifyResult) -> String {
+fn displayed_expected_fingerprint(stored_line: &str) -> String {
+    PublicKey::from_openssh(stored_line)
+        .map(|key| key.fingerprint(HashAlg::Sha256).to_string())
+        .unwrap_or_else(|_| stored_line.to_string())
+}
+
+/// Structured prompt so the UI can replace a saved host key after the user agrees.
+/// `expected_fingerprint` on [`VerifyResult::Mismatch`] is `key_type` plus key data.
+pub fn format_mismatch_host_error(
+    host: &str,
+    port: u16,
+    public_key: &PublicKey,
+    result: &VerifyResult,
+) -> String {
     match result {
         VerifyResult::Mismatch {
-            fingerprint,
             expected_fingerprint,
+            ..
         } => format!(
-            "Host key mismatch for {host}:{port}. Server fingerprint: {fingerprint}. Expected: {expected_fingerprint}."
+            "{HOST_KEY_MISMATCH_PREFIX}{}",
+            serde_json::json!({
+                "host": host,
+                "port": port,
+                "fingerprint": public_key.fingerprint(HashAlg::Sha256).to_string(),
+                "keyType": public_key.algorithm().as_str(),
+                "keyData": public_key.public_key_base64(),
+                "expectedFingerprint": displayed_expected_fingerprint(expected_fingerprint),
+            })
         ),
         _ => format!("Host key verification failed for {host}:{port}."),
     }
@@ -210,5 +232,66 @@ mod tests {
             let result = verify_host_key("new.host", 22, &public).unwrap();
             assert!(matches!(result, VerifyResult::Unknown { .. }));
         });
+    }
+
+    #[test]
+    fn changed_host_key_formats_replaceable_mismatch() {
+        with_temp_store(|| {
+            let stored = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+            let presented = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+            let stored_public = stored.public_key().clone();
+            let presented_public = presented.public_key().clone();
+            trust_host_key_entry(
+                "172.93.221.146",
+                22,
+                stored_public.algorithm().as_str(),
+                &stored_public.public_key_base64(),
+            )
+            .unwrap();
+
+            let result = verify_host_key("172.93.221.146", 22, &presented_public).unwrap();
+            let message =
+                format_mismatch_host_error("172.93.221.146", 22, &presented_public, &result);
+            assert!(message.starts_with(HOST_KEY_MISMATCH_PREFIX));
+            let payload: serde_json::Value =
+                serde_json::from_str(&message[HOST_KEY_MISMATCH_PREFIX.len()..]).unwrap();
+            assert_eq!(payload["keyData"], presented_public.public_key_base64());
+            assert_eq!(
+                payload["fingerprint"],
+                presented_public.fingerprint(HashAlg::Sha256).to_string()
+            );
+            assert_eq!(
+                payload["expectedFingerprint"],
+                stored_public.fingerprint(HashAlg::Sha256).to_string()
+            );
+            assert_ne!(payload["fingerprint"], payload["expectedFingerprint"]);
+
+            trust_host_key_entry(
+                "172.93.221.146",
+                22,
+                presented_public.algorithm().as_str(),
+                &presented_public.public_key_base64(),
+            )
+            .unwrap();
+            assert_eq!(
+                verify_host_key("172.93.221.146", 22, &presented_public).unwrap(),
+                VerifyResult::Known
+            );
+        });
+    }
+
+    #[test]
+    fn mismatch_error_keeps_unparsed_expected_key() {
+        let keypair = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).unwrap();
+        let public = keypair.public_key().clone();
+        let result = VerifyResult::Mismatch {
+            fingerprint: "ignored".to_string(),
+            expected_fingerprint: "not-a-key".to_string(),
+        };
+        let message = format_mismatch_host_error("h", 22, &public, &result);
+        let payload: serde_json::Value =
+            serde_json::from_str(&message[HOST_KEY_MISMATCH_PREFIX.len()..]).unwrap();
+        assert_eq!(payload["expectedFingerprint"], "not-a-key");
+        assert_eq!(payload["keyData"], public.public_key_base64());
     }
 }

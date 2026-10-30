@@ -32,6 +32,7 @@ export function HostKeyTrustDialog({
 }: HostKeyTrustDialogProps) {
   const { t } = useTranslation();
   const [isTrusting, setIsTrusting] = useState(false);
+  const changed = payload?.changed === true;
 
   const handleTrust = async () => {
     if (!payload || isTrusting) return;
@@ -68,14 +69,32 @@ export function HostKeyTrustDialog({
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent className="macos-alert sm:max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('hostKeyTrust.title')}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t(changed ? 'hostKeyTrust.changedTitle' : 'hostKeyTrust.title')}
+          </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>{t('hostKeyTrust.description', { host: payload?.host, port: payload?.port })}</p>
+              <p>
+                {t(changed ? 'hostKeyTrust.changedDescription' : 'hostKeyTrust.description', {
+                  host: payload?.host,
+                  port: payload?.port,
+                })}
+              </p>
+              {changed && payload?.expectedFingerprint && (
+                <div className="space-y-1">
+                  <p>{t('hostKeyTrust.savedFingerprint')}</p>
+                  <p className="font-mono text-xs break-all rounded-md bg-muted p-2">
+                    {payload.expectedFingerprint}
+                  </p>
+                </div>
+              )}
               {payload?.fingerprint && (
-                <p className="font-mono text-xs break-all rounded-md bg-muted p-2">
-                  {payload.fingerprint}
-                </p>
+                <div className="space-y-1">
+                  {changed && <p>{t('hostKeyTrust.serverFingerprint')}</p>}
+                  <p className="font-mono text-xs break-all rounded-md bg-muted p-2">
+                    {payload.fingerprint}
+                  </p>
+                </div>
               )}
             </div>
           </AlertDialogDescription>
@@ -89,7 +108,9 @@ export function HostKeyTrustDialog({
               void handleTrust();
             }}
           >
-            {isTrusting ? t('hostKeyTrust.trusting') : t('hostKeyTrust.trustAndConnect')}
+            {isTrusting
+              ? t('hostKeyTrust.trusting')
+              : t(changed ? 'hostKeyTrust.trustNewAndConnect' : 'hostKeyTrust.trustAndConnect')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

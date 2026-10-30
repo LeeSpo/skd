@@ -165,6 +165,11 @@ pub fn diagnostic_from_anyhow(err: &anyhow::Error) -> Option<&ConnectDiagnosticE
     err.downcast_ref::<ConnectDiagnosticError>()
 }
 
+fn is_host_key_mismatch(message: &str) -> bool {
+    message.contains(crate::known_hosts::HOST_KEY_MISMATCH_PREFIX)
+        || message.to_lowercase().contains("host key mismatch")
+}
+
 /// Map a free-form error into a diagnostic when the chain has no structured value.
 pub fn classify_connect_error(
     err: &anyhow::Error,
@@ -189,7 +194,7 @@ pub fn classify_connect_error(
         );
     }
 
-    if lower.contains("host key mismatch") {
+    if is_host_key_mismatch(&message) {
         return ConnectDiagnosticError::new(
             ConnectErrorKind::HostKeyMismatch,
             ConnectStage::VerifyingHostKey,
@@ -384,7 +389,7 @@ pub fn classify_handshake_error(
         );
     }
 
-    if lower.contains("host key mismatch") {
+    if is_host_key_mismatch(&message) {
         return ConnectDiagnosticError::new(
             ConnectErrorKind::HostKeyMismatch,
             ConnectStage::VerifyingHostKey,
@@ -557,6 +562,20 @@ mod tests {
         let diag = classify_connect_error(&err, ConnectStage::SshHandshake);
         assert_eq!(diag.kind, ConnectErrorKind::HostKeyMismatch);
         assert_eq!(diag.stage, ConnectStage::VerifyingHostKey);
+    }
+
+    #[test]
+    fn classifies_structured_host_key_mismatch() {
+        let err = anyhow::anyhow!(
+            "HOST_KEY_MISMATCH:{{\"host\":\"h\",\"keyType\":\"ssh-ed25519\",\"keyData\":\"d\"}}"
+        );
+        let diag = classify_connect_error(&err, ConnectStage::SshHandshake);
+        assert_eq!(diag.kind, ConnectErrorKind::HostKeyMismatch);
+        assert_eq!(diag.stage, ConnectStage::VerifyingHostKey);
+
+        let handshake = classify_handshake_error(&err, "h", 22);
+        assert_eq!(handshake.kind, ConnectErrorKind::HostKeyMismatch);
+        assert_eq!(handshake.stage, ConnectStage::VerifyingHostKey);
     }
 
     #[test]

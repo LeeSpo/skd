@@ -51,7 +51,7 @@ import {
 import { formatConnectError } from './lib/connection-diagnostics';
 import { useFileConnections } from '@/lib/use-file-connections';
 import { useConnectionAttempts } from './lib/connection-attempt-context';
-import type { UnknownHostKeyPayload } from './lib/host-key-verification';
+import { parseHostKeyTrustError, type UnknownHostKeyPayload } from './lib/host-key-verification';
 import { startLocalForward } from './lib/port-forward';
 import { getAutoStartPortForwardBookmarks } from './lib/port-forward-bookmarks';
 import { ConnectionAttemptProvider } from './lib/connection-attempt-context';
@@ -208,7 +208,10 @@ function AppContent() {
             dispatch({ type: 'RECONNECT_TAB', tabId: params.connection_id });
             return;
           }
-          if (response.errorKind === 'hostKeyUnknown') {
+          if (
+            response.errorKind === 'hostKeyUnknown'
+            || (response.error && parseHostKeyTrustError(response.error))
+          ) {
             awaitHostKey(params.connection_id);
           } else if (
             response.errorKind === 'cancelled'

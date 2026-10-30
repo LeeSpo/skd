@@ -131,6 +131,30 @@ describe('file connection lifecycle', () => {
     expect(mocks.dispatch.mock.calls.filter(([action]) => action.status === 'connected')).toHaveLength(1);
   });
 
+  it('keeps a changed SFTP host key pending and connects after trust', async () => {
+    const mismatch = 'HOST_KEY_MISMATCH:' + JSON.stringify({
+      host: config.host,
+      port: 22,
+      fingerprint: 'SHA256:new',
+      keyType: 'ssh-ed25519',
+      keyData: 'new-key',
+      expectedFingerprint: 'SHA256:old',
+    });
+    let connections = 0;
+    mocks.invoke.mockImplementation((command: string) => Promise.resolve(command === 'sftp_connect' && connections++ === 0
+      ? { success: false, errorKind: 'hostKeyMismatch', error: mismatch }
+      : { success: true }));
+    const { result, trust } = setup();
+    const onConnected = vi.fn();
+    await act(async () => { await result.current.connectFileWithDiagnostics('one', { ...config, protocol: 'SFTP' }, onConnected); });
+    expect(result.current.attempts.one.status).toBe('awaitingHostKey');
+    expect(mocks.error).not.toHaveBeenCalled();
+    expect(trust.mock.calls[0][0].payload).toMatchObject({ changed: true, expectedFingerprint: 'SHA256:old', keyData: 'new-key' });
+    await act(async () => { await trust.mock.calls[0][0].retry(); });
+    expect(result.current.attempts.one.status).toBe('connected');
+    expect(onConnected).toHaveBeenCalledTimes(1);
+  });
+
   it('declining host key trust clears progress and prevents its retry from connecting', async () => {
     mocks.invoke.mockImplementation((command: string) => Promise.resolve(command === 'sftp_connect' ? {
       success: false, errorKind: 'hostKeyUnknown',

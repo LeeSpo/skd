@@ -7,7 +7,7 @@ import {
   isConnectStage,
 } from './connection-diagnostics';
 import { loadConnectionTimeoutSecs, loadKeepAliveIntervalSecs } from './connection-settings';
-import { isHostKeyVerificationEnabled, parseUnknownHostKeyError } from './host-key-verification';
+import { isHostKeyVerificationEnabled, parseHostKeyTrustError } from './host-key-verification';
 import type { KeyboardInteractiveCoordinator } from './keyboard-interactive-context';
 
 export interface SshConnectParams {
@@ -35,7 +35,7 @@ export interface ConnectResponse {
 
 export type HostKeyTrustRequest = {
   connectionId?: string;
-  payload: NonNullable<ReturnType<typeof parseUnknownHostKeyError>>;
+  payload: NonNullable<ReturnType<typeof parseHostKeyTrustError>>;
   retry: () => Promise<ConnectResponse>;
 };
 
@@ -94,13 +94,13 @@ export async function sshConnectWithHostKeyTrust(
     return result;
   }
 
-  const payload = result.error ? parseUnknownHostKeyError(result.error) : null;
+  const payload = result.error ? parseHostKeyTrustError(result.error) : null;
   if (payload) {
     onTrustRequired({ payload, retry: attempt });
     return {
       ...result,
       pendingHostKeyTrust: true,
-      errorKind: result.errorKind ?? 'hostKeyUnknown',
+      errorKind: result.errorKind ?? (payload.changed ? 'hostKeyMismatch' : 'hostKeyUnknown'),
     };
   }
 
@@ -122,13 +122,13 @@ export async function sftpConnectWithHostKeyTrust(
       keepalive_interval_secs: loadKeepAliveIntervalSecs(),
     }, onStage, signal);
     onAttemptResult?.(response);
-    const payload = response.error ? parseUnknownHostKeyError(response.error) : null;
+    const payload = response.error ? parseHostKeyTrustError(response.error) : null;
     if (!response.success && payload && !signal?.aborted) {
       onTrustRequired({ connectionId: params.connection_id, payload, retry: attempt });
       return {
         ...response,
         pendingHostKeyTrust: true,
-        errorKind: response.errorKind ?? 'hostKeyUnknown',
+        errorKind: response.errorKind ?? (payload.changed ? 'hostKeyMismatch' : 'hostKeyUnknown'),
       };
     }
     return response;

@@ -27,8 +27,8 @@ import {
   type PrivateKeySource,
 } from '../lib/resolve-private-key';
 import {
-  isUnknownHostKeyError,
-  parseUnknownHostKeyError,
+  isHostKeyTrustPrompt,
+  parseHostKeyTrustError,
   type UnknownHostKeyPayload,
 } from '../lib/host-key-verification';
 import {
@@ -249,8 +249,8 @@ export function ConnectionDialog({
       return;
     }
 
-    if (result.pendingHostKeyTrust || isUnknownHostKeyError(result.error ?? '')) {
-      const payload = result.error ? parseUnknownHostKeyError(result.error) : null;
+    if (result.pendingHostKeyTrust || isHostKeyTrustPrompt(result.error ?? '')) {
+      const payload = result.error ? parseHostKeyTrustError(result.error) : null;
       if (payload) {
         onHostKeyTrustRequired({ payload, retry: hostKeyRetryRef.current });
       }
@@ -637,7 +637,7 @@ export function ConnectionDialog({
         );
         pendingSshConnectRef.current = null;
         resetConnectionState();
-      } else if (result.pendingHostKeyTrust || isUnknownHostKeyError(result.error ?? '')) {
+      } else if (result.pendingHostKeyTrust || isHostKeyTrustPrompt(result.error ?? '')) {
         awaitingHostKeyTrust = true;
       } else {
         console.error('Connection failed:', result.error);

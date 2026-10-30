@@ -168,12 +168,9 @@ impl client::Handler for SshHandler {
                 self.port,
                 server_public_key,
             ))),
-            VerifyResult::Mismatch { .. } => {
-                let result = verify_host_key(&self.host, self.port, server_public_key)?;
-                Err(anyhow::anyhow!(format_mismatch_host_error(
-                    &self.host, self.port, &result,
-                )))
-            }
+            result @ VerifyResult::Mismatch { .. } => Err(anyhow::anyhow!(
+                format_mismatch_host_error(&self.host, self.port, server_public_key, &result)
+            )),
         }
     }
 }

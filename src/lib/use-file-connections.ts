@@ -6,7 +6,7 @@ import type { ConnectionData } from '@/lib/connection-storage';
 import { useConnectionAttempts } from '@/lib/connection-attempt-context';
 import { useTerminalGroups } from '@/lib/terminal-group-context';
 import { formatConnectError } from '@/lib/connection-diagnostics';
-import { parseUnknownHostKeyError } from '@/lib/host-key-verification';
+import { parseHostKeyTrustError } from '@/lib/host-key-verification';
 import { resolvePrivateKeyContent } from '@/lib/resolve-private-key';
 import {
   cancelledConnectResponse,
@@ -81,7 +81,7 @@ export function useFileConnections(
         sessions.current.delete(connectionId);
         onConnected?.();
       } else if (response.errorKind === 'hostKeyUnknown'
-        || (response.error && parseUnknownHostKeyError(response.error))) {
+        || (response.error && parseHostKeyTrustError(response.error))) {
         awaitHostKey(connectionId);
       } else {
         if (response.errorKind === 'cancelled') clearAttempt(connectionId);

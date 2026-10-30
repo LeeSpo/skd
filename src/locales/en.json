@@ -834,7 +834,12 @@
   "hostKeyTrust": {
     "title": "Unknown Host Key",
     "description": "The host {{host}}:{{port}} is not in your known hosts. Do you trust this host key?",
+    "changedTitle": "Host Key Changed",
+    "changedDescription": "The saved key for {{host}}:{{port}} does not match the key this server is presenting.",
+    "savedFingerprint": "Saved fingerprint",
+    "serverFingerprint": "Server fingerprint",
     "trustAndConnect": "Trust and Connect",
+    "trustNewAndConnect": "Trust New Key and Connect",
     "trusting": "Trusting...",
     "trustFailed": "Failed to trust host key"
   },
