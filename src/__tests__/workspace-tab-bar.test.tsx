@@ -16,7 +16,7 @@ import {
   unregisterContentDropTarget,
 } from '@/lib/tab-drag-state';
 
-const lifecycle = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), close: vi.fn() }));
+const lifecycle = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), close: vi.fn(), duplicate: vi.fn() }));
 vi.mock('@/components/pty-terminal', async () => {
   const React = await import('react');
   return {
@@ -71,7 +71,7 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
 function renderWorkspace(initialState = workspace(), { width = 300, grid = false } = {}) {
   const view = render(
     <TerminalGroupProvider>
-      <TerminalCallbacksProvider value={{ onRequestCloseTabs: lifecycle.close }}>
+      <TerminalCallbacksProvider value={{ onRequestCloseTabs: lifecycle.close, onDuplicateTab: lifecycle.duplicate }}>
         <TitlebarSlotProvider><Harness initialState={initialState} grid={grid} /></TitlebarSlotProvider>
       </TerminalCallbacksProvider>
     </TerminalGroupProvider>,
@@ -130,6 +130,24 @@ afterEach(() => {
   clearTabDrag();
   vi.unstubAllGlobals();
   document.body.style.userSelect = '';
+});
+
+describe('WorkspaceTabBar context menu', () => {
+  it('duplicates once when a click follows pointer-release selection', async () => {
+    const { bar } = renderWorkspace();
+    const source = page(bar, '1');
+    fireEvent.pointerDown(source, { button: 2, pointerType: 'mouse' });
+    fireEvent.contextMenu(source, { button: 2 });
+    const item = await screen.findByRole('menuitem', { name: 'Duplicate Tab' });
+
+    act(() => {
+      fireEvent.pointerUp(item, { button: 2, pointerType: 'mouse' });
+      fireEvent.click(item);
+    });
+
+    expect(lifecycle.duplicate).toHaveBeenCalledExactlyOnceWith('a');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
 });
 
 describe('WorkspaceTabBar drag ordering', () => {

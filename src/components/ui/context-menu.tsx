@@ -1,15 +1,42 @@
 "use client";
 
 import * as React from "react";
+import { flushSync } from "react-dom";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
 function ContextMenu({
+  open: controlledOpen,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+
+  const handleOpenChange = (open: boolean) => {
+    const updateOpen = () => {
+      if (!isControlled) setUncontrolledOpen(open);
+      props.onOpenChange?.(open);
+    };
+
+    if (open) {
+      updateOpen();
+    } else {
+      // Radix can synthesize a click on pointer release. Commit the close
+      // before a trailing native click can activate the same item again.
+      flushSync(updateOpen);
+    }
+  };
+
+  return (
+    <ContextMenuPrimitive.Root
+      data-slot="context-menu"
+      {...props}
+      open={controlledOpen ?? uncontrolledOpen}
+      onOpenChange={handleOpenChange}
+    />
+  );
 }
 
 function ContextMenuTrigger({

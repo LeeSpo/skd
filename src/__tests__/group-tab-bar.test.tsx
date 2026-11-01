@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GroupTabBar } from '@/components/terminal/group-tab-bar';
 import type { TerminalTab } from '@/lib/terminal-group-types';
@@ -33,6 +33,23 @@ const tabs: TerminalTab[] = ['connected', 'connecting', 'disconnected', 'pending
 }));
 
 describe('GroupTabBar visual pilot', () => {
+  it('duplicates once when a click follows pointer-release selection', async () => {
+    const onDuplicateTab = vi.fn();
+    const { container } = render(<GroupTabBar groupId="g" tabs={tabs} activeTabId="0" onDuplicateTab={onDuplicateTab} />);
+    const source = container.querySelector('[data-tab-id="0"]')!;
+    fireEvent.pointerDown(source, { button: 2, pointerType: 'mouse' });
+    fireEvent.contextMenu(source, { button: 2 });
+    const item = await screen.findByRole('menuitem', { name: 'Duplicate Tab' });
+
+    act(() => {
+      fireEvent.pointerUp(item, { button: 2, pointerType: 'mouse' });
+      fireEvent.click(item);
+    });
+
+    expect(onDuplicateTab).toHaveBeenCalledExactlyOnceWith('0');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('splits pane tabs into the same equal capsules as the titlebar', () => {
     const { container } = render(<GroupTabBar groupId="g" tabs={tabs} activeTabId="0" />);
     const bar = container.querySelector('[data-variant="pane"]');
