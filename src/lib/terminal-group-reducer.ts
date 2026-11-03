@@ -685,7 +685,11 @@ function applyTerminalGroupAction(
         tabToGroupMap: { ...state.tabToGroupMap, [tabId]: newGroupId },
       };
 
-      newState = maybeRemoveEmptyGroup(newState, sourceGroupId);
+      // Splitting a pane's only tab must leave the source pane available for
+      // another session. Only a move to a different pane should collapse it.
+      if (splitAt !== sourceGroupId) {
+        newState = maybeRemoveEmptyGroup(newState, sourceGroupId);
+      }
       return newState;
     }
 

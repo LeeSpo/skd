@@ -643,17 +643,40 @@ describe('MOVE_TAB_TO_NEW_GROUP', () => {
     expect(next.activeGroupId).toBe('2');
   });
 
-  it('auto-removes source group when it becomes empty', () => {
+  it.each(['left', 'right', 'up', 'down'] as const)('keeps the source pane when splitting its only tab %s', (direction) => {
+    const state = stateWithTabs('1', [makeTab('a')]);
+    const next = terminalGroupReducer(state, {
+      type: 'MOVE_TAB_TO_NEW_GROUP',
+      groupId: '1',
+      tabId: 'a',
+      direction,
+    });
+
+    expect(next.groups['1'].tabs).toEqual([]);
+    expect(next.groups['1'].activeTabId).toBeNull();
+    expect(next.groups['2'].tabs).toEqual(state.groups['1'].tabs);
+    expect(collectLeafIds(next.gridLayout).sort()).toEqual(['1', '2']);
+    expect(next.tabToGroupMap.a).toBe('2');
+
+    const focused = terminalGroupReducer(next, { type: 'ACTIVATE_GROUP', groupId: '1' });
+    const filled = terminalGroupReducer(focused, { type: 'ADD_TAB', groupId: '1', tab: makeTab('b') });
+    expect(filled.pages).toHaveLength(1);
+    expect(collectLeafIds(filled.gridLayout).sort()).toEqual(['1', '2']);
+    expect(filled.groups['1'].activeTabId).toBe('b');
+  });
+
+  it('auto-removes source group when moving its only tab to a different pane', () => {
     let state = stateWithTabs('1', [makeTab('a')]);
     // Add a second group so source isn't the last
     state = terminalGroupReducer(state, { type: 'SPLIT_GROUP', groupId: '1', direction: 'right' });
     state = terminalGroupReducer(state, { type: 'ADD_TAB', groupId: '2', tab: makeTab('b') });
-    // Now move the only tab from group 1 to a new group
+    // Split group 2 with the only tab from group 1.
     const next = terminalGroupReducer(state, {
       type: 'MOVE_TAB_TO_NEW_GROUP',
       groupId: '1',
       tabId: 'a',
       direction: 'down',
+      targetGroupId: '2',
     });
     expect(next.groups['1']).toBeUndefined();
   });

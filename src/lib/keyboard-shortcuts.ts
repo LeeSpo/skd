@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 
 export interface KeyboardShortcut {
   key: string;
+  /** Physical key fallback for shortcuts whose character changes with Shift. */
+  code?: string;
   ctrlKey?: boolean;
   shiftKey?: boolean;
   altKey?: boolean;
@@ -223,7 +225,8 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled: boo
       }
 
       for (const shortcut of shortcuts) {
-        const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
+        const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase()
+          || (shortcut.code !== undefined && event.code === shortcut.code);
         const ctrlOrCmd = event.metaKey || event.ctrlKey;
         const usesExplicitMeta = shortcut.metaKey === true && shortcut.ctrlKey !== true;
         const ctrlMatch = usesExplicitMeta
@@ -292,13 +295,6 @@ export const createLayoutShortcuts = (actions: {
     handler: actions.toggleZenMode,
     description: 'Toggle Zen Mode',
   },
-  {
-    key: '\\',
-    ctrlKey: true,
-    ignoreInTerminal: true,
-    handler: actions.toggleLeftSidebar,
-    description: 'Toggle Connection Manager (Alternative)',
-  },
 ];
 
 /**
@@ -324,6 +320,7 @@ export const createSplitViewShortcuts = (actions: {
   return [
     {
       key: '\\',
+      code: 'Backslash',
       ctrlKey: true,
       shiftKey: false,
       handler: actions.splitRight,
@@ -331,6 +328,7 @@ export const createSplitViewShortcuts = (actions: {
     },
     {
       key: '\\',
+      code: 'Backslash',
       ctrlKey: true,
       shiftKey: true,
       handler: actions.splitDown,

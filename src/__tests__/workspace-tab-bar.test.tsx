@@ -133,6 +133,40 @@ afterEach(() => {
 });
 
 describe('WorkspaceTabBar context menu', () => {
+  it.each([
+    ['Right', 'horizontal'],
+    ['Down', 'vertical'],
+  ] as const)('keeps a visible split when moving the only tab %s', async (direction, orientation) => {
+    const { bar, container } = renderWorkspace(workspace(), { grid: true });
+    await waitFor(() => expect(lifecycle.mount).toHaveBeenCalledTimes(3));
+    const terminal = container.querySelector('[data-mock-pty="a"]');
+    const source = page(bar, '1');
+    fireEvent.contextMenu(source, { button: 2 });
+    const submenu = await screen.findByRole('menuitem', { name: 'Move Tab to New Group' });
+    fireEvent.keyDown(submenu, { key: 'ArrowRight' });
+    const item = await screen.findByRole('menuitem', { name: direction, exact: true });
+    fireEvent.click(item);
+
+    expect(currentState.gridLayout.type).toBe('branch');
+    if (currentState.gridLayout.type === 'branch') {
+      expect(currentState.gridLayout.direction).toBe(orientation);
+      expect(currentState.gridLayout.children).toHaveLength(2);
+    }
+    expect(currentState.groups[currentState.tabToGroupMap.a].tabs[0].id).toBe('a');
+    expect(currentState.pages.map((entry) => entry.id)).toEqual(['1', '2', '3']);
+
+    // Stable-grid chrome normally passes pointer input through to the PTY.
+    // The blank half has no PTY, so its content must receive clicks itself.
+    const emptyPane = container.querySelector<HTMLElement>('[data-group-content="1"]')!;
+    expect(emptyPane.classList.contains('pointer-events-auto')).toBe(true);
+    fireEvent.mouseDown(emptyPane);
+    expect(currentState.activeGroupId).toBe('1');
+    expect(container.querySelector('[data-mock-pty="a"]')).toBe(terminal);
+    expect(lifecycle.mount).toHaveBeenCalledTimes(3);
+    expect(lifecycle.unmount).not.toHaveBeenCalled();
+    expect(lifecycle.close).not.toHaveBeenCalled();
+  });
+
   it('duplicates once when a click follows pointer-release selection', async () => {
     const { bar } = renderWorkspace();
     const source = page(bar, '1');
@@ -300,6 +334,21 @@ describe('WorkspaceTabBar drag ordering', () => {
     release(10);
     expect(pageIds(bar)).toEqual(['2', '1', '3']);
     expect(currentState.groups).toBe(before.groups);
+  });
+
+  it('keeps a split when dragging the only tab onto its own content edge', () => {
+    const { bar } = renderWorkspace();
+    contentTarget();
+    startDrag(page(bar, '1'));
+    move(290, 150);
+    release(290, 150);
+
+    expect(currentState.gridLayout.type).toBe('branch');
+    expect(currentState.groups['1'].tabs).toEqual([]);
+    expect(currentState.groups[currentState.tabToGroupMap.a].tabs[0].id).toBe('a');
+    expect(currentState.pages.map((entry) => entry.id)).toEqual(['1', '2', '3']);
+    expect(currentState.activePageId).toBe('1');
+    expect(getActiveDrag()).toBeNull();
   });
 
   it('keeps content-edge drops creating splits instead of reordering', () => {

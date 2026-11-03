@@ -226,6 +226,44 @@ describe('useKeyboardShortcuts', () => {
     expect(actions.toggleLeftSidebar).toHaveBeenCalledOnce();
   });
 
+  it.each(
+    (['button', 'terminal'] as const).flatMap((targetType) =>
+      (['metaKey', 'ctrlKey'] as const).flatMap((modifier) =>
+        [false, true].map((shiftKey) => ({ targetType, modifier, shiftKey })),
+      ),
+    ),
+  )('splits with $modifier + Backslash (Shift: $shiftKey) from $targetType', ({ targetType, modifier, shiftKey }) => {
+    const layoutActions = {
+      toggleLeftSidebar: vi.fn(),
+      toggleRightSidebar: vi.fn(),
+      toggleBottomPanel: vi.fn(),
+      toggleZenMode: vi.fn(),
+    };
+    const actions = createMockActions();
+    render(React.createElement(ShortcutHarness, {
+      shortcuts: [...createLayoutShortcuts(layoutActions), ...createSplitViewShortcuts(actions)],
+    }));
+
+    const { container } = render(targetType === 'terminal'
+      ? React.createElement('div', { className: 'xterm' }, React.createElement('textarea'))
+      : React.createElement('button'));
+    const target = container.querySelector('textarea, button')!;
+    const event = new KeyboardEvent('keydown', {
+      key: shiftKey ? '|' : '\\',
+      code: 'Backslash',
+      [modifier]: true,
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+
+    expect(shiftKey ? actions.splitDown : actions.splitRight).toHaveBeenCalledOnce();
+    expect(shiftKey ? actions.splitRight : actions.splitDown).not.toHaveBeenCalled();
+    expect(layoutActions.toggleLeftSidebar).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('closes the tab from a focused terminal', () => {
     const actions = createMockActions();
     const shortcuts = createSplitViewShortcuts(actions);

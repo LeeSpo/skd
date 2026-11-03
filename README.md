@@ -44,11 +44,11 @@ skd brings interactive SSH sessions, local shells, SFTP file management, and sav
 | `⌃J` (`Ctrl+J`) | Toggle integrated file browser panel when focus is outside terminal input and text fields |
 | `⌃M` (`Ctrl+M`) | Toggle remote system monitor panel when focus is outside terminal input and text fields |
 | `⌃Z` (`Ctrl+Z`) | Toggle Zen mode (hide all sidebars and panels) when focus is outside terminal input and text fields |
-| `⌃\` / `⌃⇧\` | Split terminal pane right / down when the terminal has focus |
+| `⌘\` / `⌘⇧\` (also `Ctrl+\` / `Ctrl+Shift+\`) | Split terminal pane right / down |
 | `⌘W` | Close active terminal tab or split pane |
 | `⌥ Drag` | Option-drag text selection (bypasses mouse reporting in `htop`, `tmux`, etc.) |
 
-With focus outside terminal input and text fields, `Ctrl+\` and `Ctrl+Shift+\` currently toggle the connection manager sidebar because that binding takes precedence over the split shortcuts.
+Split shortcuts work with focus in the terminal or elsewhere in the workspace, except ordinary text fields.
 
 ## Download and install
 

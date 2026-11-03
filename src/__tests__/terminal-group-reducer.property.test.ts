@@ -385,19 +385,9 @@ describe('terminal-group-reducer property tests', () => {
           expect(newGroup.tabs).toHaveLength(1);
           expect(newGroup.tabs[0].id).toBe(tab.id);
 
-          // Source group tab count decreased by 1 (or group was removed if it became empty)
-          if (beforeSourceTabCount === 1 && beforeGroupCount > 1) {
-            // Source group was removed, but new group was added
-            // Net: same count or count stays same
-            expect(after.groups[group.id]).toBeUndefined();
-          } else if (beforeSourceTabCount === 1 && beforeGroupCount === 1) {
-            // Source was the only group with 1 tab — it stays (empty) + new group
-            // Actually the source becomes empty but is preserved since... wait,
-            // after MOVE_TAB_TO_NEW_GROUP there are now 2 groups, so the empty one gets removed
-            // The new group replaces it effectively
-          } else {
-            expect(after.groups[group.id].tabs).toHaveLength(beforeSourceTabCount - 1);
-          }
+          // A self-split keeps the source pane even when its last tab is moved.
+          expect(after.groups[group.id].tabs).toHaveLength(beforeSourceTabCount - 1);
+          expect(Object.keys(after.groups)).toHaveLength(beforeGroupCount + 1);
 
           checkGridTreeInvariants(after);
         },
