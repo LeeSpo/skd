@@ -1,3 +1,4 @@
+mod clipboard;
 mod commands;
 mod connection_diagnostics;
 mod connection_manager;
@@ -329,6 +330,8 @@ pub fn run() {
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
             commands::get_window_appearance,
+            commands::read_clipboard_text,
+            commands::write_clipboard_text,
             commands::ssh_connect,
             commands::ssh_keyboard_interactive_respond,
             commands::ssh_cancel_connect,

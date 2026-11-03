@@ -7,6 +7,8 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { createTerminalClipboardProvider } from '@/lib/terminal-clipboard';
+import { readClipboardText, writeClipboardText } from '@/lib/clipboard';
 import { getWebSocketUrl } from '@/lib/websocket-endpoint';
 import {
   loadAppearanceSettings,
@@ -154,21 +156,30 @@ export function PtyTerminal({
   }, [connectionId]);
 
   const pasteClipboardIntoPty = React.useCallback(async () => {
+    const term = xtermRef.current;
+    const ws = wsRef.current;
+    const generation = ptyGenerationRef.current;
+    if (!term || !ws || ws.readyState !== WebSocket.OPEN) {
+      toast.error(t('ptyTerminal.terminalNotConnected'));
+      return;
+    }
+    const isCurrentSession = () => xtermRef.current === term
+      && wsRef.current === ws
+      && ws.readyState === WebSocket.OPEN
+      && ptyGenerationRef.current === generation;
+
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text) return;
-      const term = xtermRef.current;
-      if (!term) {
-        toast.error(t('ptyTerminal.terminalNotConnected'));
-        return;
-      }
+      const text = await readClipboardText();
+      // A clipboard read can outlive a reconnect, session switch, or unmount.
+      // Never send the result to a different terminal or PTY generation.
+      if (!text || !isCurrentSession()) return;
       // term.paste() routes through xterm's onData handler,
       // which calls sendInputToPty with proper bracketed paste wrapping
       term.paste(text);
     } catch (_error) {
-      toast.error(t('ptyTerminal.failedToReadClipboard'));
+      if (isCurrentSession()) toast.error(t('ptyTerminal.failedToReadClipboard'));
     }
-  }, []);
+  }, [t]);
 
   const [settingsRevision, setSettingsRevision] = React.useState(0);
 
@@ -254,7 +265,9 @@ export function PtyTerminal({
     term.loadAddon(fitAddon);
     term.loadAddon(webLinks);
     term.loadAddon(searchAddon);
-    const clipboardAddon = new ClipboardAddon();
+    const clipboardAddon = new ClipboardAddon(undefined, createTerminalClipboardProvider(() => {
+      toast.error(t('ptyTerminal.failedToCopyClipboard'));
+    }));
     term.loadAddon(clipboardAddon);
     clipboardAddonRef.current = clipboardAddon;
 
@@ -396,8 +409,8 @@ export function PtyTerminal({
       if (modKey && key === 'c' && term.hasSelection()) {
         // Allow copy to happen
         const selection = term.getSelection();
-        navigator.clipboard.writeText(selection).catch(() => {
-          console.error('Failed to copy');
+        void writeClipboardText(selection).catch(() => {
+          toast.error(t('ptyTerminal.failedToCopyClipboard'));
         });
         return false;
       }
@@ -982,6 +995,7 @@ export function PtyTerminal({
       }
       term.reset(); // clear scrollback + viewport so GC can reclaim xterm buffers sooner
       term.dispose();
+      if (xtermRef.current === term) xtermRef.current = null;
     };
   }, [connectionId, connectionName, host, username, terminalKey, reconnectKey, sendInputToPty, registerSender, unregisterSender, reportStage, failAttempt]);
   // NOTE: themeKey and appearanceKey are intentionally NOT in the deps above.
@@ -1040,7 +1054,7 @@ export function PtyTerminal({
     const term = xtermRef.current;
     if (term?.hasSelection()) {
       const selection = term.getSelection();
-      navigator.clipboard.writeText(selection).then(() => {
+      void writeClipboardText(selection).then(() => {
         toast.success(t('ptyTerminal.copiedToClipboard'));
       }).catch(() => {
         toast.error(t('ptyTerminal.failedToCopyClipboard'));
@@ -1057,7 +1071,7 @@ export function PtyTerminal({
 
   const handleCopyLink = React.useCallback(() => {
     if (!contextLinkUrl) return;
-    navigator.clipboard.writeText(contextLinkUrl).then(() => {
+    void writeClipboardText(contextLinkUrl).then(() => {
       toast.success(t('ptyTerminal.copiedToClipboard'));
     }).catch(() => {
       toast.error(t('ptyTerminal.failedToCopyClipboard'));

@@ -660,6 +660,7 @@
       "duplicateFailed": "Failed to Duplicate File",
       "duplicateFailedDesc": "Unable to duplicate file on server.",
       "pathCopied": "Path copied to clipboard",
+      "copyPathFailed": "Failed to copy path to clipboard",
       "loadFailed": "Failed to Load Files",
       "loadFailedDesc": "Unable to load remote directory contents.",
       "pasteFailed": "Failed to Paste Files",
@@ -969,6 +970,7 @@
       "directoryCreated": "Directory created",
       "createDirectoryFailed": "Create directory failed",
       "pathCopied": "Path copied",
+      "copyPathFailed": "Failed to copy path to clipboard",
       "loadFailed": "Failed to load directory"
     },
     "prompt": {

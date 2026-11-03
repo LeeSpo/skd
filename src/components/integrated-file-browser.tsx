@@ -74,6 +74,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, C
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, MacosAlertDialogContent } from "./ui/alert-dialog";
 import { toast } from 'sonner';
 import { isEditableTarget } from '@/lib/keyboard-shortcuts';
+import { writeClipboardText } from '@/lib/clipboard';
 import { interleaveContextMenuSections } from '@/lib/context-menu-sections';
 import {
   createLocalAdapter,
@@ -1043,9 +1044,13 @@ export function IntegratedFileBrowser(props: IntegratedFileBrowserProps) {
     setNewFileName('');
   };
 
-  const handleCopyPath = (file: FileItem) => {
-    void navigator.clipboard.writeText(file.path);
-    toast.success(t('fileBrowser.toast.pathCopied'));
+  const handleCopyPath = async (file: FileItem) => {
+    try {
+      await writeClipboardText(file.path);
+      toast.success(t('fileBrowser.toast.pathCopied'));
+    } catch {
+      toast.error(t('fileBrowser.toast.copyPathFailed'));
+    }
   };
 
   const handleFileInfo = (file: FileItem) => {

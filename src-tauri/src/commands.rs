@@ -3876,6 +3876,45 @@ mod local_fs_tests {
     }
 }
 
+/// Explicit context-menu paste avoids WebKit's second clipboard confirmation.
+/// OSC 52 reads remain disabled in the frontend clipboard provider.
+#[tauri::command]
+pub async fn read_clipboard_text(window: tauri::WebviewWindow) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("Clipboard reading is only available in the main window".to_string());
+    }
+
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    window
+        .run_on_main_thread(move || {
+            let result = crate::clipboard::read_text().map_err(|error| error.to_string());
+            let _ = sender.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+    receiver.await.map_err(|error| error.to_string())?
+}
+
+/// Remote terminal output cannot supply WebKit's clipboard user activation.
+/// Keep this bridge write-only and restricted to the terminal's main window.
+#[tauri::command]
+pub async fn write_clipboard_text(
+    window: tauri::WebviewWindow,
+    text: String,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Clipboard writing is only available in the main window".to_string());
+    }
+
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    window
+        .run_on_main_thread(move || {
+            let result = crate::clipboard::write_text(&text).map_err(|error| error.to_string());
+            let _ = sender.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+    receiver.await.map_err(|error| error.to_string())?
+}
+
 /// Query AppKit on its main thread; used for window chrome materials and accent.
 #[tauri::command]
 pub async fn get_window_appearance(
