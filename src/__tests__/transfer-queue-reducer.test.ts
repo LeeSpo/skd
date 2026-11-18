@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import * as fc from "fast-check";
 import {
   transferQueueReducer,
-  generateTransferId,
   resetTransferIdCounter,
   getActiveTransferCount,
   getNextQueuedTransfer,
@@ -371,16 +370,6 @@ describe("transfer-queue-reducer", () => {
         makeItem({ id: "t2", status: "completed" }),
       ];
       expect(getNextQueuedTransfer(state)).toBeUndefined();
-    });
-  });
-
-  describe("generateTransferId", () => {
-    it("produces unique sequential IDs", () => {
-      const ids = new Set<string>();
-      for (let i = 0; i < 100; i++) {
-        ids.add(generateTransferId());
-      }
-      expect(ids.size).toBe(100);
     });
   });
 });

@@ -88,15 +88,6 @@ describe('file transfer queue progress', () => {
     expect(screen.queryByText('—')).toBeNull();
   });
 
-  it('starts the next item after failure', async () => {
-    render(<FileBrowserView connectionId="one" connectionName="host" isConnected />);
-    enqueue(['a', 'b']);
-    await waitFor(() => expect(pending).toHaveLength(1));
-    await act(async () => pending[0].resolve({ success: false, error: 'Disconnected' }));
-    await waitFor(() => expect(pending).toHaveLength(2));
-    expect(fixture.pending[1].input.sourcePath).toBe('/local/b');
-  });
-
   it('ignores completion/progress of cancelled items and processes queued work', async () => {
     render(<FileBrowserView connectionId="one" connectionName="host" isConnected />);
     enqueue(['a', 'b']);

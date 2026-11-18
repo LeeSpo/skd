@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Terminal } from '@xterm/xterm';
-import { shouldIgnoreImeKeyDown } from '../terminal-ime';
+import { bindTerminalIme, shouldIgnoreImeKeyDown } from '../terminal-ime';
 
 describe('terminal IME commits with real xterm', () => {
   let term: Terminal;
   let textarea: HTMLTextAreaElement;
   let sent: string[];
+  let removeTerminalIme: () => void;
 
   beforeEach(async () => {
     vi.useFakeTimers();
@@ -50,12 +51,14 @@ describe('terminal IME commits with real xterm', () => {
     term.onData((data) => sent.push(data));
     term.attachCustomKeyEventHandler((event) => !shouldIgnoreImeKeyDown(event));
     term.open(host);
-    term.focus();
     textarea = term.textarea!;
+    removeTerminalIme = bindTerminalIme(textarea);
+    term.focus();
     vi.advanceTimersByTime(20);
   });
 
   afterEach(() => {
+    removeTerminalIme?.();
     term?.dispose();
     document.body.replaceChildren();
     vi.clearAllTimers();
@@ -85,12 +88,31 @@ describe('terminal IME commits with real xterm', () => {
     textarea.dispatchEvent(new InputEvent('input', init));
   }
 
-  function startComposition(text: string) {
-    const prefix = textarea.value;
-    composition('compositionstart', '');
+  function updateComposition(text: string, prefix: string) {
     composition('compositionupdate', text);
     input('insertCompositionText', text, prefix + text, true);
     vi.advanceTimersByTime(0);
+  }
+
+  function startComposition(text: string) {
+    const prefix = textarea.value;
+    composition('compositionstart', '');
+    updateComposition(text, prefix);
+    return prefix;
+  }
+
+  function typePinyinLetter(letter: string) {
+    const code = `Key${letter.toUpperCase()}`;
+    key('keydown', { key: letter, code, keyCode: 229, isComposing: true });
+    key('keyup', { key: letter, code, keyCode: code.charCodeAt(3), isComposing: true });
+  }
+
+  function startSegmentedPinyin(betweenLetters?: KeyboardEventInit) {
+    const prefix = startComposition('d');
+    typePinyinLetter('d');
+    if (betweenLetters) key('keydown', { keyCode: 229, isComposing: true, ...betweenLetters });
+    updateComposition('d s', prefix);
+    typePinyinLetter('s');
     return prefix;
   }
 
@@ -101,8 +123,7 @@ describe('terminal IME commits with real xterm', () => {
     vi.advanceTimersByTime(0);
   }
 
-  function commitWithCapsLock(text: string) {
-    const prefix = startComposition(text);
+  function finishWithCapsLock(text: string, prefix: string) {
     // Captured in WKWebView on macOS 15.7.8 with the system Pinyin IME.
     key('keydown', { key: 'CapsLock', code: 'CapsLock', keyCode: 20, isComposing: true });
     key('keydown', { key: 'Unidentified', code: 'Unidentified', keyCode: 0, isComposing: true });
@@ -111,6 +132,35 @@ describe('terminal IME commits with real xterm', () => {
     finishComposition(text, prefix);
     key('keyup', { key: 'CapsLock', code: 'CapsLock', keyCode: 20 });
   }
+
+  function commitWithCapsLock(text: string) {
+    finishWithCapsLock(text, startComposition(text));
+  }
+
+  it('restores the letters typed before CapsLock when Pinyin adds a space', () => {
+    textarea.value = 'previous ';
+    finishWithCapsLock('d s', startSegmentedPinyin());
+    expect(sent).toEqual(['ds']);
+    expect(textarea.value).toBe('previous ds');
+  });
+
+  it('preserves segmented text committed without CapsLock', () => {
+    finishComposition('d s', startSegmentedPinyin());
+    expect(sent).toEqual(['d s']);
+  });
+
+  it.each([
+    { key: ' ', code: 'Space' },
+    { key: 'ArrowLeft', code: 'ArrowLeft' },
+  ])('leaves the CapsLock commit alone if the user pressed $code during composition', (otherKey) => {
+    finishWithCapsLock('d s', startSegmentedPinyin(otherKey));
+    expect(sent).toEqual(['d s']);
+  });
+
+  it('preserves a CapsLock commit if it differs from the raw letters beyond spacing', () => {
+    finishWithCapsLock('d z', startSegmentedPinyin());
+    expect(sent).toEqual(['d z']);
+  });
 
   it('sends the CapsLock-committed word once', () => {
     commitWithCapsLock('good');

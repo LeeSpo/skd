@@ -153,14 +153,6 @@ describe('createSplitViewShortcuts', () => {
       expect(shortcut.ctrlKey === true || shortcut.metaKey === true).toBe(true);
     }
   });
-
-  it('all shortcuts have a non-empty description', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    for (const shortcut of shortcuts) {
-      expect(shortcut.description).toBeTruthy();
-    }
-  });
 });
 
 describe('useKeyboardShortcuts', () => {

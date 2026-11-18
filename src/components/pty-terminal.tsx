@@ -20,7 +20,7 @@ import {
 } from '../lib/terminal-config';
 import { TerminalContextMenu } from './terminal/terminal-context-menu';
 import { bindTerminalSelectionMouseGuard, selectTerminalContent } from '@/lib/terminal-selection';
-import { shouldIgnoreImeKeyDown } from '@/lib/terminal-ime';
+import { bindTerminalIme, shouldIgnoreImeKeyDown } from '@/lib/terminal-ime';
 import { TerminalSearchBar } from './terminal/terminal-search-bar';
 import { toast } from 'sonner';
 import { signalReady } from '../lib/restoration-manager';
@@ -276,6 +276,7 @@ export function PtyTerminal({
     term.unicode.activeVersion = '11';
     
     term.open(terminalRef.current);
+    const removeTerminalIme = term.textarea ? bindTerminalIme(term.textarea) : undefined;
 
     // Shell integrations report their working directory through OSC 7. Keep
     // this synchronous and allocation-light because it runs inside xterm's
@@ -968,6 +969,7 @@ export function PtyTerminal({
       wsRef.current = null;
       
       removeSelectionMouseGuard();
+      removeTerminalIme?.();
       inputDisposable.dispose();
       resizeDisposable.dispose();
       lineFeedDisposable.dispose();
