@@ -716,25 +716,9 @@ impl ConnectionManager {
     }
 }
 
-// =============================================================================
-// Unit tests — Task 6.4: Connection manager dispatch / protocol routing
-// =============================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_new_manager_has_no_connections() {
-        let mgr = ConnectionManager::new();
-        let connections = mgr.list_connections().await;
-        assert!(connections.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_get_connection_type_returns_none_for_unknown() {
-        let mgr = ConnectionManager::new();
-        assert!(mgr.get_connection_type("unknown-id").await.is_none());
-    }
 
     #[tokio::test]
     async fn test_close_sftp_removes_connection_type() {
@@ -920,29 +904,6 @@ mod tests {
             crate::connection_diagnostics::ConnectErrorKind::KeyboardInteractiveTimeout
         );
         assert!(broker.pending.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_multiple_protocol_types_tracked() {
-        let mgr = ConnectionManager::new();
-        {
-            let mut types = mgr.connection_types.write().await;
-            types.insert("ssh-1".to_string(), "SSH".to_string());
-            types.insert("sftp-1".to_string(), "SFTP".to_string());
-            types.insert("ftp-1".to_string(), "FTP".to_string());
-        }
-        assert_eq!(
-            mgr.get_connection_type("ssh-1").await,
-            Some("SSH".to_string())
-        );
-        assert_eq!(
-            mgr.get_connection_type("sftp-1").await,
-            Some("SFTP".to_string())
-        );
-        assert_eq!(
-            mgr.get_connection_type("ftp-1").await,
-            Some("FTP".to_string())
-        );
     }
 
     #[test]

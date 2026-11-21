@@ -165,8 +165,15 @@ mod tests {
     }
 
     #[test]
-    fn expand_tilde_unix() {
-        let expanded = expand_tilde("~/.ssh/id_rsa");
-        assert!(!expanded.starts_with('~'));
+    fn expands_home_relative_paths_and_preserves_absolute_paths() {
+        let home = dirs::home_dir().expect("home directory");
+        assert_eq!(
+            expand_tilde("~/.ssh/id_rsa"),
+            home.join(".ssh/id_rsa").to_str().unwrap(),
+        );
+        assert_eq!(
+            expand_tilde("/absolute/path/to/key"),
+            "/absolute/path/to/key"
+        );
     }
 }

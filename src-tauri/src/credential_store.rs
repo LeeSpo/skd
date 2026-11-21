@@ -98,7 +98,7 @@ mod tests {
     use keyring::mock::default_credential_builder;
 
     fn use_mock_keyring() {
-        let _ = keyring::set_default_credential_builder(default_credential_builder());
+        keyring::set_default_credential_builder(default_credential_builder());
     }
 
     #[test]

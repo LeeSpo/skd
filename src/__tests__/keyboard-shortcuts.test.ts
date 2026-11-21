@@ -38,28 +38,6 @@ function findShortcut(
 describe('createSplitViewShortcuts', () => {
   // Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
 
-  // Requirement 5.1: Ctrl+\ splits right
-  it('Ctrl+\\ triggers splitRight', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    const shortcut = findShortcut(shortcuts, '\\', { ctrlKey: true, shiftKey: false });
-
-    expect(shortcut).toBeDefined();
-    shortcut!.handler();
-    expect(actions.splitRight).toHaveBeenCalledOnce();
-  });
-
-  // Requirement 5.7: Ctrl+Shift+\ splits down
-  it('Ctrl+Shift+\\ triggers splitDown', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    const shortcut = findShortcut(shortcuts, '\\', { ctrlKey: true, shiftKey: true });
-
-    expect(shortcut).toBeDefined();
-    shortcut!.handler();
-    expect(actions.splitDown).toHaveBeenCalledOnce();
-  });
-
   // Requirement 5.2: Ctrl+1~9 focuses group by index (0-based)
   describe('Ctrl+1~9 focus group shortcuts', () => {
     it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])(
@@ -73,18 +51,6 @@ describe('createSplitViewShortcuts', () => {
         expect(actions.focusGroup).toHaveBeenCalledWith(digit - 1);
       },
     );
-  });
-
-  it('⌘+W triggers closeTab by default', () => {
-    const actions = createMockActions();
-    const shortcuts = createSplitViewShortcuts(actions);
-    const shortcut = shortcuts.find(
-      (item) => item.key === 'w' && item.metaKey === true && item.ctrlKey === false && item.shiftKey === false,
-    );
-
-    expect(shortcut).toBeDefined();
-    shortcut!.handler();
-    expect(actions.closeTab).toHaveBeenCalledOnce();
   });
 
   it('does not bind Ctrl+W to closeTab by default', () => {

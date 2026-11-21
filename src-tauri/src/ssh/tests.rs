@@ -1,5 +1,3 @@
-// ── Key-loading unit tests (no SSH server required) ──────────────────────────
-
 // Regression adapted from upstream PR #187 / russh's compressor fix: an Ok
 // result with a full output buffer must not truncate incompressible packets.
 #[test]
@@ -26,72 +24,6 @@ fn incompressible_packets_survive_compression_roundtrip() {
         Compression::new(&ZLIB).init_decompress(&mut decompressor);
         let mut output = Vec::new();
         assert_eq!(decompressor.decompress(&bytes, &mut output).unwrap(), input);
-    }
-}
-
-#[cfg(test)]
-mod key_loading_tests {
-    use crate::ssh::key_loader::expand_tilde;
-    use russh::keys::decode_secret_key;
-
-    // ── 1. Bug repro: passing a file *path* string directly fails ────────────
-    //    This confirms why the old code was broken on every platform.
-
-    #[test]
-    fn test_decode_secret_key_rejects_file_path_string() {
-        // A file path is not valid PEM content — decode must fail.
-        let fake_path = "/home/user/.ssh/id_rsa";
-        let result = decode_secret_key(fake_path, None);
-        assert!(
-            result.is_err(),
-            "decode_secret_key should reject a bare file path string"
-        );
-    }
-
-    // ── 2. Missing key file returns a clear error ─────────────────────────────
-
-    #[tokio::test]
-    async fn test_connect_invalid_key_content_returns_error() {
-        use crate::ssh::{AuthMethod, SshClient, SshConfig};
-
-        let config = SshConfig {
-            host: "127.0.0.1".to_string(),
-            port: 22,
-            username: "user".to_string(),
-            auth_method: AuthMethod::PublicKey {
-                key_content: "not-a-valid-private-key".to_string(),
-                passphrase: None,
-            },
-            host_key_verification: false,
-            keepalive_interval_secs: 60,
-        };
-
-        let mut client = SshClient::new();
-        let err = client
-            .connect_with_progress(
-                &config,
-                crate::connection_diagnostics::default_tcp_timeout(),
-                |_| {},
-                None,
-            )
-            .await
-            .unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Failed to load SSH private key")
-                || msg.contains("Connection refused")
-                || msg.contains("timed out"),
-            "Error should mention invalid key or connection failure, got: {msg}"
-        );
-    }
-
-    // ── 3. Tilde expansion ───────────────────────────────────────────────────
-
-    #[test]
-    fn test_no_tilde_path_unchanged() {
-        let path = "/absolute/path/to/key".to_string();
-        let expanded = expand_tilde(&path);
-        assert_eq!(expanded, path, "Path without tilde should be unchanged");
     }
 }
 

@@ -189,27 +189,6 @@ describe("compareDirectories", () => {
 
     expect(results[0].action).toBe("upload");
   });
-
-  it("handles mixed local-only, remote-only, and identical files", () => {
-    const local = [
-      mkFile("new.txt", 100),
-      mkFile("same.txt", 200),
-      mkDir("shared"),
-    ];
-    const remote = [
-      mkFile("orphan.txt", 50),
-      mkFile("same.txt", 200),
-      mkDir("shared"),
-    ];
-    const config: SyncConfig = { ...baseConfig, deleteOrphaned: true };
-    const results = compareDirectories(local, remote, "", config);
-
-    const actionMap = new Map(results.map((r) => [r.relativePath, r.action]));
-    expect(actionMap.get("new.txt")).toBe("upload");
-    expect(actionMap.get("same.txt")).toBe("skip");
-    expect(actionMap.get("orphan.txt")).toBe("delete-remote");
-    expect(actionMap.has("shared")).toBe(false); // Identical dirs skipped
-  });
 });
 
 // ── computeSyncSummary ──

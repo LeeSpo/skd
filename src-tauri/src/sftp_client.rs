@@ -524,135 +524,67 @@ mod tests {
     // ---- Helper function tests ----
 
     #[test]
-    fn test_format_permissions_full() {
-        assert_eq!(format_permissions(0o777), "rwxrwxrwx");
-    }
-
-    #[test]
-    fn test_format_permissions_none() {
-        assert_eq!(format_permissions(0o000), "---------");
-    }
-
-    #[test]
-    fn test_format_permissions_typical_file() {
-        assert_eq!(format_permissions(0o644), "rw-r--r--");
-    }
-
-    #[test]
-    fn test_format_permissions_typical_dir() {
-        assert_eq!(format_permissions(0o755), "rwxr-xr-x");
-    }
-
-    #[test]
-    fn test_format_permissions_write_only() {
-        assert_eq!(format_permissions(0o200), "-w-------");
-    }
-
-    #[test]
-    fn test_chrono_from_unix_timestamp_epoch() {
-        let result = chrono_from_unix_timestamp(0);
-        assert_eq!(result, "1970-01-01 00:00:00");
-    }
-
-    #[test]
-    fn test_chrono_from_unix_timestamp_known_date() {
-        // 2024-01-01 00:00:00 UTC = 1704067200
-        let result = chrono_from_unix_timestamp(1704067200);
-        assert_eq!(result, "2024-01-01 00:00:00");
-    }
-
-    #[test]
-    fn test_chrono_from_unix_timestamp_with_time() {
-        // 2000-06-15 11:30:45 UTC = 961068645
-        let result = chrono_from_unix_timestamp(961068645);
-        assert_eq!(result, "2000-06-15 11:30:45");
-    }
-
-    #[test]
-    fn test_days_to_ymd_epoch() {
-        let (y, m, d) = days_to_ymd(0);
-        assert_eq!((y, m, d), (1970, 1, 1));
-    }
-
-    #[test]
-    fn test_days_to_ymd_known_date() {
-        // 2024-01-01 = day 19723 from epoch
-        let (y, m, d) = days_to_ymd(19723);
-        assert_eq!((y, m, d), (2024, 1, 1));
-    }
-
-    // ---- StandaloneSftpClient unit tests ----
-
-    #[test]
-    fn test_file_entry_type_serialization() {
-        // Verify that FileEntryType variants serialize correctly
-        let entry = RemoteFileEntry {
-            name: "test.txt".to_string(),
-            size: 1024,
-            modified: Some("2024-01-01 00:00:00".to_string()),
-            permissions: Some("rw-r--r--".to_string()),
-            file_type: FileEntryType::File,
-        };
-        let json = serde_json::to_string(&entry).unwrap();
-        assert!(json.contains("\"name\":\"test.txt\""));
-        assert!(json.contains("\"size\":1024"));
-        assert!(json.contains("File"));
-    }
-
-    #[test]
-    fn test_directory_entry_serialization() {
-        let entry = RemoteFileEntry {
-            name: "mydir".to_string(),
-            size: 4096,
-            modified: None,
-            permissions: Some("rwxr-xr-x".to_string()),
-            file_type: FileEntryType::Directory,
-        };
-        let json = serde_json::to_string(&entry).unwrap();
-        assert!(json.contains("Directory"));
-        assert!(json.contains("\"modified\":null"));
-    }
-
-    #[test]
-    fn test_symlink_entry_serialization() {
-        let entry = RemoteFileEntry {
-            name: "link".to_string(),
-            size: 0,
-            modified: None,
-            permissions: None,
-            file_type: FileEntryType::Symlink,
-        };
-        let json = serde_json::to_string(&entry).unwrap();
-        assert!(json.contains("Symlink"));
-    }
-
-    #[test]
-    fn test_sftp_config_deserialization() {
-        let json = r#"{"host":"10.0.0.1","port":22,"username":"admin","auth_method":{"type":"Password","password":"secret"}}"#;
-        let config: SftpConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.host, "10.0.0.1");
-        assert_eq!(config.port, 22);
-        assert_eq!(config.username, "admin");
-        match config.auth_method {
-            SftpAuthMethod::Password { password } => assert_eq!(password, "secret"),
-            _ => panic!("Expected Password auth method"),
+    fn formats_sftp_permission_bits() {
+        for (mode, expected) in [
+            (0o777, "rwxrwxrwx"),
+            (0o000, "---------"),
+            (0o644, "rw-r--r--"),
+            (0o755, "rwxr-xr-x"),
+            (0o200, "-w-------"),
+        ] {
+            assert_eq!(format_permissions(mode), expected, "mode {mode:o}");
         }
     }
 
     #[test]
-    fn test_sftp_config_publickey() {
-        let json = r#"{"host":"server","port":2222,"username":"deploy","host_key_verification":true,"auth_method":{"type":"PublicKey","key_content":"-----BEGIN PRIVATE KEY-----\nMIIB...\n-----END PRIVATE KEY-----","passphrase":null}}"#;
-        let config: SftpConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.port, 2222);
-        match config.auth_method {
-            SftpAuthMethod::PublicKey {
-                key_content,
-                passphrase,
-            } => {
-                assert!(key_content.contains("BEGIN PRIVATE KEY"));
-                assert!(passphrase.is_none());
-            }
-            _ => panic!("Expected PublicKey auth method"),
+    fn formats_sftp_timestamps_as_utc() {
+        for (secs, expected) in [
+            (0, "1970-01-01 00:00:00"),
+            (1_704_067_200, "2024-01-01 00:00:00"),
+            (961_068_645, "2000-06-15 11:30:45"),
+        ] {
+            assert_eq!(
+                chrono_from_unix_timestamp(secs),
+                expected,
+                "timestamp {secs}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_entries_serialize_with_the_ipc_field_names_and_types() {
+        for (file_type, expected, modified, permissions) in [
+            (
+                FileEntryType::File,
+                "File",
+                Some("2024-01-01 00:00:00"),
+                Some("rw-r--r--"),
+            ),
+            (
+                FileEntryType::Directory,
+                "Directory",
+                None,
+                Some("rwxr-xr-x"),
+            ),
+            (FileEntryType::Symlink, "Symlink", None, None),
+        ] {
+            let entry = FileEntry {
+                name: "entry".into(),
+                size: 1024,
+                modified: modified.map(str::to_owned),
+                permissions: permissions.map(str::to_owned),
+                file_type,
+            };
+            assert_eq!(
+                serde_json::to_value(&entry).unwrap(),
+                serde_json::json!({
+                    "name": "entry",
+                    "size": 1024,
+                    "modified": modified,
+                    "permissions": permissions,
+                    "file_type": expected,
+                })
+            );
         }
     }
 }

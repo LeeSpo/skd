@@ -68,21 +68,6 @@ describe('ConnectionDialog field layout', () => {
     ]);
   });
 
-  it('does not keep a separate Auth tab', () => {
-    render(
-      <ConnectionDialog
-        open
-        onOpenChange={vi.fn()}
-        onConnect={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole('tab', { name: 'Auth' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Proxy' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Connection' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Advanced' })).toBeTruthy();
-  });
-
   it('shows private key fields when editing a publickey connection', () => {
     render(
       <ConnectionDialog

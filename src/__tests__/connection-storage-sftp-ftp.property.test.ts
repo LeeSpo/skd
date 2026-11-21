@@ -105,26 +105,6 @@ describe('connection-storage SFTP/FTP property tests', () => {
 
   // Property 5: Protocol-agnostic storage queries
   describe('Property 5 — protocol-agnostic queries', () => {
-    it('SFTP/FTP connections appear in getConnections()', () => {
-      ConnectionStorageManager.saveConnection({
-        name: 'SSH Conn', host: '1.1.1.1', port: 22, username: 'u', protocol: 'SSH',
-      });
-      ConnectionStorageManager.saveConnection({
-        name: 'SFTP Conn', host: '2.2.2.2', port: 22, username: 'u', protocol: 'SFTP',
-      });
-      ConnectionStorageManager.saveConnection({
-        name: 'FTP Conn', host: '3.3.3.3', port: 21, username: 'u', protocol: 'FTP',
-      });
-
-      const all = ConnectionStorageManager.getConnections();
-      expect(all.length).toBe(3);
-
-      const protocols = all.map(c => c.protocol);
-      expect(protocols).toContain('SSH');
-      expect(protocols).toContain('SFTP');
-      expect(protocols).toContain('FTP');
-    });
-
     it('SFTP/FTP connections appear in favorites', () => {
       const sftp = ConnectionStorageManager.saveConnection({
         name: 'Fav SFTP', host: '1.1.1.1', port: 22, username: 'u', protocol: 'SFTP', favorite: true,

@@ -28,16 +28,6 @@ describe('getTabDisplayName', () => {
     expect(getTabDisplayName(tab, [tab])).toBe('My Server');
   });
 
-  // Task 7.2: correct suffixes for 2 tabs from same profile
-  it('returns correct suffixes for 2 tabs from same profile', () => {
-    const tab1 = makeTab({ id: 'conn-1' });
-    const tab2 = makeTab({ id: 'conn-1-dup-1234', originalConnectionId: 'conn-1' });
-    const allTabs = [tab1, tab2];
-
-    expect(getTabDisplayName(tab1, allTabs)).toBe('My Server (1)');
-    expect(getTabDisplayName(tab2, allTabs)).toBe('My Server (2)');
-  });
-
   // Task 7.2: correct suffixes for 3 tabs from same profile
   it('returns correct suffixes for 3 tabs from same profile', () => {
     const tab1 = makeTab({ id: 'conn-1' });
@@ -50,25 +40,14 @@ describe('getTabDisplayName', () => {
     expect(getTabDisplayName(tab3, allTabs)).toBe('My Server (3)');
   });
 
-  // Tabs from different profiles should not affect each other
-  it('tabs from different profiles do not get suffixes', () => {
-    const tabA = makeTab({ id: 'conn-1', name: 'Server A' });
-    const tabB = makeTab({ id: 'conn-2', name: 'Server B' });
-    const allTabs = [tabA, tabB];
+  it('only adds suffixes to tabs from the same profile, even when names match', () => {
+    const original = makeTab({ id: 'conn-1' });
+    const duplicate = makeTab({ id: 'conn-1-dup-123', originalConnectionId: 'conn-1' });
+    const unrelated = makeTab({ id: 'conn-2' });
+    const allTabs = [original, unrelated, duplicate];
 
-    expect(getTabDisplayName(tabA, allTabs)).toBe('Server A');
-    expect(getTabDisplayName(tabB, allTabs)).toBe('Server B');
-  });
-
-  // Mixed: one profile with duplicates, another without
-  it('handles mixed profiles correctly', () => {
-    const tabA1 = makeTab({ id: 'conn-1', name: 'Server A' });
-    const tabA2 = makeTab({ id: 'conn-1-dup-123', name: 'Server A', originalConnectionId: 'conn-1' });
-    const tabB = makeTab({ id: 'conn-2', name: 'Server B' });
-    const allTabs = [tabA1, tabA2, tabB];
-
-    expect(getTabDisplayName(tabA1, allTabs)).toBe('Server A (1)');
-    expect(getTabDisplayName(tabA2, allTabs)).toBe('Server A (2)');
-    expect(getTabDisplayName(tabB, allTabs)).toBe('Server B');
+    expect(getTabDisplayName(original, allTabs)).toBe('My Server (1)');
+    expect(getTabDisplayName(duplicate, allTabs)).toBe('My Server (2)');
+    expect(getTabDisplayName(unrelated, allTabs)).toBe('My Server');
   });
 });

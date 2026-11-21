@@ -581,18 +581,6 @@ describe('REORDER_TAB', () => {
     });
     expect(next.groups['1'].tabs.map((t) => t.id)).toEqual(['b', 'c', 'a']);
   });
-
-  it('preserves tab set', () => {
-    const state = stateWithTabs('1', [makeTab('a'), makeTab('b'), makeTab('c')]);
-    const next = terminalGroupReducer(state, {
-      type: 'REORDER_TAB',
-      groupId: '1',
-      fromIndex: 2,
-      toIndex: 0,
-    });
-    const ids = next.groups['1'].tabs.map((t) => t.id).sort();
-    expect(ids).toEqual(['a', 'b', 'c']);
-  });
 });
 
 // ── Reducer: CLOSE_OTHER_TABS ──

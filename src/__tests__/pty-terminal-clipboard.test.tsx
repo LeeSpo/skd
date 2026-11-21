@@ -144,7 +144,13 @@ describe('PTY terminal clipboard integration', () => {
   });
 
   it('continues parsing output after the native clipboard rejects a write', async () => {
-    vi.mocked(invoke).mockRejectedValue(new Error('Clipboard unavailable'));
+    let rejectClipboardWrite = true;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === 'get_websocket_endpoint') return { port: 9001, token: 'test-token' };
+      if (command === 'write_clipboard_text' && rejectClipboardWrite) {
+        throw new Error('Clipboard unavailable');
+      }
+    });
     const term = mount();
 
     await write(term, `${osc52('copy failed')}terminal still responsive`);
@@ -152,9 +158,13 @@ describe('PTY terminal clipboard integration', () => {
     expect(toast.error).toHaveBeenCalledWith('Failed to copy to clipboard');
     expect(term.buffer.active.getLine(0)?.translateToString(true)).toContain('terminal still responsive');
 
-    vi.mocked(invoke).mockResolvedValue(undefined);
+    rejectClipboardWrite = false;
     await write(term, osc52('next copy succeeds'));
-    expect(invoke).toHaveBeenLastCalledWith('write_clipboard_text', { text: 'next copy succeeds' });
+    const clipboardWrites = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'write_clipboard_text');
+    expect(clipboardWrites).toEqual([
+      ['write_clipboard_text', { text: 'copy failed' }],
+      ['write_clipboard_text', { text: 'next copy succeeds' }],
+    ]);
   });
 
   it.each(['c', '', 'p', 's', 'pc'])('supports OSC 52 selection %j on macOS', async (selection) => {

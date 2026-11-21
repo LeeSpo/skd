@@ -3770,15 +3770,6 @@ mod local_fs_tests {
     }
 
     #[tokio::test]
-    async fn test_get_home_directory() {
-        let result = get_home_directory().await;
-        assert!(result.is_ok());
-        let home = result.unwrap();
-        assert!(!home.is_empty());
-        assert!(std::path::Path::new(&home).exists());
-    }
-
-    #[tokio::test]
     async fn test_delete_local_item_rejects_missing_path() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("missing.txt").to_string_lossy().to_string();

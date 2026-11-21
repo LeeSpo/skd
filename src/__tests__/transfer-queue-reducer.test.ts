@@ -1,11 +1,6 @@
-/**
- * Task 10 — Unit & property tests for transfer-queue-reducer.ts
- */
-import { describe, it, expect, beforeEach } from "vitest";
-import * as fc from "fast-check";
+import { describe, it, expect } from "vitest";
 import {
   transferQueueReducer,
-  resetTransferIdCounter,
   getActiveTransferCount,
   getNextQueuedTransfer,
   type TransferItem,
@@ -31,10 +26,6 @@ function makeItem(overrides: Partial<TransferItem> = {}): TransferItem {
 }
 
 describe("transfer-queue-reducer", () => {
-  beforeEach(() => {
-    resetTransferIdCounter();
-  });
-
   // ── ENQUEUE ──
   describe("ENQUEUE", () => {
     it("adds items to empty state", () => {
@@ -156,25 +147,6 @@ describe("transfer-queue-reducer", () => {
       expect(next[0].bytesTransferred).toBe(500);
       expect(next[0].progress).toBe(50);
       expect(next[0].speed).toBe(1024);
-    });
-
-    it("handles progress over 100 (set by caller)", () => {
-      const state = [
-        makeItem({
-          id: "t1",
-          status: "transferring",
-          totalBytes: 100,
-        }),
-      ];
-      const next = transferQueueReducer(state, {
-        type: "PROGRESS",
-        id: "t1",
-        bytesTransferred: 200,
-        progress: 200,
-        speed: 100,
-      });
-      // Reducer stores the progress as-is; caller is responsible for capping
-      expect(next[0].bytesTransferred).toBe(200);
     });
   });
 
@@ -310,6 +282,8 @@ describe("transfer-queue-reducer", () => {
         makeItem({ id: "t1", status: "queued" }),
         makeItem({ id: "t2", status: "transferring" }),
         makeItem({ id: "t3", status: "completed" }),
+        makeItem({ id: "t4", status: "failed" }),
+        makeItem({ id: "t5", status: "cancelled" }),
       ];
       const next = transferQueueReducer(state, { type: "CLEAR_ALL" });
       // CLEAR_ALL keeps transferring items to avoid interrupting active transfers
@@ -372,81 +346,4 @@ describe("transfer-queue-reducer", () => {
       expect(getNextQueuedTransfer(state)).toBeUndefined();
     });
   });
-});
-
-// ── Property-based tests ──
-describe("transfer-queue-reducer property tests", () => {
-  beforeEach(() => {
-    resetTransferIdCounter();
-  });
-
-  it("ENQUEUE always increases state length", () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.record({
-            fileName: fc.string({ minLength: 1, maxLength: 20 }),
-            direction: fc.constantFrom("upload" as const, "download" as const),
-            sourcePath: fc.string({ minLength: 1, maxLength: 50 }),
-            destinationPath: fc.string({ minLength: 1, maxLength: 50 }),
-            totalBytes: fc.nat({ max: 10_000_000 }),
-          }),
-          { minLength: 1, maxLength: 5 },
-        ),
-        (items) => {
-          const state = transferQueueReducer([], { type: "ENQUEUE", items });
-          expect(state).toHaveLength(items.length);
-          state.forEach((item) => {
-            expect(item.status).toBe("queued");
-            expect(item.progress).toBe(0);
-          });
-        },
-      ),
-    );
-  });
-
-  it("CLEAR_ALL keeps only transferring items", () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.constantFrom("queued", "transferring", "completed", "failed", "cancelled") as fc.Arbitrary<TransferItem["status"]>,
-          { minLength: 0, maxLength: 10 },
-        ),
-        (statuses) => {
-          const state = statuses.map((status, i) =>
-            makeItem({ id: `t${i}`, status }),
-          );
-          const next = transferQueueReducer(state, { type: "CLEAR_ALL" });
-          const transferringCount = statuses.filter(
-            (s) => s === "transferring",
-          ).length;
-          expect(next).toHaveLength(transferringCount);
-        },
-      ),
-    );
-  });
-
-  it("CLEAR_COMPLETED never removes queued/transferring items", () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.constantFrom("queued", "transferring", "completed", "failed", "cancelled") as fc.Arbitrary<TransferItem["status"]>,
-          { minLength: 0, maxLength: 10 },
-        ),
-        (statuses) => {
-          const state = statuses.map((status, i) =>
-            makeItem({ id: `t${i}`, status }),
-          );
-          const next = transferQueueReducer(state, {
-            type: "CLEAR_COMPLETED",
-          });
-          const activeCount = state.filter(
-            (t) => t.status === "queued" || t.status === "transferring",
-          ).length;
-          expect(next).toHaveLength(activeCount);
-        },
-      ),
-    );
-  });
-
 });

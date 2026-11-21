@@ -68,11 +68,6 @@ export function generateTransferId(): string {
   return `transfer-${nextId++}-${Date.now()}`;
 }
 
-/** Reset the ID counter (for testing). */
-export function resetTransferIdCounter(): void {
-  nextId = 1;
-}
-
 export function transferQueueReducer(
   state: TransferItem[],
   action: TransferAction,

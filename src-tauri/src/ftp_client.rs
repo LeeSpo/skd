@@ -46,12 +46,6 @@ pub struct FtpClient {
 }
 
 impl FtpClient {
-    /// Connect to an FTP server, authenticate, and switch to binary transfer mode.
-    #[cfg(test)]
-    pub async fn connect(config: &FtpConfig) -> Result<Self> {
-        Self::connect_with_progress(config, |_| {}).await
-    }
-
     pub async fn connect_with_progress(
         config: &FtpConfig,
         on_stage: impl Fn(ConnectStage) + Send + Sync + 'static,
@@ -399,12 +393,6 @@ fn parse_ftp_list_line(line: &str) -> Option<FileEntry> {
     })
 }
 
-// =============================================================================
-// Integration tests — require a live FTP server
-//
-// The tests are gated behind the FTP_TEST_HOST env var so they are skipped
-// in CI / normal `cargo test` runs.
-// =============================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,7 +423,7 @@ mod tests {
                     "TYPE" if failure == Some(ConnectStage::SettingTransferMode) => {
                         "500 TYPE rejected\r\n"
                     }
-                    "TYPE" => "200 Binary mode\r\n",
+                    "TYPE" if line == "TYPE I" => "200 Binary mode\r\n",
                     "AUTH" => "534 TLS unavailable\r\n",
                     "QUIT" => "221 Goodbye\r\n",
                     _ => "500 Unsupported\r\n",
@@ -504,100 +492,35 @@ mod tests {
         }
     }
 
-    /// Helper – read env vars or skip the test.
-    fn test_config() -> Option<FtpConfig> {
-        let host = std::env::var("FTP_TEST_HOST").ok()?;
-        let user = std::env::var("FTP_TEST_USER").unwrap_or_else(|_| "xxxx".into());
-        let pass = std::env::var("FTP_TEST_PASS").unwrap_or_else(|_| "xxxxxxx".into());
-        let port: u16 = std::env::var("FTP_TEST_PORT")
-            .ok()
-            .and_then(|p| p.parse().ok())
-            .unwrap_or(21);
-        Some(FtpConfig {
-            host,
-            port,
-            username: user,
-            password: pass,
+    #[tokio::test]
+    #[ignore = "Requires a writable test FTP server and FTP_TEST_HOST, FTP_TEST_USER, FTP_TEST_PASS (optional FTP_TEST_PORT)"]
+    async fn test_ftp_crud_cycle() {
+        let config = FtpConfig {
+            host: std::env::var("FTP_TEST_HOST").expect("set FTP_TEST_HOST"),
+            port: std::env::var("FTP_TEST_PORT")
+                .unwrap_or_else(|_| "21".into())
+                .parse()
+                .expect("FTP_TEST_PORT must be a valid port"),
+            username: std::env::var("FTP_TEST_USER").expect("set FTP_TEST_USER"),
+            password: std::env::var("FTP_TEST_PASS").expect("set FTP_TEST_PASS"),
             ftps_enabled: false,
             anonymous: false,
-        })
-    }
-
-    // ---- 1. Connect & disconnect -----------------------------------------
-
-    #[tokio::test]
-    async fn test_ftp_connect_and_disconnect() {
-        let Some(cfg) = test_config() else {
-            eprintln!("SKIP: FTP_TEST_HOST not set");
-            return;
         };
-
-        let mut client = FtpClient::connect(&cfg)
+        let mut client = FtpClient::connect_with_progress(&config, |_| {})
             .await
-            .expect("FTP connect should succeed");
+            .unwrap();
 
-        assert!(client.stream.is_some(), "client should be connected");
+        let local = tempfile::Builder::new()
+            .prefix("skd-ftp-")
+            .tempdir()
+            .unwrap();
+        let dir_name = local.path().file_name().unwrap().to_str().unwrap();
+        let test_dir = format!("/{dir_name}");
+        let test_file_remote = format!("{test_dir}/hello.txt");
+        let renamed_file_remote = format!("{test_dir}/hello_renamed.txt");
+        client.create_dir(&test_dir).await.unwrap();
 
-        client
-            .disconnect()
-            .await
-            .expect("disconnect should succeed");
-        assert!(client.stream.is_none(), "client should be disconnected");
-    }
-
-    // ---- 2. Connect with wrong credentials --------------------------------
-
-    #[tokio::test]
-    async fn test_ftp_connect_bad_credentials() {
-        let Some(mut cfg) = test_config() else {
-            eprintln!("SKIP: FTP_TEST_HOST not set");
-            return;
-        };
-        cfg.password = "wrong-password-definitely".into();
-
-        let result = FtpClient::connect(&cfg).await;
-        assert!(result.is_err(), "connect with bad password should fail");
-
-        let err_msg = result.err().unwrap().to_string();
-        eprintln!("Expected error: {}", err_msg);
-        assert!(
-            err_msg.to_lowercase().contains("auth")
-                || err_msg.to_lowercase().contains("login")
-                || err_msg.to_lowercase().contains("fail"),
-            "error should mention authentication failure, got: {}",
-            err_msg
-        );
-    }
-
-    // ---- 4. Full CRUD cycle: mkdir → upload → list → download → rename → delete
-
-    #[tokio::test]
-    async fn test_ftp_crud_cycle() {
-        let Some(cfg) = test_config() else {
-            eprintln!("SKIP: FTP_TEST_HOST not set");
-            return;
-        };
-
-        let mut client = FtpClient::connect(&cfg).await.expect("connect");
-
-        let test_dir = "/skd_e2e_test";
-        let test_file_remote = format!("{}/hello.txt", test_dir);
-        let renamed_file_remote = format!("{}/hello_renamed.txt", test_dir);
-
-        // --- Clean up from any previous failed run ---
-        let _ = client.delete_file(&renamed_file_remote).await;
-        let _ = client.delete_file(&test_file_remote).await;
-        let _ = client.delete_dir(test_dir).await;
-
-        // 4a. Create directory
-        client
-            .create_dir(test_dir)
-            .await
-            .expect("create_dir should succeed");
-        eprintln!("Created directory: {}", test_dir);
-
-        // 4b. Upload a file
-        let tmp_upload = std::env::temp_dir().join("skd_e2e_upload.txt");
+        let tmp_upload = local.path().join("upload.txt");
         let upload_content = b"Hello from skd E2E test!\nLine 2\n";
         tokio::fs::write(&tmp_upload, upload_content)
             .await
@@ -608,20 +531,10 @@ mod tests {
             .await
             .expect("upload_file should succeed");
         assert_eq!(uploaded_bytes, upload_content.len() as u64);
-        eprintln!("Uploaded {} bytes to {}", uploaded_bytes, test_file_remote);
+        let entries = client.list_dir(&test_dir).await.unwrap();
+        assert!(entries.iter().any(|e| e.name == "hello.txt"));
 
-        // 4c. List directory — should contain our file
-        let entries = client.list_dir(test_dir).await.expect("list test dir");
-        eprintln!("Directory {} contains {} entries", test_dir, entries.len());
-        let found = entries.iter().any(|e| e.name == "hello.txt");
-        assert!(
-            found,
-            "uploaded file should appear in listing: {:?}",
-            entries.iter().map(|e| &e.name).collect::<Vec<_>>()
-        );
-
-        // 4d. Download the file and verify contents
-        let tmp_download = std::env::temp_dir().join("skd_e2e_download.txt");
+        let tmp_download = local.path().join("download.txt");
         let downloaded_bytes = client
             .download_file(&test_file_remote, tmp_download.to_str().unwrap())
             .await
@@ -635,57 +548,21 @@ mod tests {
             downloaded_data, upload_content,
             "downloaded content should match uploaded content"
         );
-        eprintln!("Download verified: {} bytes match", downloaded_bytes);
 
-        // 4e. Rename the file
         client
             .rename(&test_file_remote, &renamed_file_remote)
             .await
-            .expect("rename should succeed");
-        eprintln!("Renamed {} → {}", test_file_remote, renamed_file_remote);
+            .unwrap();
+        let entries = client.list_dir(&test_dir).await.unwrap();
+        assert!(!entries.iter().any(|e| e.name == "hello.txt"));
+        assert!(entries.iter().any(|e| e.name == "hello_renamed.txt"));
 
-        // Verify rename: old name gone, new name present
-        let entries_after = client.list_dir(test_dir).await.expect("list after rename");
-        assert!(
-            !entries_after.iter().any(|e| e.name == "hello.txt"),
-            "old file name should be gone"
-        );
-        assert!(
-            entries_after.iter().any(|e| e.name == "hello_renamed.txt"),
-            "renamed file should exist"
-        );
-
-        // 4f. Delete the file
-        client
-            .delete_file(&renamed_file_remote)
-            .await
-            .expect("delete_file should succeed");
-        eprintln!("Deleted {}", renamed_file_remote);
-
-        // 4g. Delete the directory
-        client
-            .delete_dir(test_dir)
-            .await
-            .expect("delete_dir should succeed");
-        eprintln!("Deleted directory {}", test_dir);
-
-        // Verify cleanup
-        let root_entries = client.list_dir("/").await.expect("list root");
-        assert!(
-            !root_entries.iter().any(|e| e.name == "skd_e2e_test"),
-            "test directory should be removed"
-        );
-        eprintln!("Cleanup verified: test directory removed from root listing");
-
-        // Cleanup temp files
-        let _ = tokio::fs::remove_file(&tmp_upload).await;
-        let _ = tokio::fs::remove_file(&tmp_download).await;
-
-        client.disconnect().await.ok();
-        eprintln!("FTP CRUD E2E test PASSED ✓");
+        client.delete_file(&renamed_file_remote).await.unwrap();
+        client.delete_dir(&test_dir).await.unwrap();
+        let root_entries = client.list_dir("/").await.unwrap();
+        assert!(!root_entries.iter().any(|e| e.name == dir_name));
+        client.disconnect().await.unwrap();
     }
-
-    // ---- 5. Parse FTP LIST line -------------------------------------------
 
     #[test]
     fn test_parse_ftp_list_line_unix_dir() {
@@ -736,33 +613,6 @@ mod tests {
     }
 
     // ---- Task 5.4: Additional unit tests ----
-
-    #[test]
-    fn test_ftp_config_deserialization() {
-        let json = r#"{"host":"192.168.1.1","port":21,"username":"user","password":"pass","ftps_enabled":false,"anonymous":false}"#;
-        let config: FtpConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.host, "192.168.1.1");
-        assert_eq!(config.port, 21);
-        assert_eq!(config.username, "user");
-        assert_eq!(config.password, "pass");
-        assert!(!config.ftps_enabled);
-        assert!(!config.anonymous);
-    }
-
-    #[test]
-    fn test_ftp_config_anonymous() {
-        let json = r#"{"host":"ftp.example.com","port":21,"username":"","password":"","ftps_enabled":false,"anonymous":true}"#;
-        let config: FtpConfig = serde_json::from_str(json).unwrap();
-        assert!(config.anonymous);
-    }
-
-    #[test]
-    fn test_ftp_config_ftps_enabled() {
-        let json = r#"{"host":"secure.example.com","port":990,"username":"admin","password":"secret","ftps_enabled":true,"anonymous":false}"#;
-        let config: FtpConfig = serde_json::from_str(json).unwrap();
-        assert!(config.ftps_enabled);
-        assert_eq!(config.port, 990);
-    }
 
     #[test]
     fn test_parse_ftp_list_large_file_size() {

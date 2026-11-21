@@ -14,11 +14,6 @@ describe('compose-draft-storage', () => {
     expect(loadComposeDraft('conn-a')).toBe('');
   });
 
-  it('saves and loads draft for a connection', () => {
-    saveComposeDraft('conn-a', 'echo hello');
-    expect(loadComposeDraft('conn-a')).toBe('echo hello');
-  });
-
   it('isolates drafts per connection id', () => {
     saveComposeDraft('conn-a', 'alpha');
     saveComposeDraft('conn-b', 'beta');

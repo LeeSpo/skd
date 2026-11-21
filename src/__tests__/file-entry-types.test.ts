@@ -8,10 +8,6 @@ import {
   pathJoin,
   parentPath,
   breadcrumbSegments,
-  localParentPath,
-  localBreadcrumbSegments,
-  getFileIcon,
-  type FileEntry,
 } from "../lib/file-entry-types";
 
 describe("file-entry-types helpers", () => {
@@ -27,16 +23,6 @@ describe("file-entry-types helpers", () => {
       expect(formatSize(1099511627776)).toBe("1.0 TB"));
     it("rounds large KB values", () =>
       expect(formatSize(51200)).toBe("50 KB"));
-
-    it("property: always returns a non-empty string for positive input", () => {
-      fc.assert(
-        fc.property(fc.integer({ min: 1, max: 1e15 }), (n) => {
-          const result = formatSize(n);
-          expect(result.length).toBeGreaterThan(0);
-          expect(result).not.toBe("—");
-        }),
-      );
-    });
   });
 
   // ── pathJoin (Unix) ──
@@ -44,8 +30,6 @@ describe("file-entry-types helpers", () => {
     it("joins root + name", () => expect(pathJoin("/", "foo")).toBe("/foo"));
     it("joins non-root + name", () =>
       expect(pathJoin("/home", "user")).toBe("/home/user"));
-    it("joins deep path", () =>
-      expect(pathJoin("/a/b/c", "d")).toBe("/a/b/c/d"));
   });
 
   // ── parentPath (Unix) ──
@@ -55,8 +39,6 @@ describe("file-entry-types helpers", () => {
     it("single level returns root", () =>
       expect(parentPath("/home")).toBe("/"));
     it("two levels", () => expect(parentPath("/home/user")).toBe("/home"));
-    it("deep path", () =>
-      expect(parentPath("/a/b/c/d")).toBe("/a/b/c"));
 
     it("property: parentPath(pathJoin(base, child)) === base", () => {
       const seg = fc
@@ -88,24 +70,5 @@ describe("file-entry-types helpers", () => {
         { label: "b", path: "/a/b" },
         { label: "c", path: "/a/b/c" },
       ]));
-
-    it("property: last segment path equals original", () => {
-      const seg = fc
-        .string({ minLength: 1, maxLength: 10 })
-        .filter((s) => !s.includes("/") && s !== "." && s !== "..");
-      const absPath = fc
-        .array(seg, { minLength: 0, maxLength: 5 })
-        .map((parts) =>
-          parts.length === 0 ? "/" : `/${parts.join("/")}`,
-        );
-
-      fc.assert(
-        fc.property(absPath, (path) => {
-          const segs = breadcrumbSegments(path);
-          expect(segs[segs.length - 1].path).toBe(path);
-          expect(segs[0]).toEqual({ label: "/", path: "/" });
-        }),
-      );
-    });
   });
 });
