@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-21
+
+### Fixed
+
+- Terminal copy and paste now use the native macOS clipboard. Remote applications can copy text through OSC 52, and pasting from the terminal context menu avoids the WebKit confirmation prompt.
+- Switching out of macOS Pinyin composition with Caps Lock preserves the typed letters without adding spaces between syllables.
+- Splitting a pane that contains a single terminal tab leaves the original pane open for another session.
+- Improved double-click text selection and corrected the insertion marker when dragging workspace tabs.
+- When an SSH server presents a different host key, the trust dialog shows both fingerprints and lets you reconnect after explicitly trusting the new key.
+
+
 ## [1.2.0] - 2026-10-29
 
 ### Added
